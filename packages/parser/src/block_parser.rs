@@ -1,13 +1,14 @@
 use cosmwasm_std::{StdError, StdResult, Uint256};
 use sha2::{Digest, Sha256};
 
-use crate::types::{
-    BagOfCellsInfo, Bytes32, CachedCell, CellData, TransactionHeader, ValidatorDescription,
-};
-
-use super::bit_reader::{
-    log2ceil, parse_dict, read_bit, read_bool, read_bytes32_bit_size, read_bytes32_byte_size,
-    read_cell, read_u16, read_u32, read_u64, read_u8, read_uint256, read_unary_length,
+use super::{
+    bit_reader::{
+        log2ceil, parse_dict, read_bit, read_bool, read_bytes32_bit_size, read_bytes32_byte_size,
+        read_cell, read_u16, read_u32, read_u64, read_u8, read_uint256, read_unary_length,
+    },
+    types::{
+        BagOfCellsInfo, Bytes32, CachedCell, CellData, TransactionHeader, ValidatorDescription,
+    },
 };
 
 pub trait IBlockParser {

@@ -1,6 +1,6 @@
 use cosmwasm_std::{StdError, StdResult, Uint256};
 
-use crate::types::{Bytes32, CellData};
+use super::types::{Bytes32, CellData};
 
 // memory: mutable, calldata: immutable
 

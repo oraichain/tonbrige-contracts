@@ -1,19 +1,15 @@
 use cosmwasm_std::{StdError, StdResult, Uint256};
 
-use crate::{
-    parser::bit_reader::read_uint256,
+use super::{
+    bit_reader::{
+        parse_dict, read_bit, read_bool, read_bytes32_bit_size, read_bytes32_byte_size, read_cell,
+        read_u32, read_u64, read_u8, read_uint256,
+    },
+    block_parser::{parse_currency_collection, read_coins},
     types::{
         CellData, Message, MessagesHeader, RawCommonMessageInfo, TestData, TonAddress,
         TransactionHeader,
     },
-};
-
-use super::{
-    bit_reader::{
-        parse_dict, read_bit, read_bool, read_bytes32_bit_size, read_bytes32_byte_size, read_cell,
-        read_u32, read_u64, read_u8,
-    },
-    block_parser::{parse_currency_collection, read_coins},
 };
 
 pub trait ITransactionParser {

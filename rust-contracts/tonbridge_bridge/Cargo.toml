@@ -1,12 +1,17 @@
 [package]
-name = "tonbridge-utils"
+name = "tonbridge-bridge"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
-documentation = { workspace = true }
-description = "Common helpers for tonbridge contracts"
+license = { workspace = true }
+readme = { workspace = true }
+exclude = { workspace = true }
+description = ""
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 # for quicker tests, cargo test --lib
@@ -14,6 +19,7 @@ description = "Common helpers for tonbridge contracts"
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
-cosmwasm-schema = { workspace = true }
+cw20 = { workspace = true }
 cosmwasm-std = { workspace = true }
-sha2 = { workspace = true }
+cw-storage-plus = { workspace = true }
+cosmwasm-schema = { workspace = true }
