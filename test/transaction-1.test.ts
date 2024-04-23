@@ -343,7 +343,7 @@ describe("Tree of Cells parser tests 1", () => {
       "hex"
     );
 
-    await bridge.readTransaction(txBoc, boc, adapter.address);
+    await bridge.readTransaction(txBoc, boc, adapter.address, 0x1);
 
     expect(
       await token.balanceOf("0xe003de6861c9e3b82f293335d4cdf90c299cbbd3")

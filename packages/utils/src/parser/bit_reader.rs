@@ -261,3 +261,15 @@ pub fn read_bytes32_bit_size(
 //         }
 //     }
 // }
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::{HexBinary, Uint256};
+
+    #[test]
+    fn test_bytes32() {
+        let test_number = Uint256::from(42u8);
+        let ret = test_number.to_be_bytes();
+        println!("0x{}", HexBinary::from(&ret).to_hex());
+    }
+}
