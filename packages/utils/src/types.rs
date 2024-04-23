@@ -89,11 +89,15 @@ pub struct CellSerializationInfo {
     pub end_offset: Uint256,
 }
 
+#[cw_serde]
+#[derive(Copy, Default)]
 pub struct TonAddress {
     pub hash: Bytes32,
     pub wc: u8,
 }
 
+#[cw_serde]
+#[derive(Copy, Default)]
 pub struct RawCommonMessageInfo {
     pub msg_type: Uint256,
     pub ihr_disabled: bool,
@@ -110,11 +114,15 @@ pub struct RawCommonMessageInfo {
     pub import_fee: Bytes32,
 }
 
+#[cw_serde]
+#[derive(Copy, Default)]
 pub struct Message {
     pub info: RawCommonMessageInfo,
-    pub body_idx: Uint256,
+    pub body_idx: usize,
 }
 
+#[cw_serde]
+#[derive(Copy, Default)]
 pub struct MessagesHeader {
     pub has_in_message: bool,
     pub has_out_messages: bool,
@@ -122,6 +130,8 @@ pub struct MessagesHeader {
     pub out_messages: [Message; 5],
 }
 
+#[cw_serde]
+#[derive(Copy, Default)]
 pub struct TransactionHeader {
     pub check_code: u8,
     pub address_hash: Bytes32,
@@ -136,7 +146,10 @@ pub struct TransactionHeader {
     pub messages: MessagesHeader,
 }
 
+#[cw_serde]
+#[derive(Copy, Default)]
 pub struct TestData {
+    // should change to cannonical addr, same as Address with 20 bytes
     pub eth_address: Address,
     pub amount: Uint256,
 }
