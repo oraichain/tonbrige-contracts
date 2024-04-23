@@ -50,10 +50,10 @@ const config: HardhatUserConfig = {
     },
     hardhat: {
       gasPrice: 35000000000,
-    //   // gasPrice: 470000000000,
-    //   // blockGasLimit: 9990000000000,
-    //   // chainId: 43112,
-    //   // allowUnlimitedContractSize: true,
+      //   // gasPrice: 470000000000,
+      //   // blockGasLimit: 9990000000000,
+      //   // chainId: 43112,
+      //   // allowUnlimitedContractSize: true,
     },
     ropsten: {
       url: process.env.ROPSTEN_URL || "",
@@ -69,6 +69,10 @@ const config: HardhatUserConfig = {
       url: `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`,
       accounts: [process.env.PRIVATE_KEY || ""],
     },
+  },
+  typechain: {
+    outDir: "typechain",
+    target: "ethers-v5",
   },
   gasReporter: {
     enabled: true, // process.env.REPORT_GAS !== undefined,

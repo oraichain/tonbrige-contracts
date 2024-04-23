@@ -61,7 +61,7 @@ pub struct VerifiedBlockInfo {
 pub struct CellData {
     pub special: bool,
     pub refs: [Uint256; 4],
-    pub cursor: Uint256,
+    pub cursor: usize,
     pub cursor_ref: u8,
 
     pub hashes: [Bytes32; 4],
