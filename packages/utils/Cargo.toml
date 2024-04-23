@@ -16,3 +16,4 @@ backtraces = ["cosmwasm-std/backtraces"]
 [dependencies]
 cosmwasm-schema = { workspace = true }
 cosmwasm-std = { workspace = true }
+sha2 = { workspace = true }

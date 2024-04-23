@@ -22,10 +22,11 @@ pub struct BagOfCellsInfo {
     pub data_offset: Uint256,
     pub data_size: Uint256,
     pub total_size: Uint256,
-    pub root_idx: Uint256,
+    pub root_idx: usize,
 }
 
 #[cw_serde]
+#[derive(Copy, Default)]
 pub struct ValidatorDescription {
     pub c_type: u8,
     pub weight: u64,
@@ -43,6 +44,7 @@ pub struct Vdata {
 }
 
 #[cw_serde]
+#[derive(Copy, Default)]
 pub struct CachedCell {
     pub prefix_length: Uint256,
     pub hash: Bytes32,

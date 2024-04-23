@@ -32,6 +32,8 @@ cw20-base = { version = "1.0.1" }
 cw-storage-plus = { version = "1.0.1" }
 cw-utils = "0.16.0"
 
+sha2 = "0.10.8"
+
 osmosis-test-tube = { git = "https://github.com/oraichain/test-tube.git", rev = "354d580" }
 test-tube = { git = "https://github.com/oraichain/test-tube.git", rev = "354d580" }
 
