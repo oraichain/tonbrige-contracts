@@ -60,7 +60,7 @@ pub struct VerifiedBlockInfo {
 #[cw_serde]
 pub struct CellData {
     pub special: bool,
-    pub refs: [Uint256; 4],
+    pub refs: [usize; 4],
     pub cursor: usize,
     pub cursor_ref: u8,
 

@@ -119,157 +119,150 @@ pub fn read_bytes32_bit_size(
     value.to_be_bytes()
 }
 
-// function readBytes32ByteSize(
-//     bytes calldata data,
-//     CellData[100] memory cells,
-//     uint256 cellIdx,
-//     uint256 sizeb
-// ) public pure returns (bytes32 buffer) {
-//     uint256 size = sizeb * 8;
-//     uint256 value = 0;
-//     while (size > 0) {
-//         value = (value << 1) + readBit(data, cells, cellIdx);
-//         size--;
-//     }
-//     buffer = bytes32(value);
-//     return buffer;
-// }
+pub fn read_cell(cells: &mut [CellData; 100], cell_idx: usize) -> usize {
+    let idx = cells[cell_idx].refs[cells[cell_idx].cursor_ref as usize];
+    cells[cell_idx].cursor_ref += 1;
+    idx
+}
 
-// function readCell(
-//     CellData[100] memory cells,
-//     uint256 cellIdx
-// ) public pure returns (uint256 idx) {
-//     idx = cells[cellIdx].refs[cells[cellIdx].cursorRef];
-//     cells[cellIdx].cursorRef++;
-//     return idx;
-// }
+pub fn read_unary_length(data: &[u8], cells: &mut [CellData; 100], cell_idx: usize) -> u128 {
+    // u128 is big enough
+    let mut value = 0u128;
+    while read_bool(data, cells, cell_idx) {
+        value += 1;
+    }
+    value
+}
 
-// function readUnaryLength(
-//     bytes calldata data,
-//     CellData[100] memory cells,
-//     uint256 cellIdx
-// ) public pure returns (uint256 value) {
-//     value = 0;
-//     while (readBool(data, cells, cellIdx)) {
-//         value++;
-//     }
-//     return value;
-// }
+pub fn log2ceil(x: u128) -> u8 {
+    x.ilog2() as u8 + 1
+    // let mut check = false;
+    // let mut n = 0u128;
 
-// function log2Ceil(uint256 x) public pure returns (uint256 n) {
-//     bool check = false;
+    // while x > 1 {
+    //     n += 1;
 
-//     for (n = 0; x > 1; x >>= 1) {
-//         n += 1;
+    //     if x & 1 == 1 && !check {
+    //         n += 1;
+    //         check = true;
+    //     }
+    //     x >>= 1
+    // }
 
-//         if (x & 1 == 1 && !check) {
-//             n += 1;
-//             check = true;
-//         }
-//     }
+    // if x == 1 && !check {
+    //     n += 1;
+    // }
 
-//     if (x == 1 && !check) {
-//         n += 1;
-//     }
+    // Uint256::from(n)
+}
 
-//     return n;
-// }
+pub fn do_parse(
+    data: &[u8],
+    prefix: u128,
+    cells: &mut [CellData; 100],
+    cell_idx: usize,
+    n: u128,
+    cell_idxs: &mut [usize; 32],
+) -> StdResult<()> {
+    let prefix_length;
+    let mut pp = prefix;
 
-// function parseDict(
-//     bytes calldata data,
-//     CellData[100] memory cells,
-//     uint256 cellIdx,
-//     uint256 keySize
-// ) public view returns (uint256[32] memory cellIdxs) {
-//     for (uint256 i = 0; i < 32; i++) {
-//         cellIdxs[i] = 255;
-//     }
-//     doParse(data, 0, cells, cellIdx, keySize, cellIdxs);
-//     return cellIdxs;
-// }
+    // lb0
+    if !read_bool(data, cells, cell_idx) {
+        // Short label detected
+        prefix_length = read_unary_length(data, cells, cell_idx);
 
-// function doParse(
-//     bytes calldata data,
-//     uint256 prefix,
-//     CellData[100] memory cells,
-//     uint256 cellIdx,
-//     uint256 n,
-//     uint256[32] memory cellIdxs
-// ) public view {
-//     uint256 prefixLength = 0;
-//     uint256 pp = prefix;
+        for _ in 0..prefix_length {
+            pp = (pp << 1) + read_bit(data, cells, cell_idx) as u128;
+        }
+    } else {
+        // lb1
+        if !read_bool(data, cells, cell_idx) {
+            // long label detected
+            prefix_length = read_u64(data, cells, cell_idx, log2ceil(n))? as u128;
+            for _ in 0..prefix_length {
+                pp = (pp << 1) + read_bit(data, cells, cell_idx) as u128;
+            }
+        } else {
+            // Same label detected
+            let bit = read_bit(data, cells, cell_idx);
+            prefix_length = read_u64(data, cells, cell_idx, log2ceil(n))? as u128;
+            for _ in 0..prefix_length {
+                pp = (pp << 1) + bit as u128;
+            }
+        }
+    }
 
-//     // lb0
-//     if (!readBool(data, cells, cellIdx)) {
-//         // Short label detected
-//         prefixLength = readUnaryLength(data, cells, cellIdx);
+    if n - prefix_length == 0 {
+        // end
+        for i in 0..32 {
+            if cell_idxs[i] == 255 {
+                cell_idxs[i] = cell_idx;
+                break;
+            }
+        }
+        // cell_idxs[pp] = cell_idx;
+        // res.set(new BN(pp, 2).toString(32), extractor(slice));
+    } else {
+        let left_idx = read_cell(cells, cell_idx);
+        let right_idx = read_cell(cells, cell_idx);
+        // NOTE: Left and right branches are implicitly contain prefixes '0' and '1'
+        if left_idx != 255 && !cells[left_idx].special {
+            do_parse(
+                data,
+                pp << 1,
+                cells,
+                left_idx,
+                n - prefix_length - 1,
+                cell_idxs,
+            )?;
+        }
+        if right_idx != 255 && !cells[right_idx].special {
+            do_parse(
+                data,
+                pp << (1 + 1),
+                cells,
+                right_idx,
+                n - prefix_length - 1,
+                cell_idxs,
+            )?;
+        }
+    }
 
-//         for (uint256 i = 0; i < prefixLength; i++) {
-//             pp = (pp << 1) + readBit(data, cells, cellIdx);
-//         }
-//     } else {
-//         // lb1
-//         if (!readBool(data, cells, cellIdx)) {
-//             // long label detected
-//             prefixLength = readUint64(data, cells, cellIdx, uint8(log2Ceil(n)));
-//             for (uint256 i = 0; i < prefixLength; i++) {
-//                 pp = (pp << 1) + readBit(data, cells, cellIdx);
-//             }
-//         } else {
-//             // Same label detected
-//             uint256 bit = readBit(data, cells, cellIdx);
-//             prefixLength = readUint64(data, cells, cellIdx, uint8(log2Ceil(n)));
-//             for (uint256 i = 0; i < prefixLength; i++) {
-//                 pp = (pp << 1) + bit;
-//             }
-//         }
-//     }
+    Ok(())
+}
 
-//     if (n - prefixLength == 0) {
-//         // end
-//         for (uint256 i = 0; i < 32; i++) {
-//             if (cellIdxs[i] == 255) {
-//                 cellIdxs[i] = cellIdx;
-//                 break;
-//             }
-//         }
-//         // cellIdxs[pp] = cellIdx;
-//         // res.set(new BN(pp, 2).toString(32), extractor(slice));
-//     } else {
-//         uint256 leftIdx = readCell(cells, cellIdx);
-//         uint256 rightIdx = readCell(cells, cellIdx);
-//         // NOTE: Left and right branches are implicitly contain prefixes '0' and '1'
-//         if (leftIdx != 255 && !cells[leftIdx].special) {
-//             doParse(
-//                 data,
-//                 pp << 1,
-//                 cells,
-//                 leftIdx,
-//                 n - prefixLength - 1,
-//                 cellIdxs
-//             );
-//         }
-//         if (rightIdx != 255 && !cells[rightIdx].special) {
-//             doParse(
-//                 data,
-//                 pp << (1 + 1),
-//                 cells,
-//                 rightIdx,
-//                 n - prefixLength - 1,
-//                 cellIdxs
-//             );
-//         }
-//     }
-// }
+pub fn parse_dict(
+    data: &[u8],
+    cells: &mut [CellData; 100],
+    cell_idx: usize,
+    key_size: u128,
+) -> StdResult<[usize; 32]> {
+    let mut cell_idxs = [255; 32];
+
+    do_parse(data, 0, cells, cell_idx, key_size, &mut cell_idxs)?;
+    Ok(cell_idxs)
+}
 
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::{HexBinary, Uint256};
 
+    use super::log2ceil;
+
     #[test]
     fn test_bytes32() {
-        let test_number = Uint256::from(42u8);
+        let test_number = Uint256::from(100_000_042u128);
         let ret = test_number.to_be_bytes();
         println!("0x{}", HexBinary::from(&ret).to_hex());
+    }
+
+    #[test]
+    fn test_log2ceil() {
+        let test_number = 1_000_000_042u128;
+        for i in 0..100 {
+            let ret = log2ceil(test_number + i * 10_000_000_000);
+            println!("ret {}", ret);
+        }
     }
 }
