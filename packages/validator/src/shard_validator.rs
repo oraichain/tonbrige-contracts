@@ -10,6 +10,7 @@ use tonbridge_parser::{
 
 pub const SHARD_STATE_CELL: u32 = 0x9023afe2;
 pub const MC_EXTRA_STATE_CELL: u16 = 0xcc26;
+pub const MESSAGE_PREFIX: [u8; 4] = [0x70, 0x6e, 0x0b, 0xc5];
 
 pub trait IShardValidator {
     fn parse_shard_proof_path(

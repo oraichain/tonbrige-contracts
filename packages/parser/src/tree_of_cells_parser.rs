@@ -6,6 +6,7 @@ use super::{
     types::{BagOfCellsInfo, Bytes32, Bytes4, CellData, CellSerializationInfo},
 };
 
+pub const EMPTY_HASH: Bytes32 = [0; 32];
 pub const BOC_IDX: Bytes4 = [0x68, 0xff, 0x65, 0xf3];
 pub const BOC_IDX_CRC32C: Bytes4 = [0xac, 0xc3, 0xa7, 0x28];
 pub const BOC_GENERIC: Bytes4 = [0xb5, 0xee, 0x9c, 0x72];

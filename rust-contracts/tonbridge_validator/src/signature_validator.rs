@@ -1,4 +1,4 @@
-use cosmwasm_std::{StdError, StdResult};
+use cosmwasm_std::{Api, StdError, StdResult, Storage};
 use cw_storage_plus::Map;
 use tonbridge_parser::{
     bit_reader::{
@@ -6,53 +6,58 @@ use tonbridge_parser::{
         read_u8,
     },
     block_parser::{BlockParser, IBlockParser, BLOCK_INFO_CELL},
+    tree_of_cells_parser::EMPTY_HASH,
     types::{Bytes32, CachedCell, CellData, ValidatorDescription, Vdata, VerifiedBlockInfo},
 };
+use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
+
+use crate::state::SIGNED_BLOCKS;
 
 pub trait ISignatureValidator {
-    fn get_pruned_cells(&self) -> StdResult<[CachedCell; 10]>;
-
-    fn add_current_block_to_verified_set(&self, root_h: Bytes32) -> StdResult<Bytes32>;
-
-    // fn setRootHashForValidating(bytes32 rh) external;
+    fn add_current_block_to_verified_set(
+        &self,
+        storage: &dyn Storage,
+        root_h: Bytes32,
+    ) -> StdResult<Bytes32>;
 
     fn verify_validators(
         &self,
+        storage: &mut dyn Storage,
+        api: &dyn Api,
         root_h: Bytes32,
         file_hash: Bytes32,
         vdata: &[Vdata; 5],
     ) -> StdResult<()>;
 
-    fn get_validators(&self) -> StdResult<[ValidatorDescription; 20]>;
+    // fn parse_candidates_root_block(
+    //     &self,
+    //     boc: &[u8],
+    //     root_idx: usize,
+    //     tree_of_cells: &mut [CellData; 100],
+    // ) -> StdResult<()>;
 
-    fn get_candidates_for_validators(&self) -> StdResult<[ValidatorDescription; 20]>;
+    // fn parse_part_validators(
+    //     data: &[u8],
+    //     cell_idx: usize,
+    //     cells: &mut [CellData; 100],
+    // ) -> StdResult<()>;
 
-    fn set_validator_set(&self) -> StdResult<Bytes32>;
-
-    fn parse_candidates_root_block(
+    fn is_signed_by_validator(
         &self,
-        boc: &[u8],
-        root_idx: usize,
-        tree_of_cells: &mut [CellData; 100],
-    ) -> StdResult<()>;
+        storage: &dyn Storage,
+        node_id: Bytes32,
+        root_h: Bytes32,
+    ) -> bool;
 
-    fn parse_part_validators(
-        data: &[u8],
-        cell_idx: usize,
-        cells: &mut [CellData; 100],
-    ) -> StdResult<()>;
-
-    fn is_signed_by_validator(&self, node_id: Bytes32, root_h: Bytes32) -> StdResult<bool>;
-
-    fn init_validators(&self) -> StdResult<Bytes32>;
+    // fn init_validators(&self) -> StdResult<Bytes32>;
 }
 
 // need to deserialize from storage and better access directly from storage
 #[derive(Default)]
 pub struct SignatureValidator {
-    validator_set: [ValidatorDescription; 20],
+    pub validator_set: [ValidatorDescription; 20],
     total_weight: u64,
-    pruned_cells: [CachedCell; 10],
+    pub pruned_cells: [CachedCell; 10],
     candidates_for_validator_set: [ValidatorDescription; 20],
     candidates_total_weight: u64,
     root_hash: Bytes32,
@@ -66,101 +71,96 @@ impl SignatureValidator {
 }
 
 impl ISignatureValidator for SignatureValidator {
-    //     constructor(address block_parserAddr) {
-    //         block_parser = IBlockParser(block_parserAddr);
-    //     }
+    fn is_signed_by_validator(
+        &self,
+        storage: &dyn Storage,
+        node_id: Bytes32,
+        root_h: Bytes32,
+    ) -> bool {
+        SIGNED_BLOCKS
+            .load(storage, &[node_id, root_h].concat())
+            .unwrap_or_default()
+    }
 
-    //     function is_signed_by_validator(
-    //         bytes32 node_id,
-    //         bytes32 root_h
-    //     ) public view returns (bool) {
-    //         return signed_blocks[node_id][root_h];
-    //     }
+    fn add_current_block_to_verified_set(
+        &self,
+        storage: &dyn Storage,
+        root_h: Bytes32,
+    ) -> StdResult<Bytes32> {
+        let mut current_weight = 0;
+        for j in 0..self.validator_set.len() {
+            if self.is_signed_by_validator(storage, self.validator_set[j].node_id, root_h) {
+                current_weight += self.validator_set[j].weight;
+            }
+        }
 
-    //     function get_pruned_cells() public view returns (CachedCell[10] memory) {
-    //         return pruned_cells;
-    //     }
+        if current_weight * 3 <= self.total_weight * 2 {
+            return Err(StdError::generic_err("not enought votes"));
+        }
+        Ok(root_h)
+    }
 
-    //     function get_validators()
-    //         public
-    //         view
-    //         returns (ValidatorDescription[20] memory)
-    //     {
-    //         return validator_set;
-    //     }
+    fn verify_validators(
+        &self,
+        storage: &mut dyn Storage,
+        api: &dyn Api,
+        root_h: Bytes32,
+        file_hash: Bytes32,
+        vdata: &[Vdata; 5],
+    ) -> StdResult<()> {
+        let test_root_hash = if self.root_hash == EMPTY_HASH {
+            root_h
+        } else {
+            self.root_hash
+        };
 
-    //     function get_candidates_for_validators()
-    //         public
-    //         view
-    //         returns (ValidatorDescription[20] memory)
-    //     {
-    //         return candidates_for_validator_set;
-    //     }
+        if test_root_hash == EMPTY_HASH || file_hash == EMPTY_HASH {
+            return Err(StdError::generic_err("wrong root_hash or file_hash"));
+        }
 
-    //     // function setRootHashForValidating(bytes32 rh) public {
-    //     //     root_hash = rh;
-    //     // }
+        let mut validator_idx = self.validator_set.len();
+        for i in 0..5 {
+            // 1. found validator
+            for j in 0..self.validator_set.len() {
+                if self.validator_set[j].node_id == vdata[i].node_id {
+                    validator_idx = j;
+                    break;
+                }
+            }
+            // skip others node_ids and already checked node_ids
+            if validator_idx == self.validator_set.len()
+                || self.is_signed_by_validator(
+                    storage,
+                    self.validator_set[validator_idx].node_id,
+                    test_root_hash,
+                )
+            {
+                continue;
+            }
+            // require(validator_idx != validator_set.length, "wrong node_id");
+            let mut message = MESSAGE_PREFIX.to_vec();
+            message.extend_from_slice(&test_root_hash);
+            message.extend_from_slice(&file_hash);
+            if api.ed25519_verify(&message, &[0u8], &self.validator_set[validator_idx].pubkey)? {
+                SIGNED_BLOCKS.save(
+                    storage,
+                    &[self.validator_set[validator_idx].node_id, test_root_hash].concat(),
+                    &true,
+                )?;
+            }
 
-    //     function add_current_block_to_verified_set(
-    //         bytes32 root_h
-    //     ) public view returns (bytes32) {
-    //         uint64 currentWeight = 0;
-    //         for (uint256 j = 0; j < validator_set.length; j++) {
-    //             if (signed_blocks[validator_set[j].node_id][root_h]) {
-    //                 currentWeight += validator_set[j].weight;
-    //             }
-    //         }
+            // if (Ed25519.verify(
+            //     validator_set[validator_idx].pubkey,
+            //     vdata[i].r,
+            //     vdata[i].s,
+            //     bytes.concat(bytes4(0x706e0bc5), test_root_hash, file_hash),
+            // )) {
+            //     signed_blocks[validator_set[validator_idx].node_id][test_root_hash] = true;
+            // }
+        }
 
-    //         require(currentWeight * 3 > total_weight * 2, "not enought votes");
-
-    //         return root_h;
-    //     }
-
-    //     function verify_validators(
-    //         bytes32 root_h,
-    //         bytes32 file_hash,
-    //         Vdata[5] calldata vdata
-    //     ) public {
-    //         bytes32 test_root_hash = root_hash == 0 ? root_h : root_hash;
-
-    //         require(
-    //             test_root_hash != 0 && file_hash != 0,
-    //             "wrong root_hash or file_hash"
-    //         );
-
-    //         uint256 validatodIdx = validator_set.length;
-    //         for (uint256 i = 0; i < 5; i++) {
-    //             // 1. found validator
-    //             for (uint256 j = 0; j < validator_set.length; j++) {
-    //                 if (validator_set[j].node_id == vdata[i].node_id) {
-    //                     validatodIdx = j;
-    //                     break;
-    //                 }
-    //             }
-    //             // skip others node_ids and already checked node_ids
-    //             if (
-    //                 validatodIdx == validator_set.length ||
-    //                 (signed_blocks[validator_set[validatodIdx].node_id][
-    //                     test_root_hash
-    //                 ] == true)
-    //             ) {
-    //                 continue;
-    //             }
-    //             // require(validatodIdx != validator_set.length, "wrong node_id");
-    //             if (
-    //                 Ed25519.verify(
-    //                     validator_set[validatodIdx].pubkey,
-    //                     vdata[i].r,
-    //                     vdata[i].s,
-    //                     bytes.concat(bytes4(0x706e0bc5), test_root_hash, file_hash)
-    //                 )
-    //             ) {
-    //                 signed_blocks[validator_set[validatodIdx].node_id][
-    //                     test_root_hash
-    //                 ] = true;
-    //             }
-    //         }
-    //     }
+        Ok(())
+    }
 
     //     function init_validators() public onlyOwner returns (bytes32) {
     //         // require(validator_set[0].weight == 0, "current validators not empty");
@@ -186,14 +186,14 @@ impl ISignatureValidator for SignatureValidator {
     //             require(pruned_cells[i].hash == 0, "need read all validators");
     //         }
 
-    //         uint64 currentWeight = 0;
+    //         uint64 current_weight = 0;
     //         for (uint256 j = 0; j < validator_set.length; j++) {
     //             if (signed_blocks[validator_set[j].node_id][root_hash]) {
-    //                 currentWeight += validator_set[j].weight;
+    //                 current_weight += validator_set[j].weight;
     //             }
     //         }
 
-    //         require(currentWeight * 3 > total_weight * 2, "not enought votes");
+    //         require(current_weight * 3 > total_weight * 2, "not enought votes");
 
     //         validator_set = candidates_for_validator_set;
     //         delete candidates_for_validator_set;
