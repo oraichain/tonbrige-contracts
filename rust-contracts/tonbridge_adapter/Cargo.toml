@@ -1,5 +1,5 @@
 [package]
-name = "tonbridge-adapter"
+name = "cw-tonbridge-adapter"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }

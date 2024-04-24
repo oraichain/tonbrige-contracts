@@ -52,6 +52,7 @@ pub struct CachedCell {
 }
 
 #[cw_serde]
+#[derive(Copy, Default)]
 pub struct VerifiedBlockInfo {
     pub verified: bool,
     pub seq_no: u32,

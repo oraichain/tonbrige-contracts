@@ -145,11 +145,17 @@ impl ITransactionParser for TransactionParser {
     }
 }
 
-pub fn parse_message(
-    data: &[u8],
-    cells: &mut [CellData],
-    message_idx: usize,
-) -> StdResult<Message> {
+pub fn parse_state_init(data: &[u8], cells: &mut [CellData], idx: usize) -> StdResult<()> {
+    if read_bool(data, cells, idx) {
+        read_uint256(data, cells, idx, 5)?;
+    }
+    if read_bool(data, cells, idx) {
+        read_uint256(data, cells, idx, 2)?;
+    }
+    Ok(())
+}
+
+fn parse_message(data: &[u8], cells: &mut [CellData], message_idx: usize) -> StdResult<Message> {
     let info = parse_common_msg_info(data, cells, message_idx)?;
     let has_init = read_bool(data, cells, message_idx);
 
@@ -179,17 +185,7 @@ pub fn parse_message(
     Ok(Message { info, body_idx })
 }
 
-pub fn parse_state_init(data: &[u8], cells: &mut [CellData], idx: usize) -> StdResult<()> {
-    if read_bool(data, cells, idx) {
-        read_uint256(data, cells, idx, 5)?;
-    }
-    if read_bool(data, cells, idx) {
-        read_uint256(data, cells, idx, 2)?;
-    }
-    Ok(())
-}
-
-pub fn parse_common_msg_info(
+fn parse_common_msg_info(
     data: &[u8],
     cells: &mut [CellData],
     message_idx: usize,
@@ -228,11 +224,7 @@ pub fn parse_common_msg_info(
     Ok(msg_info)
 }
 
-pub fn read_address(
-    data: &[u8],
-    cells: &mut [CellData],
-    message_idx: usize,
-) -> StdResult<TonAddress> {
+fn read_address(data: &[u8], cells: &mut [CellData], message_idx: usize) -> StdResult<TonAddress> {
     let mut addr = TonAddress::default();
 
     let cell_type = read_u8(data, cells, message_idx, 2)?;

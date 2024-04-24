@@ -12,6 +12,8 @@ use super::{
     },
 };
 
+pub const BLOCK_INFO_CELL: u32 = 0x9bc7a987;
+
 pub trait IBlockParser {
     fn parse_candidates_root_block(
         &self,
@@ -166,23 +168,6 @@ impl IBlockParser for BlockParser {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use cosmwasm_std::HexBinary;
-
-    use crate::types::Bytes32;
-
-    #[test]
-    fn test_hex_convert() {
-        let ret = HexBinary::from_hex("c6b41348").unwrap();
-        let ret1 = HexBinary::from([0xc6, 0xb4, 0x13, 0x48]);
-        println!("{} {}", ret.to_hex(), ret1.to_hex());
-
-        print!("{:?}", Bytes32::default());
-        assert!(2390828938u32 == 0x8e81278a);
-    }
-}
-
 pub fn read_coins(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> StdResult<Bytes32> {
     let bytes = read_u8(data, cells, cell_idx, 4)?;
 
@@ -208,6 +193,42 @@ pub fn parse_currency_collection(
     }
 
     Ok(coins)
+}
+
+pub fn read_int(data: &[u8], mut size: usize) -> usize {
+    let mut res = 0;
+    let mut cursor = 0;
+    while size > 0 {
+        res = (res << 8) + data[cursor] as usize;
+        cursor += 1;
+        size -= 1;
+    }
+    res
+}
+
+pub fn read_uint_leq(
+    proof_boc: &[u8],
+    cells: &mut [CellData],
+    cell_idx: usize,
+    n: u128,
+) -> StdResult<Uint256> {
+    let mut last_one = 0u16;
+    let mut l = 1u128;
+    let mut found = false;
+    for i in 0..32 {
+        if (n & l) > 0 {
+            last_one = i;
+            found = true;
+        }
+        l = l << 1;
+    }
+
+    if !found {
+        return Err(StdError::generic_err("not a UintLe"));
+    }
+
+    last_one += 1;
+    read_uint256(proof_boc, cells, cell_idx, last_one)
 }
 
 fn parse_block_extra(
@@ -424,42 +445,6 @@ fn parse_dict2(
     Ok((cell_idxs, pruned_cells))
 }
 
-pub fn read_int(data: &[u8], mut size: usize) -> usize {
-    let mut res = 0;
-    let mut cursor = 0;
-    while size > 0 {
-        res = (res << 8) + data[cursor] as usize;
-        cursor += 1;
-        size -= 1;
-    }
-    res
-}
-
-pub fn read_uint_leq(
-    proof_boc: &[u8],
-    cells: &mut [CellData],
-    cell_idx: usize,
-    n: u128,
-) -> StdResult<Uint256> {
-    let mut last_one = 0u16;
-    let mut l = 1u128;
-    let mut found = false;
-    for i in 0..32 {
-        if (n & l) > 0 {
-            last_one = i;
-            found = true;
-        }
-        l = l << 1;
-    }
-
-    if !found {
-        return Err(StdError::generic_err("not a UintLe"));
-    }
-
-    last_one += 1;
-    read_uint256(proof_boc, cells, cell_idx, last_one)
-}
-
 fn parse_config_param342(
     data: &[u8],
     cells: &mut [CellData],
@@ -501,7 +486,7 @@ pub fn check_block_info(
     cell_idx: usize,
     transaction: &mut TransactionHeader,
 ) -> StdResult<bool> {
-    if read_u32(proof_boc, cells, cell_idx, 32)? != 0x9bc7a987 {
+    if read_u32(proof_boc, cells, cell_idx, 32)? != BLOCK_INFO_CELL {
         return Err(StdError::generic_err("not a BlockInfo"));
     }
 
@@ -548,4 +533,21 @@ pub fn check_block_info(
     let end_lt = read_u64(proof_boc, cells, cell_idx, 64)?;
 
     Ok(transaction.lt >= start_lt || transaction.lt <= end_lt)
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::HexBinary;
+
+    use crate::types::Bytes32;
+
+    #[test]
+    fn test_hex_convert() {
+        let ret = HexBinary::from_hex("c6b41348").unwrap();
+        let ret1 = HexBinary::from([0xc6, 0xb4, 0x13, 0x48]);
+        println!("{} {}", ret.to_hex(), ret1.to_hex());
+
+        print!("{:?}", Bytes32::default());
+        assert!(2390828938u32 == 0x8e81278a);
+    }
 }

@@ -149,7 +149,7 @@ impl ITreeOfCellsParser for TreeOfCellsParser {
     }
 }
 
-pub fn get_indexes(boc: &[u8], info: &mut BagOfCellsInfo) -> StdResult<Vec<usize>> {
+fn get_indexes(boc: &[u8], info: &mut BagOfCellsInfo) -> StdResult<Vec<usize>> {
     // require(!info.has_index, "has index logic has not realised");
     // custom_index
     let mut cells_slice_for_indexes = &boc[info.data_offset..info.data_offset + info.data_size];
@@ -169,7 +169,7 @@ pub fn get_indexes(boc: &[u8], info: &mut BagOfCellsInfo) -> StdResult<Vec<usize
     Ok(custom_index)
 }
 
-pub fn init_cell_serialization_info(
+fn init_cell_serialization_info(
     data: &[u8],
     ref_byte_size: usize,
 ) -> StdResult<CellSerializationInfo> {
@@ -269,7 +269,7 @@ fn get_cell_slice<'a>(idx: usize, cells_slice: &'a [u8], custom_index: &'a [usiz
     &cells_slice[offs..offs_end]
 }
 
-pub fn create_data_cell(refs: [usize; 4], cell_info: &CellSerializationInfo) -> CellData {
+fn create_data_cell(refs: [usize; 4], cell_info: &CellSerializationInfo) -> CellData {
     let mut cell = CellData::default();
     cell.refs = refs;
     cell.special = cell_info.special;
@@ -277,7 +277,7 @@ pub fn create_data_cell(refs: [usize; 4], cell_info: &CellSerializationInfo) -> 
     cell
 }
 
-pub fn calc_hashes_for_toc(
+fn calc_hashes_for_toc(
     boc: &[u8],
     info: &mut BagOfCellsInfo,
     cells: &mut [CellData],
