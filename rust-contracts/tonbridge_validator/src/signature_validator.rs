@@ -141,22 +141,20 @@ impl ISignatureValidator for SignatureValidator {
             let mut message = MESSAGE_PREFIX.to_vec();
             message.extend_from_slice(&test_root_hash);
             message.extend_from_slice(&file_hash);
-            if api.ed25519_verify(&message, &[0u8], &self.validator_set[validator_idx].pubkey)? {
+
+            // signature = r + s
+            if api.ed25519_verify(
+                &message,
+                &[vdata[i].r, vdata[i].s].concat(),
+                &self.validator_set[validator_idx].pubkey,
+            )? {
+                // update as verified
                 SIGNED_BLOCKS.save(
                     storage,
                     &[self.validator_set[validator_idx].node_id, test_root_hash].concat(),
                     &true,
                 )?;
             }
-
-            // if (Ed25519.verify(
-            //     validator_set[validator_idx].pubkey,
-            //     vdata[i].r,
-            //     vdata[i].s,
-            //     bytes.concat(bytes4(0x706e0bc5), test_root_hash, file_hash),
-            // )) {
-            //     signed_blocks[validator_set[validator_idx].node_id][test_root_hash] = true;
-            // }
         }
 
         Ok(())
@@ -300,4 +298,28 @@ impl ISignatureValidator for SignatureValidator {
     //             }
     //         }
     //     }
+}
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::{testing::mock_dependencies, Api, HexBinary, Uint256};
+
+    const ED25519_MESSAGE_HEX: &str = "af82";
+    const ED25519_SIGNATURE_HEX: &str = "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a";
+    const ED25519_PUBLIC_KEY_HEX: &str =
+        "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025";
+
+    #[test]
+    fn test_signature_verify() {
+        let deps = mock_dependencies();
+        let message = HexBinary::from_hex(ED25519_MESSAGE_HEX).unwrap();
+        let signature = HexBinary::from_hex(ED25519_SIGNATURE_HEX).unwrap();
+        let public_key = HexBinary::from_hex(ED25519_PUBLIC_KEY_HEX).unwrap();
+        let verfied = deps
+            .api
+            .ed25519_verify(&message, &signature, &public_key)
+            .unwrap();
+
+        println!("verified {}", verfied);
+    }
 }
