@@ -1,5 +1,6 @@
 use cosmwasm_std::{StdError, StdResult, Uint256};
-use sha2::{Digest, Sha256};
+
+use crate::bit_reader::sha256;
 
 use super::{
     bit_reader::{
@@ -16,14 +17,14 @@ pub trait IBlockParser {
         &self,
         boc: &[u8],
         root_idx: usize,
-        tree_of_cells: &mut [CellData; 100],
+        tree_of_cells: &mut [CellData],
     ) -> StdResult<[ValidatorDescription; 32]>;
 
     fn parse_part_validators(
         &self,
         data: &[u8],
         cell_idx: usize,
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         prefix_length: u128,
     ) -> StdResult<[ValidatorDescription; 32]>;
 
@@ -31,7 +32,7 @@ pub trait IBlockParser {
         &self,
         proof_boc: &[u8],
         proof_boc_info: &mut BagOfCellsInfo,
-        proof_tree_of_cells: &mut [CellData; 100],
+        proof_tree_of_cells: &mut [CellData],
         tx_root_hash: Bytes32,
         transaction: &mut TransactionHeader,
     ) -> StdResult<bool>;
@@ -43,20 +44,16 @@ pub struct BlockParser {}
 
 impl IBlockParser for BlockParser {
     fn compute_node_id(public_key: Bytes32) -> StdResult<Bytes32> {
-        let mut hasher = Sha256::new();
-        hasher.update(&[0xc6, 0xb4, 0x13, 0x48]);
-        hasher.update(&public_key);
-        hasher
-            .finalize()
-            .try_into()
-            .map_err(|_| StdError::generic_err("hash is not 32 bits"))
+        let mut data = vec![0xc6, 0xb4, 0x13, 0x48];
+        data.extend_from_slice(&public_key);
+        sha256(&data)
     }
 
     fn parse_candidates_root_block(
         &self,
         boc: &[u8],
         root_idx: usize,
-        tree_of_cells: &mut [CellData; 100],
+        tree_of_cells: &mut [CellData],
     ) -> StdResult<[ValidatorDescription; 32]> {
         // uint32 tag =
         read_u32(boc, tree_of_cells, root_idx, 32)?;
@@ -121,7 +118,7 @@ impl IBlockParser for BlockParser {
         &self,
         data: &[u8],
         cell_idx: usize,
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         prefix_length: u128,
     ) -> StdResult<[ValidatorDescription; 32]> {
         let tx_idxs = parse_dict(data, cells, cell_idx, prefix_length)?;
@@ -141,7 +138,7 @@ impl IBlockParser for BlockParser {
         &self,
         proof_boc: &[u8],
         proof_boc_info: &mut BagOfCellsInfo,
-        proof_tree_of_cells: &mut [CellData; 100],
+        proof_tree_of_cells: &mut [CellData],
         tx_root_hash: Bytes32,
         transaction: &mut TransactionHeader,
     ) -> StdResult<bool> {
@@ -186,7 +183,7 @@ mod tests {
     }
 }
 
-pub fn read_coins(data: &[u8], cells: &mut [CellData; 100], cell_idx: usize) -> StdResult<Bytes32> {
+pub fn read_coins(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> StdResult<Bytes32> {
     let bytes = read_u8(data, cells, cell_idx, 4)?;
 
     if bytes == 0 {
@@ -198,7 +195,7 @@ pub fn read_coins(data: &[u8], cells: &mut [CellData; 100], cell_idx: usize) -> 
 
 pub fn parse_currency_collection(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
 ) -> StdResult<Bytes32> {
     let coins = read_coins(data, cells, cell_idx)?;
@@ -215,7 +212,7 @@ pub fn parse_currency_collection(
 
 fn parse_block_extra(
     proof_boc: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     tx_root_hash: Bytes32,
     transaction: &mut TransactionHeader,
@@ -267,7 +264,7 @@ fn parse_block_extra(
 
 fn read_validator_description(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
 ) -> StdResult<ValidatorDescription> {
     let c_type = read_u8(data, cells, cell_idx, 8)?;
@@ -295,7 +292,7 @@ fn read_validator_description(
 fn do_parse2(
     data: &[u8],
     prefix: u128,
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     n: u128,
     cell_idxs: &mut [usize; 32],
@@ -407,7 +404,7 @@ fn do_parse2(
 
 fn parse_dict2(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     key_size: u128,
 ) -> StdResult<([usize; 32], [CachedCell; 10])> {
@@ -427,11 +424,11 @@ fn parse_dict2(
     Ok((cell_idxs, pruned_cells))
 }
 
-pub fn read_int(data: &[u8], mut size: u128) -> Uint256 {
-    let mut res = Uint256::zero();
+pub fn read_int(data: &[u8], mut size: usize) -> usize {
+    let mut res = 0;
     let mut cursor = 0;
     while size > 0 {
-        res = (res << 8) + Uint256::from(data[cursor]);
+        res = (res << 8) + data[cursor] as usize;
         cursor += 1;
         size -= 1;
     }
@@ -440,7 +437,7 @@ pub fn read_int(data: &[u8], mut size: u128) -> Uint256 {
 
 pub fn read_uint_leq(
     proof_boc: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     n: u128,
 ) -> StdResult<Uint256> {
@@ -465,7 +462,7 @@ pub fn read_uint_leq(
 
 fn parse_config_param342(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
 ) -> StdResult<[ValidatorDescription; 32]> {
     // uint256 skipped =
@@ -500,7 +497,7 @@ fn parse_config_param342(
 
 pub fn check_block_info(
     proof_boc: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     transaction: &mut TransactionHeader,
 ) -> StdResult<bool> {

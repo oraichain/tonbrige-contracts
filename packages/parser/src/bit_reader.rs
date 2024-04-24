@@ -1,23 +1,22 @@
 use cosmwasm_std::{StdError, StdResult, Uint256};
+use sha2::{Digest, Sha256};
 
 use super::types::{Bytes32, CellData};
 
-// memory: mutable, calldata: immutable
-
-pub fn read_bit(data: &[u8], cells: &mut [CellData; 100], cell_idx: usize) -> u8 {
+pub fn read_bit(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> u8 {
     let cursor = cells[cell_idx].cursor >> 3;
     let bytes_start = cells[cell_idx].cursor - cursor << 3;
     cells[cell_idx].cursor += 1;
     (data[cursor] << bytes_start) >> 7
 }
 
-pub fn read_bool(data: &[u8], cells: &mut [CellData; 100], cell_idx: usize) -> bool {
+pub fn read_bool(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> bool {
     read_bit(data, cells, cell_idx) == 1
 }
 
 pub fn read_u8(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     mut size: u8,
 ) -> StdResult<u8> {
@@ -35,7 +34,7 @@ pub fn read_u8(
 
 pub fn read_u16(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     mut size: u8,
 ) -> StdResult<u16> {
@@ -53,7 +52,7 @@ pub fn read_u16(
 
 pub fn read_u32(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     mut size: u8,
 ) -> StdResult<u32> {
@@ -71,7 +70,7 @@ pub fn read_u32(
 
 pub fn read_u64(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     mut size: u8,
 ) -> StdResult<u64> {
@@ -89,7 +88,7 @@ pub fn read_u64(
 
 pub fn read_uint256(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     mut size: u16,
 ) -> StdResult<Uint256> {
@@ -107,7 +106,7 @@ pub fn read_uint256(
 
 pub fn read_bytes32_bit_size(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     mut size: u128,
 ) -> Bytes32 {
@@ -121,7 +120,7 @@ pub fn read_bytes32_bit_size(
 
 pub fn read_bytes32_byte_size(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     sizeb: u128,
 ) -> Bytes32 {
@@ -134,13 +133,13 @@ pub fn read_bytes32_byte_size(
     Uint256::from(value).to_be_bytes()
 }
 
-pub fn read_cell(cells: &mut [CellData; 100], cell_idx: usize) -> usize {
+pub fn read_cell(cells: &mut [CellData], cell_idx: usize) -> usize {
     let idx = cells[cell_idx].refs[cells[cell_idx].cursor_ref as usize];
     cells[cell_idx].cursor_ref += 1;
     idx
 }
 
-pub fn read_unary_length(data: &[u8], cells: &mut [CellData; 100], cell_idx: usize) -> u128 {
+pub fn read_unary_length(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> u128 {
     // u128 is big enough
     let mut value = 0u128;
     while read_bool(data, cells, cell_idx) {
@@ -174,7 +173,7 @@ pub fn log2ceil(x: u128) -> u8 {
 pub fn do_parse(
     data: &[u8],
     prefix: u128,
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     n: u128,
     cell_idxs: &mut [usize; 32],
@@ -249,7 +248,7 @@ pub fn do_parse(
 
 pub fn parse_dict(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     cell_idx: usize,
     key_size: u128,
 ) -> StdResult<[usize; 32]> {
@@ -257,6 +256,15 @@ pub fn parse_dict(
 
     do_parse(data, 0, cells, cell_idx, key_size, &mut cell_idxs)?;
     Ok(cell_idxs)
+}
+
+pub fn sha256(data: &[u8]) -> StdResult<Bytes32> {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hasher
+        .finalize()
+        .try_into()
+        .map_err(|_| StdError::generic_err("hash is not 32 bits"))
 }
 
 #[cfg(test)]

@@ -6,22 +6,23 @@ pub type Bytes4 = [u8; 4];
 pub type Address = [u8; 20];
 
 #[cw_serde]
+#[derive(Copy, Default)]
 pub struct BagOfCellsInfo {
     pub magic: Bytes4,
-    pub root_count: Uint256,
-    pub cell_count: Uint256,
-    pub absent_count: Uint256,
-    pub ref_byte_size: Uint256,
-    pub offset_byte_size: Uint256,
+    pub root_count: usize,
+    pub cell_count: usize,
+    pub absent_count: usize,
+    pub ref_byte_size: usize,
+    pub offset_byte_size: usize,
     pub has_index: bool,
     pub has_roots: bool,
     pub has_crc32c: bool,
     pub has_cache_bits: bool,
-    pub roots_offset: Uint256,
-    pub index_offset: Uint256,
-    pub data_offset: Uint256,
-    pub data_size: Uint256,
-    pub total_size: Uint256,
+    pub roots_offset: usize,
+    pub index_offset: usize,
+    pub data_offset: usize,
+    pub data_size: usize,
+    pub total_size: usize,
     pub root_idx: usize,
 }
 
@@ -60,6 +61,7 @@ pub struct VerifiedBlockInfo {
 }
 
 #[cw_serde]
+#[derive(Copy, Default)]
 pub struct CellData {
     pub special: bool,
     pub refs: [usize; 4],
@@ -73,20 +75,21 @@ pub struct CellData {
 }
 
 #[cw_serde]
+#[derive(Copy, Default)]
 pub struct CellSerializationInfo {
     pub d1: u8,
     pub d2: u8,
     pub special: bool,
     pub level_mask: u32,
     pub with_hashes: bool,
-    pub hashes_offset: Uint256,
-    pub depth_offset: Uint256,
-    pub data_offset: Uint256,
-    pub data_len: Uint256,
+    pub hashes_offset: usize,
+    pub depth_offset: usize,
+    pub data_offset: usize,
+    pub data_len: usize,
     pub data_with_bits: bool,
-    pub refs_offset: Uint256,
-    pub refs_cnt: Uint256,
-    pub end_offset: Uint256,
+    pub refs_offset: usize,
+    pub refs_cnt: usize,
+    pub end_offset: usize,
 }
 
 #[cw_serde]

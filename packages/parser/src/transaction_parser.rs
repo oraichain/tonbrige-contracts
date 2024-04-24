@@ -16,28 +16,28 @@ pub trait ITransactionParser {
     fn deserialize_msg_date(
         &self,
         boc: &[u8],
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         root_idx: usize,
     ) -> StdResult<TestData>;
 
     fn parse_transaction_header(
         &self,
         data: &[u8],
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         root_idx: usize,
     ) -> StdResult<TransactionHeader>;
 
     fn parse_messages_header(
         &self,
         data: &[u8],
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         messages_idx: usize,
     ) -> StdResult<MessagesHeader>;
 
     fn get_data_from_messages(
         &self,
         boc_data: &[u8],
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         out_messages: &mut [Message; 5],
     ) -> StdResult<TestData>;
 }
@@ -48,7 +48,7 @@ impl ITransactionParser for TransactionParser {
     fn deserialize_msg_date(
         &self,
         boc: &[u8],
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         root_idx: usize,
     ) -> StdResult<TestData> {
         self.parse_transaction_header(boc, cells, root_idx)?;
@@ -61,7 +61,7 @@ impl ITransactionParser for TransactionParser {
     fn parse_transaction_header(
         &self,
         data: &[u8],
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         root_idx: usize,
     ) -> StdResult<TransactionHeader> {
         let mut transaction = TransactionHeader::default();
@@ -86,7 +86,7 @@ impl ITransactionParser for TransactionParser {
     fn parse_messages_header(
         &self,
         data: &[u8],
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         messages_idx: usize,
     ) -> StdResult<MessagesHeader> {
         let mut message_header = MessagesHeader::default();
@@ -117,7 +117,7 @@ impl ITransactionParser for TransactionParser {
     fn get_data_from_messages(
         &self,
         boc_data: &[u8],
-        cells: &mut [CellData; 100],
+        cells: &mut [CellData],
         out_messages: &mut [Message; 5],
     ) -> StdResult<TestData> {
         let bytes32_one = Uint256::one().to_be_bytes();
@@ -147,7 +147,7 @@ impl ITransactionParser for TransactionParser {
 
 pub fn parse_message(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     message_idx: usize,
 ) -> StdResult<Message> {
     let info = parse_common_msg_info(data, cells, message_idx)?;
@@ -179,7 +179,7 @@ pub fn parse_message(
     Ok(Message { info, body_idx })
 }
 
-pub fn parse_state_init(data: &[u8], cells: &mut [CellData; 100], idx: usize) -> StdResult<()> {
+pub fn parse_state_init(data: &[u8], cells: &mut [CellData], idx: usize) -> StdResult<()> {
     if read_bool(data, cells, idx) {
         read_uint256(data, cells, idx, 5)?;
     }
@@ -191,7 +191,7 @@ pub fn parse_state_init(data: &[u8], cells: &mut [CellData; 100], idx: usize) ->
 
 pub fn parse_common_msg_info(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     message_idx: usize,
 ) -> StdResult<RawCommonMessageInfo> {
     let mut msg_info = RawCommonMessageInfo::default();
@@ -230,7 +230,7 @@ pub fn parse_common_msg_info(
 
 pub fn read_address(
     data: &[u8],
-    cells: &mut [CellData; 100],
+    cells: &mut [CellData],
     message_idx: usize,
 ) -> StdResult<TonAddress> {
     let mut addr = TonAddress::default();
