@@ -38,20 +38,12 @@ pub trait IBlockParser {
         tx_root_hash: Bytes32,
         transaction: &mut TransactionHeader,
     ) -> StdResult<bool>;
-
-    fn compute_node_id(public_key: Bytes32) -> StdResult<Bytes32>;
 }
 
 #[derive(Default)]
 pub struct BlockParser {}
 
 impl IBlockParser for BlockParser {
-    fn compute_node_id(public_key: Bytes32) -> StdResult<Bytes32> {
-        let mut data = vec![0xc6, 0xb4, 0x13, 0x48];
-        data.extend_from_slice(&public_key);
-        sha256(&data)
-    }
-
     fn parse_candidates_root_block(
         &self,
         boc: &[u8],
@@ -379,13 +371,13 @@ fn do_parse2(
             let start_idx = cells[left_idx].cursor / 8 + 2;
             let end_idx = start_idx + 32;
             let sdata = CachedCell {
-                prefix_length: Uint256::from(n - prefix_length - 1),
+                prefix_length: n - prefix_length - 1,
                 hash: data[start_idx..end_idx]
                     .try_into()
                     .map_err(|_| StdError::generic_err("hash is not 32 bits"))?,
             };
             for i in 0..10 {
-                if pruned_cells[i].prefix_length.is_zero() {
+                if pruned_cells[i].prefix_length == 0 {
                     pruned_cells[i] = sdata;
                     break;
                 }
@@ -406,14 +398,14 @@ fn do_parse2(
             let end_idx = start_idx + 32;
 
             let sdata = CachedCell {
-                prefix_length: Uint256::from(n - prefix_length - 1),
+                prefix_length: n - prefix_length - 1,
                 hash: data[start_idx..end_idx]
                     .try_into()
                     .map_err(|_| StdError::generic_err("hash is not 32 bits"))?,
             };
 
             for i in 0..10 {
-                if pruned_cells[i].prefix_length.is_zero() {
+                if pruned_cells[i].prefix_length == 0 {
                     pruned_cells[i] = sdata;
                     break;
                 }
@@ -534,6 +526,12 @@ pub fn check_block_info(
     let end_lt = read_u64(proof_boc, cells, cell_idx, 64)?;
 
     Ok(transaction.lt >= start_lt || transaction.lt <= end_lt)
+}
+
+pub fn compute_node_id(public_key: Bytes32) -> StdResult<Bytes32> {
+    let mut data = vec![0xc6, 0xb4, 0x13, 0x48];
+    data.extend_from_slice(&public_key);
+    sha256(&data)
 }
 
 #[cfg(test)]

@@ -47,7 +47,7 @@ pub struct Vdata {
 #[cw_serde]
 #[derive(Copy, Default)]
 pub struct CachedCell {
-    pub prefix_length: Uint256,
+    pub prefix_length: u128,
     pub hash: Bytes32,
 }
 

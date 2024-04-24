@@ -1,17 +1,14 @@
 use cosmwasm_std::{Api, StdError, StdResult, Storage};
-use cw_storage_plus::Map;
 use tonbridge_parser::{
-    bit_reader::{
-        parse_dict, read_bit, read_bool, read_bytes32_bit_size, read_u16, read_u32, read_u64,
-        read_u8,
-    },
-    block_parser::{BlockParser, IBlockParser, BLOCK_INFO_CELL},
+    block_parser::{compute_node_id, BlockParser, IBlockParser},
     tree_of_cells_parser::EMPTY_HASH,
-    types::{Bytes32, CachedCell, CellData, ValidatorDescription, Vdata, VerifiedBlockInfo},
+    types::{Bytes32, CachedCell, CellData, ValidatorDescription, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
 
 use crate::state::SIGNED_BLOCKS;
+
+pub type ValidatorSet = [ValidatorDescription; 20];
 
 pub trait ISignatureValidator {
     fn add_current_block_to_verified_set(
@@ -29,18 +26,19 @@ pub trait ISignatureValidator {
         vdata: &[Vdata; 5],
     ) -> StdResult<()>;
 
-    // fn parse_candidates_root_block(
-    //     &self,
-    //     boc: &[u8],
-    //     root_idx: usize,
-    //     tree_of_cells: &mut [CellData; 100],
-    // ) -> StdResult<()>;
+    fn parse_candidates_root_block(
+        &mut self,
+        boc: &[u8],
+        root_idx: usize,
+        tree_of_cells: &mut [CellData],
+    ) -> StdResult<()>;
 
-    // fn parse_part_validators(
-    //     data: &[u8],
-    //     cell_idx: usize,
-    //     cells: &mut [CellData; 100],
-    // ) -> StdResult<()>;
+    fn parse_part_validators(
+        &mut self,
+        data: &[u8],
+        cell_idx: usize,
+        cells: &mut [CellData],
+    ) -> StdResult<()>;
 
     fn is_signed_by_validator(
         &self,
@@ -49,16 +47,18 @@ pub trait ISignatureValidator {
         root_h: Bytes32,
     ) -> bool;
 
-    // fn init_validators(&self) -> StdResult<Bytes32>;
+    fn set_validator_set(&mut self, storage: &dyn Storage) -> StdResult<Bytes32>;
+
+    fn init_validators(&mut self) -> StdResult<Bytes32>;
 }
 
 // need to deserialize from storage and better access directly from storage
 #[derive(Default)]
 pub struct SignatureValidator {
-    pub validator_set: [ValidatorDescription; 20],
+    pub validator_set: ValidatorSet,
     total_weight: u64,
     pub pruned_cells: [CachedCell; 10],
-    candidates_for_validator_set: [ValidatorDescription; 20],
+    candidates_for_validator_set: ValidatorSet,
     candidates_total_weight: u64,
     root_hash: Bytes32,
     block_parser: BlockParser,
@@ -160,149 +160,156 @@ impl ISignatureValidator for SignatureValidator {
         Ok(())
     }
 
-    //     function init_validators() public onlyOwner returns (bytes32) {
-    //         // require(validator_set[0].weight == 0, "current validators not empty");
+    fn init_validators(&mut self) -> StdResult<Bytes32> {
+        // require(validator_set[0].weight == 0, "current validators not empty");
 
-    //         validator_set = candidates_for_validator_set;
-    //         delete candidates_for_validator_set;
+        // TODO: using Item storage
+        self.validator_set = self.candidates_for_validator_set;
+        self.candidates_for_validator_set = ValidatorSet::default();
 
-    //         total_weight = candidates_total_weight;
-    //         candidates_total_weight = 0;
-    //         bytes32 rh = root_hash;
-    //         root_hash = 0;
+        self.total_weight = self.candidates_total_weight;
+        self.candidates_total_weight = 0;
+        let rh = self.root_hash;
+        self.root_hash = Bytes32::default();
 
-    //         return (rh);
-    //     }
+        Ok(rh)
+    }
 
-    //     function set_validator_set() public returns (bytes32) {
-    //         // if current validator_set is empty, check caller
-    //         // else check votes
-    //         require(validator_set[0].weight != 0);
+    fn set_validator_set(&mut self, storage: &dyn Storage) -> StdResult<Bytes32> {
+        // if current validator_set is empty, check caller
+        // else check votes
+        if self.validator_set[0].weight == 0 {
+            return Err(StdError::generic_err("current validator_set is empty"));
+        }
 
-    //         // check all pruned cells are empty
-    //         for (uint256 i = 0; i < pruned_cells.length; i++) {
-    //             require(pruned_cells[i].hash == 0, "need read all validators");
-    //         }
+        // check all pruned cells are empty
+        for pruned_cell in &self.pruned_cells {
+            if pruned_cell.hash != EMPTY_HASH {
+                return Err(StdError::generic_err("need read all validators"));
+            }
+        }
 
-    //         uint64 current_weight = 0;
-    //         for (uint256 j = 0; j < validator_set.length; j++) {
-    //             if (signed_blocks[validator_set[j].node_id][root_hash]) {
-    //                 current_weight += validator_set[j].weight;
-    //             }
-    //         }
+        let mut current_weight = 0;
+        for validator in &self.validator_set {
+            if self.is_signed_by_validator(storage, validator.node_id, self.root_hash) {
+                current_weight += validator.weight;
+            }
+        }
 
-    //         require(current_weight * 3 > total_weight * 2, "not enought votes");
+        if current_weight * 3 <= self.total_weight * 2 {
+            return Err(StdError::generic_err("not enought votes"));
+        }
 
-    //         validator_set = candidates_for_validator_set;
-    //         delete candidates_for_validator_set;
+        self.validator_set = self.candidates_for_validator_set;
+        self.candidates_for_validator_set = ValidatorSet::default();
 
-    //         total_weight = candidates_total_weight;
-    //         candidates_total_weight = 0;
-    //         bytes32 rh = root_hash;
-    //         root_hash = 0;
+        self.total_weight = self.candidates_total_weight;
+        self.candidates_total_weight = 0;
+        let rh = self.root_hash;
+        self.root_hash = EMPTY_HASH;
 
-    //         return (rh);
-    //     }
+        Ok(rh)
+    }
 
-    //     function parse_candidates_root_block(
-    //         bytes calldata boc,
-    //         uint256 root_idx,
-    //         CellData[100] memory tree_of_cells
-    //     ) public {
-    //         delete candidates_for_validator_set;
-    //         candidates_total_weight = 0;
-    //         delete pruned_cells;
-    //         root_hash = tree_of_cells[root_idx]._hash[0];
+    fn parse_candidates_root_block(
+        &mut self,
+        boc: &[u8],
+        root_idx: usize,
+        tree_of_cells: &mut [CellData],
+    ) -> StdResult<()> {
+        self.candidates_for_validator_set = ValidatorSet::default();
+        self.candidates_total_weight = 0;
+        self.pruned_cells = [CachedCell::default(); 10];
+        self.root_hash = tree_of_cells[root_idx].hashes[0];
 
-    //         ValidatorDescription[32] memory validators = block_parser
-    //             .parse_candidates_root_block(boc, root_idx, tree_of_cells);
+        let mut validators =
+            self.block_parser
+                .parse_candidates_root_block(boc, root_idx, tree_of_cells)?;
 
-    //         for (uint256 i = 0; i < 32; i++) {
-    //             for (uint256 j = 0; j < 20; j++) {
-    //                 // is empty
-    //                 if (candidates_for_validator_set[j].weight == 0) {
-    //                     candidates_total_weight += validators[i].weight;
-    //                     candidates_for_validator_set[j] = validators[i];
-    //                     candidates_for_validator_set[j].node_id = block_parser
-    //                         .computeNodeId(candidates_for_validator_set[j].pubkey);
-    //                     break;
-    //                 }
-    //                 // old validator has less weight then new
-    //                 if (
-    //                     candidates_for_validator_set[j].weight < validators[i].weight
-    //                 ) {
-    //                     candidates_total_weight += validators[i].weight;
-    //                     candidates_total_weight -= candidates_for_validator_set[j]
-    //                         .weight;
+        for i in 0..32 {
+            for j in 0..20 {
+                // is empty
+                if self.candidates_for_validator_set[j].weight == 0 {
+                    self.candidates_total_weight += validators[i].weight;
+                    self.candidates_for_validator_set[j] = validators[i];
+                    self.candidates_for_validator_set[j].node_id =
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey)?;
+                    break;
+                }
+                // old validator has less weight then new
+                if self.candidates_for_validator_set[j].weight < validators[i].weight {
+                    self.candidates_total_weight += validators[i].weight;
+                    self.candidates_total_weight -= self.candidates_for_validator_set[j].weight;
 
-    //                     ValidatorDescription memory tmp = candidates_for_validator_set[
-    //                         j
-    //                     ];
-    //                     candidates_for_validator_set[j] = validators[i];
-    //                     validators[i] = tmp;
+                    let tmp = self.candidates_for_validator_set[j];
+                    self.candidates_for_validator_set[j] = validators[i];
+                    validators[i] = tmp;
 
-    //                     candidates_for_validator_set[j].node_id = block_parser
-    //                         .computeNodeId(candidates_for_validator_set[j].pubkey);
-    //                 }
-    //             }
-    //         }
-    //     }
+                    self.candidates_for_validator_set[j].node_id =
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey)?;
+                }
+            }
+        }
 
-    //     function parse_part_validators(
-    //         bytes calldata data,
-    //         uint256 cell_idx,
-    //         CellData[100] memory cells
-    //     ) public {
-    //         bool valid = false;
-    //         uint256 prefixLength = 0;
-    //         for (uint256 i = 0; i < 10; i++) {
-    //             if (pruned_cells[i].hash == cells[cell_idx]._hash[0]) {
-    //                 valid = true;
-    //                 prefixLength = pruned_cells[i].prefixLength;
-    //                 delete pruned_cells[i];
-    //                 break;
-    //             }
-    //         }
-    //         require(valid, "Wrong boc for validators");
+        Ok(())
+    }
 
-    //         ValidatorDescription[32] memory validators = block_parser
-    //             .parse_part_validators(data, cell_idx, cells, prefixLength);
+    fn parse_part_validators(
+        &mut self,
+        data: &[u8],
+        cell_idx: usize,
+        cells: &mut [CellData],
+    ) -> StdResult<()> {
+        let mut valid = false;
+        let mut prefix_length = 0;
+        for i in 0..self.pruned_cells.len() {
+            if self.pruned_cells[i].hash == cells[cell_idx].hashes[0] {
+                valid = true;
+                prefix_length = self.pruned_cells[i].prefix_length;
+                self.pruned_cells[i] = CachedCell::default();
+                break;
+            }
+        }
+        if !valid {
+            return Err(StdError::generic_err("Wrong boc for validators"));
+        }
 
-    //         for (uint256 i = 0; i < 32; i++) {
-    //             for (uint256 j = 0; j < 20; j++) {
-    //                 // is empty
-    //                 if (candidates_for_validator_set[j].weight == 0) {
-    //                     candidates_total_weight += validators[i].weight;
-    //                     candidates_for_validator_set[j] = validators[i];
-    //                     candidates_for_validator_set[j].node_id = block_parser
-    //                         .computeNodeId(candidates_for_validator_set[j].pubkey);
-    //                     break;
-    //                 }
-    //                 // old validator has less weight then new
-    //                 if (
-    //                     candidates_for_validator_set[j].weight < validators[i].weight
-    //                 ) {
-    //                     candidates_total_weight += validators[i].weight;
-    //                     candidates_total_weight -= candidates_for_validator_set[j]
-    //                         .weight;
+        let mut validators =
+            self.block_parser
+                .parse_part_validators(data, cell_idx, cells, prefix_length)?;
 
-    //                     ValidatorDescription memory tmp = candidates_for_validator_set[
-    //                         j
-    //                     ];
-    //                     candidates_for_validator_set[j] = validators[i];
-    //                     validators[i] = tmp;
+        for i in 0..32 {
+            for j in 0..20 {
+                // is empty
+                if self.candidates_for_validator_set[j].weight == 0 {
+                    self.candidates_total_weight += validators[i].weight;
+                    self.candidates_for_validator_set[j] = validators[i];
+                    self.candidates_for_validator_set[j].node_id =
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey)?;
+                    break;
+                }
+                // old validator has less weight then new
+                if self.candidates_for_validator_set[j].weight < validators[i].weight {
+                    self.candidates_total_weight += validators[i].weight;
+                    self.candidates_total_weight -= self.candidates_for_validator_set[j].weight;
 
-    //                     candidates_for_validator_set[j].node_id = block_parser
-    //                         .computeNodeId(candidates_for_validator_set[j].pubkey);
-    //                 }
-    //             }
-    //         }
-    //     }
+                    let tmp = self.candidates_for_validator_set[j];
+                    self.candidates_for_validator_set[j] = validators[i];
+                    validators[i] = tmp;
+
+                    self.candidates_for_validator_set[j].node_id =
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::{testing::mock_dependencies, Api, HexBinary, Uint256};
+    use cosmwasm_std::{testing::mock_dependencies, Api, HexBinary};
 
     const ED25519_MESSAGE_HEX: &str = "af82";
     const ED25519_SIGNATURE_HEX: &str = "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a";
