@@ -42,6 +42,7 @@ pub trait IBlockParser {
     fn compute_node_id(public_key: Bytes32) -> StdResult<Bytes32>;
 }
 
+#[derive(Default)]
 pub struct BlockParser {}
 
 impl IBlockParser for BlockParser {
