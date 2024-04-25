@@ -229,7 +229,11 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
+ "cw-tonbridge-adapter",
+ "cw-tonbridge-validator",
  "cw20",
+ "tonbridge-parser",
+ "tonbridge-validator",
 ]
 
 [[package]]
