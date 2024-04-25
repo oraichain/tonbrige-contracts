@@ -13,6 +13,8 @@ use super::{
 };
 
 pub const BLOCK_INFO_CELL: u32 = 0x9bc7a987;
+pub type ValidatorSet20 = [ValidatorDescription; 20];
+pub type ValidatorSet32 = [ValidatorDescription; 32];
 
 pub trait IBlockParser {
     fn parse_candidates_root_block(
@@ -20,7 +22,7 @@ pub trait IBlockParser {
         boc: &[u8],
         root_idx: usize,
         tree_of_cells: &mut [CellData],
-    ) -> StdResult<[ValidatorDescription; 32]>;
+    ) -> StdResult<ValidatorSet32>;
 
     fn parse_part_validators(
         &self,
@@ -28,7 +30,7 @@ pub trait IBlockParser {
         cell_idx: usize,
         cells: &mut [CellData],
         prefix_length: u128,
-    ) -> StdResult<[ValidatorDescription; 32]>;
+    ) -> StdResult<ValidatorSet32>;
 
     fn parse_block(
         &self,
@@ -49,7 +51,7 @@ impl IBlockParser for BlockParser {
         boc: &[u8],
         root_idx: usize,
         tree_of_cells: &mut [CellData],
-    ) -> StdResult<[ValidatorDescription; 32]> {
+    ) -> StdResult<ValidatorSet32> {
         // uint32 tag =
         read_u32(boc, tree_of_cells, root_idx, 32)?;
 
@@ -115,7 +117,7 @@ impl IBlockParser for BlockParser {
         cell_idx: usize,
         cells: &mut [CellData],
         prefix_length: u128,
-    ) -> StdResult<[ValidatorDescription; 32]> {
+    ) -> StdResult<ValidatorSet32> {
         let tx_idxs = parse_dict(data, cells, cell_idx, prefix_length)?;
 
         let mut validators = [ValidatorDescription::default(); 32];
@@ -442,7 +444,7 @@ fn parse_config_param342(
     data: &[u8],
     cells: &mut [CellData],
     cell_idx: usize,
-) -> StdResult<[ValidatorDescription; 32]> {
+) -> StdResult<ValidatorSet32> {
     // uint256 skipped =
     read_uint256(data, cells, cell_idx, 28)?;
     // uint8 cType =

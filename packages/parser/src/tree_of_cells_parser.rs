@@ -21,6 +21,7 @@ pub trait ITreeOfCellsParser {
     fn get_tree_of_cells(&self, boc: &[u8], info: &mut BagOfCellsInfo) -> StdResult<Vec<CellData>>;
 }
 
+#[derive(Default)]
 pub struct TreeOfCellsParser {}
 
 impl ITreeOfCellsParser for TreeOfCellsParser {

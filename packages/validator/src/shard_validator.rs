@@ -43,6 +43,7 @@ pub trait IShardValidator {
     ) -> StdResult<([Bytes32; 10], [VerifiedBlockInfo; 10])>;
 }
 
+#[derive(Default)]
 pub struct ShardValidator {}
 
 impl IShardValidator for ShardValidator {

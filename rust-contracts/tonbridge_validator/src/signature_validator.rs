@@ -1,14 +1,12 @@
 use cosmwasm_std::{Api, StdError, StdResult, Storage};
 use tonbridge_parser::{
-    block_parser::{compute_node_id, BlockParser, IBlockParser},
+    block_parser::{compute_node_id, BlockParser, IBlockParser, ValidatorSet20},
     tree_of_cells_parser::EMPTY_HASH,
-    types::{Bytes32, CachedCell, CellData, ValidatorDescription, Vdata},
+    types::{Bytes32, CachedCell, CellData, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
 
 use crate::state::SIGNED_BLOCKS;
-
-pub type ValidatorSet = [ValidatorDescription; 20];
 
 pub trait ISignatureValidator {
     fn add_current_block_to_verified_set(
@@ -55,10 +53,10 @@ pub trait ISignatureValidator {
 // need to deserialize from storage and better access directly from storage
 #[derive(Default)]
 pub struct SignatureValidator {
-    pub validator_set: ValidatorSet,
+    pub validator_set: ValidatorSet20,
     total_weight: u64,
     pub pruned_cells: [CachedCell; 10],
-    candidates_for_validator_set: ValidatorSet,
+    pub candidates_for_validator_set: ValidatorSet20,
     candidates_total_weight: u64,
     root_hash: Bytes32,
     block_parser: BlockParser,
@@ -165,7 +163,7 @@ impl ISignatureValidator for SignatureValidator {
 
         // TODO: using Item storage
         self.validator_set = self.candidates_for_validator_set;
-        self.candidates_for_validator_set = ValidatorSet::default();
+        self.candidates_for_validator_set = ValidatorSet20::default();
 
         self.total_weight = self.candidates_total_weight;
         self.candidates_total_weight = 0;
@@ -201,7 +199,7 @@ impl ISignatureValidator for SignatureValidator {
         }
 
         self.validator_set = self.candidates_for_validator_set;
-        self.candidates_for_validator_set = ValidatorSet::default();
+        self.candidates_for_validator_set = ValidatorSet20::default();
 
         self.total_weight = self.candidates_total_weight;
         self.candidates_total_weight = 0;
@@ -217,7 +215,7 @@ impl ISignatureValidator for SignatureValidator {
         root_idx: usize,
         tree_of_cells: &mut [CellData],
     ) -> StdResult<()> {
-        self.candidates_for_validator_set = ValidatorSet::default();
+        self.candidates_for_validator_set = ValidatorSet20::default();
         self.candidates_total_weight = 0;
         self.pruned_cells = [CachedCell::default(); 10];
         self.root_hash = tree_of_cells[root_idx].hashes[0];
