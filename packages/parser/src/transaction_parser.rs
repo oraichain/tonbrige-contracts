@@ -1,5 +1,7 @@
 use cosmwasm_std::{StdError, StdResult, Uint256};
 
+use crate::bit_reader::address;
+
 use super::{
     bit_reader::{
         parse_dict, read_bit, read_bool, read_bytes32_bit_size, read_bytes32_byte_size, read_cell,
@@ -42,6 +44,7 @@ pub trait ITransactionParser {
     ) -> StdResult<TestData>;
 }
 
+#[derive(Default)]
 pub struct TransactionParser {}
 
 impl ITransactionParser for TransactionParser {
@@ -130,9 +133,7 @@ impl ITransactionParser for TransactionParser {
             if out_messages[i].info.dest.hash == bytes32_one {
                 let idx = out_messages[i].body_idx;
                 let hash = read_uint256(boc_data, cells, idx, 256)?.to_be_bytes();
-                data.eth_address = hash[hash.len() - 20..]
-                    .try_into()
-                    .map_err(|_| StdError::generic_err("eth address must have 20 bits"))?;
+                data.eth_address = address(hash)?;
                 // data.amount = 0;
                 // console.log("amount");
                 // console.log(uint(read_coins(boc_data, cells, idx)));

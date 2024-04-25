@@ -1,7 +1,6 @@
+use super::types::{Address, Bytes32, CellData};
 use cosmwasm_std::{StdError, StdResult, Uint256};
 use sha2::{Digest, Sha256};
-
-use super::types::{Bytes32, CellData};
 
 pub fn read_bit(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> u8 {
     let cursor = cells[cell_idx].cursor >> 3;
@@ -265,6 +264,12 @@ pub fn sha256(data: &[u8]) -> StdResult<Bytes32> {
         .finalize()
         .try_into()
         .map_err(|_| StdError::generic_err("hash is not 32 bits"))
+}
+
+pub fn address(hash: Bytes32) -> StdResult<Address> {
+    hash[hash.len() - 20..]
+        .try_into()
+        .map_err(|_| StdError::generic_err("eth address must have 20 bits"))
 }
 
 #[cfg(test)]
