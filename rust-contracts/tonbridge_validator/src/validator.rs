@@ -236,3 +236,26 @@ impl IValidator for Validator {
         Ok(VERIFIED_BLOCKS.load(storage, &root_hash)?.verified)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use cosmwasm_std::HexBinary;
+    use tonbridge_parser::tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser};
+
+    const MASTER_PROOF :&str = "b5ee9c72c102070100011500000e0034005a00a300c900ef0115241011ef55aafffffffd010203062848010157d5d40d6835fb10eab860add2c9ed9384007cbd5c4af7006716f5eeb6109092000128480101c3b6883898411dde154d6b1040de039f6adcb180ce452ba14459b202a7be8bd600030a8a045525d791b3de6fc915dbde3bf1dd45a64fa57385bdf5ef1696978e86c92e36184f47e6ab2643a05202e78a2c8723bd99edbad0dd162d21440b820943de7e9ae7001f001f0405284801015525d791b3de6fc915dbde3bf1dd45a64fa57385bdf5ef1696978e86c92e3618001f284801014f47e6ab2643a05202e78a2c8723bd99edbad0dd162d21440b820943de7e9ae7001f284801011ca3e8075b0f29141deae260b25832844ffdaea9e42d41e9c62f0bf875a132d800075572e271";
+
+    #[test]
+    fn test_master_proof() {
+        let tree_of_cells_parser = TreeOfCellsParser::default();
+        let boc = HexBinary::from_hex(MASTER_PROOF).unwrap().to_vec();
+
+        let mut header = tree_of_cells_parser.parse_serialized_header(&boc).unwrap();
+
+        let toc = tree_of_cells_parser
+            .get_tree_of_cells(&boc, &mut header)
+            .unwrap();
+
+        println!("{}", header.root_idx);
+        println!("{}", toc[0].special)
+    }
+}

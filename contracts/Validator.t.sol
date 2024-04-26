@@ -27,6 +27,7 @@ contract TransactionParserTest is Test {
         CellData[100] memory toc = treeOfCellsParser.get_tree_of_cells(MASTER_PROOF, header);
 
         console.log(header.rootIdx);        
+        console.logBool(toc[0].special);
         
     }
    

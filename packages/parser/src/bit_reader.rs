@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 
 pub fn read_bit(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> u8 {
     let cursor = cells[cell_idx].cursor >> 3;
-    let bytes_start = cells[cell_idx].cursor - cursor << 3;
+    let bytes_start = cells[cell_idx].cursor & 7; // a % b is equivalent to (b - 1) & a
     cells[cell_idx].cursor += 1;
     (data[cursor] << bytes_start) >> 7
 }
