@@ -13,6 +13,7 @@ use super::{
 };
 
 pub const BLOCK_INFO_CELL: u32 = 0x9bc7a987;
+pub const BLOCK_EXTRA_CELL: u16 = 0xcca5;
 pub type ValidatorSet20 = [ValidatorDescription; 20];
 pub type ValidatorSet32 = [ValidatorDescription; 32];
 
@@ -56,20 +57,19 @@ impl IBlockParser for BlockParser {
         read_u32(boc, tree_of_cells, root_idx, 32)?;
 
         // extra
-        let cell_idx = tree_of_cells[root_idx].refs[3];
-
+        let mut cell_idx = tree_of_cells[root_idx].refs[3];
         let test = read_u32(boc, tree_of_cells, cell_idx, 32)?;
-
         if test != 0x4a33f6fd {
             return Err(StdError::generic_err("not a BlockExtra"));
         }
 
         // McBlockExtra
+        cell_idx = tree_of_cells[cell_idx].refs[3];
         if tree_of_cells[cell_idx].refs[3] == 255 {
             return Err(StdError::generic_err("No McBlockExtra"));
         }
 
-        if read_u16(boc, tree_of_cells, cell_idx, 16)? != 0xcca5 {
+        if read_u16(boc, tree_of_cells, cell_idx, 16)? != BLOCK_EXTRA_CELL {
             return Err(StdError::generic_err("not a McBlockExtra"));
         }
 
