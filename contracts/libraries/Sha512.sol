@@ -8,11 +8,9 @@ library Sha512 {
     //          The purpose of this padding is to ensure that the padded message is a multiple of 1024 bits.
     // @param message input raw message bytes
     // @return padded message bytes
-    function preprocess(bytes memory message)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function preprocess(
+        bytes memory message
+    ) internal pure returns (bytes memory) {
         uint256 padding = 128 - (message.length % 128);
         if (message.length % 128 >= 112) {
             padding = 256 - (message.length % 128);
@@ -34,11 +32,10 @@ library Sha512 {
         return result;
     }
 
-    function bytesToBytes8(bytes memory b, uint256 offset)
-        internal
-        pure
-        returns (bytes8)
-    {
+    function bytesToBytes8(
+        bytes memory b,
+        uint256 offset
+    ) internal pure returns (bytes8) {
         bytes8 out;
         for (uint256 i = 0; i < 8; i++) {
             out |= bytes8(b[offset + i] & 0xFF) >> (i * 8);
@@ -46,11 +43,10 @@ library Sha512 {
         return out;
     }
 
-    function cutBlock(bytes memory data, uint256 blockIndex)
-        internal
-        pure
-        returns (uint64[16] memory)
-    {
+    function cutBlock(
+        bytes memory data,
+        uint256 blockIndex
+    ) internal pure returns (uint64[16] memory) {
         uint64[16] memory result;
         for (uint8 r = 0; r < result.length; r++) {
             result[r] = uint64(bytesToBytes8(data, blockIndex * 128 + r * 8));
@@ -66,7 +62,7 @@ library Sha512 {
     // @param n num of positions to circular shift
     // @return uint64
     function ROTR(uint64 x, uint256 n) internal pure returns (uint64) {
-        return (x << (64 - n)) + (x >> n);
+        return (x << (64 - uint64(n))) + (x >> n);
     }
 
     // @notice: The right shift operation SHR n(x), where x is a w-bit word and n is an integer with 0 <= n < w, is defined by SHR(x, n) = x >> n.
@@ -82,11 +78,7 @@ library Sha512 {
     // @param y y
     // @param z z
     // @return uint64
-    function Ch(
-        uint64 x,
-        uint64 y,
-        uint64 z
-    ) internal pure returns (uint64) {
+    function Ch(uint64 x, uint64 y, uint64 z) internal pure returns (uint64) {
         uint64 res = (x & y) ^ ((x ^ 0xffffffffffffffff) & z);
         return res;
     }
@@ -96,11 +88,7 @@ library Sha512 {
     // @param y y
     // @param z z
     // @return uint64
-    function Maj(
-        uint64 x,
-        uint64 y,
-        uint64 z
-    ) internal pure returns (uint64) {
+    function Maj(uint64 x, uint64 y, uint64 z) internal pure returns (uint64) {
         return (x & y) ^ (x & z) ^ (y & z);
     }
 
@@ -272,7 +260,7 @@ library Sha512 {
                             W[i - 16]
                     );
                 }
-            
+
                 T1 = uint64(
                     uint256(fvar.h) +
                         sigma1(fvar.e) +
@@ -280,11 +268,11 @@ library Sha512 {
                         K[i] +
                         W[i]
                 );
-                
+
                 T2 = uint64(
                     uint256(sigma0(fvar.a)) + Maj(fvar.a, fvar.b, fvar.c)
                 );
-                
+
                 fvar.h = fvar.g;
                 fvar.g = fvar.f;
                 fvar.f = fvar.e;
@@ -293,7 +281,6 @@ library Sha512 {
                 fvar.c = fvar.b;
                 fvar.b = fvar.a;
                 fvar.a = uint64(uint256(T1) + T2);
-                
             }
 
             H[0] = uint64(uint256(H[0]) + fvar.a);

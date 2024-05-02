@@ -32,9 +32,12 @@ contract Validator is IValidator, Ownable {
         shardValidator = IShardValidator(shardValidatorAddr);
     }
 
-    function isSignedByValidator(bytes32 node_id, bytes32 root_h) public view returns (bool) {
+    function isSignedByValidator(
+        bytes32 node_id,
+        bytes32 root_h
+    ) public view returns (bool) {
         return signatureValidator.isSignedByValidator(node_id, root_h);
-    }    
+    }
 
     function isVerifiedBlock(bytes32 rootHash) public view returns (bool) {
         return verifiedBlocks[rootHash].verified;
@@ -108,9 +111,11 @@ contract Validator is IValidator, Ownable {
         );
     }
 
-    function verifyValidators(bytes32 root_h, bytes32 file_hash, Vdata[5] calldata vdata)
-        public
-    {
+    function verifyValidators(
+        bytes32 root_h,
+        bytes32 file_hash,
+        Vdata[5] calldata vdata
+    ) public {
         signatureValidator.verifyValidators(root_h, file_hash, vdata);
     }
 
@@ -143,8 +148,6 @@ contract Validator is IValidator, Ownable {
             }
 
             verifiedBlocks[root_hashes[i]] = blocks[i];
-            
-            
         }
     }
 
@@ -208,7 +211,10 @@ contract Validator is IValidator, Ownable {
         }
     }
 
-    function setVerifiedBlock(bytes32 root_hash, uint32 seq_no) public onlyOwner {
+    function setVerifiedBlock(
+        bytes32 root_hash,
+        uint32 seq_no
+    ) public onlyOwner {
         require(!isVerifiedBlock(root_hash), "block already verified");
         verifiedBlocks[root_hash] = VerifiedBlockInfo(true, seq_no, 0, 0, 0);
     }
