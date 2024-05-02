@@ -1,4 +1,4 @@
-pragma solidity 0.8.10;
+pragma solidity 0.8.15;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "./types/BagOfCellsInfo.sol";
