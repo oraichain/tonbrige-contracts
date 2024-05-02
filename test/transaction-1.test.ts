@@ -6,15 +6,25 @@ import { BigNumber } from "ethers";
 import { ethers } from "hardhat";
 import {
   Adapter,
+  Adapter__factory,
+  BlockParser__factory,
   Bridge,
+  Bridge__factory,
+  ShardValidator__factory,
   SignatureValidator,
+  SignatureValidator__factory,
   Token,
+  Token__factory,
   TransactionParser,
+  TransactionParser__factory,
   TreeOfCellsParser,
+  TreeOfCellsParser__factory,
   Validator,
+  Validator__factory,
 } from "../typechain";
 import {
   data,
+  findBoc,
   initialValidatorsBlockRootHash,
   initialValidatorsList,
   updateValidators,
@@ -30,26 +40,18 @@ describe("Tree of Cells parser tests 1", () => {
   let transactionParser: TransactionParser;
 
   before(async function () {
-    const TreeOfCellsParser = await ethers.getContractFactory(
-      "TreeOfCellsParser"
-    );
-    tocParser = await TreeOfCellsParser.deploy();
+    const [signer] = await ethers.getSigners();
+    tocParser = await new TreeOfCellsParser__factory(signer).deploy();
 
-    const BlockParser = await ethers.getContractFactory("BlockParser");
-    const blockParser = await BlockParser.deploy();
+    const blockParser = await new BlockParser__factory(signer).deploy();
 
-    const SignatureValidator = await ethers.getContractFactory(
-      "SignatureValidator"
-    );
-    const signatureValidator = await SignatureValidator.deploy(
-      blockParser.address
-    );
+    const signatureValidator = await new SignatureValidator__factory(
+      signer
+    ).deploy(blockParser.address);
 
-    const ShardValidator = await ethers.getContractFactory("ShardValidator");
-    const shardValidator = await ShardValidator.deploy();
+    const shardValidator = await new ShardValidator__factory(signer).deploy();
 
-    const Validator = await ethers.getContractFactory("Validator");
-    validator = await Validator.deploy(
+    validator = await new Validator__factory(signer).deploy(
       signatureValidator.address,
       shardValidator.address,
       tocParser.address
@@ -57,16 +59,11 @@ describe("Tree of Cells parser tests 1", () => {
 
     signatureValidator.transferOwnership(validator.address);
 
-    const TransactionParser = await ethers.getContractFactory(
-      "TransactionParser"
-    );
-    transactionParser = await TransactionParser.deploy();
+    transactionParser = await new TransactionParser__factory(signer).deploy();
 
-    const Token = await ethers.getContractFactory("Token");
-    token = await Token.deploy();
+    token = await new Token__factory(signer).deploy();
 
-    const Bridge = await ethers.getContractFactory("Bridge");
-    bridge = await Bridge.deploy(
+    bridge = await new Bridge__factory(signer).deploy(
       blockParser.address,
       transactionParser.address,
       tocParser.address,
@@ -74,17 +71,16 @@ describe("Tree of Cells parser tests 1", () => {
       validator.address
     );
 
-    const Adapter = await ethers.getContractFactory("Adapter");
-    adapter = await Adapter.deploy(token.address, transactionParser.address);
+    adapter = await new Adapter__factory(signer).deploy(
+      token.address,
+      transactionParser.address
+    );
 
-    adapter.transferOwnership(bridge.address);
+    await adapter.transferOwnership(bridge.address);
   });
 
   it("Should throw an error when use wrong boc for parseCandidatesRootBlock", async () => {
-    const boc = Buffer.from(
-      data.find((el) => el.type === "state-hash")!.boc[0],
-      "hex"
-    );
+    const boc = findBoc("state-hash");
 
     try {
       await validator.parseCandidatesRootBlock(boc);
@@ -95,10 +91,7 @@ describe("Tree of Cells parser tests 1", () => {
   });
 
   it("Should add validators from boc to candidatesForValidators", async () => {
-    const boc = Buffer.from(
-      data.find((el) => el.type === "set-validators")!.boc[0],
-      "hex"
-    );
+    const boc = findBoc("set-validators");
 
     await validator.parseCandidatesRootBlock(boc);
 
@@ -155,10 +148,7 @@ describe("Tree of Cells parser tests 1", () => {
   });
 
   it("Should add validators for update from boc to candidatesForValidators", async () => {
-    const boc = Buffer.from(
-      data.find((el) => el.type === "proof-validators")!.boc[0],
-      "hex"
-    );
+    const boc = findBoc("proof-validators");
 
     await validator.parseCandidatesRootBlock(boc);
 
@@ -258,10 +248,7 @@ describe("Tree of Cells parser tests 1", () => {
   });
 
   it("state-hash test", async () => {
-    const boc = Buffer.from(
-      data.find((el) => el.type === "state-hash")!.boc as any,
-      "hex"
-    );
+    const boc = findBoc("state-hash");
     const signatures = data.find((el) => el.type === "state-hash")?.signatures!;
     const fileHash = data.find((el) => el.type === "state-hash")?.id?.fileHash!;
     const rootHash = data.find((el) => el.type === "state-hash")?.id?.rootHash!;
@@ -301,10 +288,7 @@ describe("Tree of Cells parser tests 1", () => {
   });
 
   it("shard state test", async () => {
-    const boc = Buffer.from(
-      data.find((el) => el.type === "shard-state")!.boc as any,
-      "hex"
-    );
+    const boc = findBoc("shard-state");
 
     await validator.readStateProof(
       boc,
@@ -319,10 +303,7 @@ describe("Tree of Cells parser tests 1", () => {
   });
 
   it("shard block test", async () => {
-    const boc = Buffer.from(
-      data.find((el) => el.type === "shard-block")!.boc as any,
-      "hex"
-    );
+    const boc = findBoc("shard-block");
 
     await validator.parseShardProofPath(boc);
     expect(
@@ -333,15 +314,9 @@ describe("Tree of Cells parser tests 1", () => {
   });
 
   it("bridge contract reads data from transaction", async () => {
-    const boc = Buffer.from(
-      data.find((el) => el.type === "tx-proof")!.boc as any,
-      "hex"
-    );
+    const boc = findBoc("tx-proof");
 
-    const txBoc = Buffer.from(
-      data.find((el) => el.type === "tx-proof")!.txBoc! as any,
-      "hex"
-    );
+    const txBoc = findBoc("tx-proof", true);
 
     await bridge.readTransaction(txBoc, boc, adapter.address, 0x1);
 

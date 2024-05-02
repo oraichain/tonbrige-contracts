@@ -400,3 +400,15 @@ export const updateValidators = [
       "0x15a9b54c3f7eddefcbb4be7f41ad892a0e1f71a9e146e5c23780e3bd4a2245a3",
   },
 ];
+
+export const findBoc = function (type: string, isTx = false) {
+  const bocItem = data.find((el) => el.type === type)!;
+  if (isTx) return Buffer.from(bocItem.txBoc!);
+  const bocData = bocItem.boc;
+  const boc = Buffer.from(
+    typeof bocData === "string" ? bocData : bocData[0],
+    "hex"
+  );
+
+  return boc;
+};
