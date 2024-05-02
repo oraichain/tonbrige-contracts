@@ -93,7 +93,8 @@ describe("Tree of Cells parser tests 1", () => {
   it("Should add validators from boc to candidatesForValidators", async () => {
     const boc = findBoc("set-validators");
 
-    await validator.parseCandidatesRootBlock(boc);
+    const res = await validator.parseCandidatesRootBlock(boc);
+    console.log(res);
 
     const validators = (await validator.getCandidatesForValidators()).filter(
       (validator) => validator.cType !== 0
@@ -192,10 +193,7 @@ describe("Tree of Cells parser tests 1", () => {
 
       await validator.verifyValidators(
         "0x0000000000000000000000000000000000000000000000000000000000000000",
-        `0x${Buffer.from(
-          data.find((el) => el.type === "proof-validators")!.id!.fileHash,
-          "hex"
-        ).toString("hex")}`,
+        "0x" + data.find((el) => el.type === "proof-validators")!.id!.fileHash,
         subArr.map((c) => ({
           node_id: `0x${c.node_id}`,
           r: `0x${c.r}`,
@@ -250,8 +248,8 @@ describe("Tree of Cells parser tests 1", () => {
   it("state-hash test", async () => {
     const boc = findBoc("state-hash");
     const signatures = data.find((el) => el.type === "state-hash")?.signatures!;
-    const fileHash = data.find((el) => el.type === "state-hash")?.id?.fileHash!;
-    const rootHash = data.find((el) => el.type === "state-hash")?.id?.rootHash!;
+    const { fileHash, rootHash } = data.find((el) => el.type === "state-hash")
+      ?.id!;
 
     for (let i = 0; i < signatures.length; i += 5) {
       const subArr = signatures.slice(i, i + 5);
