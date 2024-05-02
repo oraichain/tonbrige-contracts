@@ -239,10 +239,7 @@ impl IValidator for Validator {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::{
-        testing::{mock_dependencies, MockStorage},
-        HexBinary,
-    };
+    use cosmwasm_std::{testing::mock_dependencies, HexBinary};
     use tonbridge_parser::{
         tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser},
         types::{Bytes32, Vdata},
@@ -430,6 +427,11 @@ mod tests {
             },
         ];
 
+        let root_hash =
+            convert_byte32("292edb12dadb1b56db5c44687bf1311dcac38089f8b895b11bf0c8fbd605989e");
+        let file_hash =
+            convert_byte32("dfd3c0f265e62f340cb8020a0a3b5d0503d71ca84d5f40b2372e858147c03ba1");
+
         let mut deps = mock_dependencies();
         let validator = Validator::default();
         for arr in signatures.chunks(5) {
@@ -443,16 +445,18 @@ mod tests {
                 .verify_validators(
                     &mut deps.storage,
                     &deps.api,
-                    convert_byte32(
-                        "0000000000000000000000000000000000000000000000000000000000000000",
-                    ),
-                    convert_byte32(
-                        "dfd3c0f265e62f340cb8020a0a3b5d0503d71ca84d5f40b2372e858147c03ba1",
-                    ),
+                    root_hash,
+                    file_hash,
                     &sub_arr.try_into().unwrap(),
                 )
                 .unwrap();
         }
+
+        let err = validator
+            .add_current_block_to_verified_set(&mut deps.storage, root_hash)
+            .unwrap_err();
+
+        assert!(err.to_string().contains("not enought votes"));
 
         // for (let i = 0; i < signatures.length; i++) {
         //   expect(
