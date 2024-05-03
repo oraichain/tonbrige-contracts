@@ -257,13 +257,10 @@ pub fn parse_dict(
     Ok(cell_idxs)
 }
 
-pub fn sha256(data: &[u8]) -> StdResult<Bytes32> {
+pub fn sha256(data: &[u8]) -> Bytes32 {
     let mut hasher = Sha256::new();
     hasher.update(data);
-    hasher
-        .finalize()
-        .try_into()
-        .map_err(|_| StdError::generic_err("hash is not 32 bits"))
+    hasher.finalize().into()
 }
 
 pub fn address(hash: Bytes32) -> StdResult<Address> {

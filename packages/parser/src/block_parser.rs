@@ -215,7 +215,7 @@ pub fn read_uint_leq(
             last_one = i;
             found = true;
         }
-        l = l << 1;
+        l <<= 1;
     }
 
     if !found {
@@ -530,7 +530,7 @@ pub fn check_block_info(
     Ok(transaction.lt >= start_lt || transaction.lt <= end_lt)
 }
 
-pub fn compute_node_id(public_key: Bytes32) -> StdResult<Bytes32> {
+pub fn compute_node_id(public_key: Bytes32) -> Bytes32 {
     let mut data = vec![0xc6, 0xb4, 0x13, 0x48];
     data.extend_from_slice(&public_key);
     sha256(&data)

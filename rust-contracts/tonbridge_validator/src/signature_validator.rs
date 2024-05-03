@@ -231,7 +231,7 @@ impl ISignatureValidator for SignatureValidator {
                     self.candidates_total_weight += validators[i].weight;
                     self.candidates_for_validator_set[j] = validators[i];
                     self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey)?;
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
                     break;
                 }
                 // old validator has less weight then new
@@ -244,7 +244,7 @@ impl ISignatureValidator for SignatureValidator {
                     validators[i] = tmp;
 
                     self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey)?;
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
                 }
             }
         }
@@ -283,7 +283,7 @@ impl ISignatureValidator for SignatureValidator {
                     self.candidates_total_weight += validators[i].weight;
                     self.candidates_for_validator_set[j] = validators[i];
                     self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey)?;
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
                     break;
                 }
                 // old validator has less weight then new
@@ -296,7 +296,7 @@ impl ISignatureValidator for SignatureValidator {
                     validators[i] = tmp;
 
                     self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey)?;
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
                 }
             }
         }

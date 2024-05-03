@@ -113,15 +113,14 @@ contract BlockParser is BitReader, IBlockParser {
                     cellIdx,
                     uint8(log2Ceil(n))
                 );
-            
+
                 for (uint256 i = 0; i < prefixLength; i++) {
                     pp = (pp << 1) + bit;
                 }
             }
         }
-        
+
         if (n - prefixLength == 0) {
-            
             // end
             for (uint256 i = 0; i < 32; i++) {
                 if (cellIdxs[i] == 255) {
@@ -134,7 +133,7 @@ contract BlockParser is BitReader, IBlockParser {
         } else {
             uint256 leftIdx = readCell(cells, cellIdx);
             uint256 rightIdx = readCell(cells, cellIdx);
-            
+
             // NOTE: Left and right branches are implicitly contain prefixes '0' and '1'
             if (leftIdx != 255 && !cells[leftIdx].special) {
                 doParse2(
@@ -200,7 +199,7 @@ contract BlockParser is BitReader, IBlockParser {
         uint256 rootIdx,
         CellData[100] memory treeOfCells
     ) public returns (ValidatorDescription[32] memory) {
-        // uint32 tag = 
+        // uint32 tag =
         readUint32(boc, treeOfCells, rootIdx, 32);
 
         // extra
@@ -226,14 +225,9 @@ contract BlockParser is BitReader, IBlockParser {
             // treeOfCells[cellIdx].cursor += 76
             treeOfCells[cellIdx].cursor += 8 + 4;
             // readBytes32BitSize(boc, treeOfCells, cellIdx, 76);
-            // bytes32 configAddress = 
-            readBytes32BitSize(
-                boc,
-                treeOfCells,
-                cellIdx,
-                256
-            );
-            
+            // bytes32 configAddress =
+            readBytes32BitSize(boc, treeOfCells, cellIdx, 256);
+
             uint256 configParamsIdx = treeOfCells[cellIdx].refs[3] == 255
                 ? treeOfCells[cellIdx].refs[2]
                 : treeOfCells[cellIdx].refs[3];
@@ -268,18 +262,18 @@ contract BlockParser is BitReader, IBlockParser {
         uint256 cellIdx,
         CellData[100] memory cells
     ) private returns (ValidatorDescription[32] memory validators) {
-        // uint256 skipped = 
+        // uint256 skipped =
         readUint(data, cells, cellIdx, 28);
-        // uint8 cType = 
+        // uint8 cType =
         readUint8(data, cells, cellIdx, 8);
 
-        // uint32 utime_since = 
+        // uint32 utime_since =
         readUint32(data, cells, cellIdx, 32);
-        // uint32 utime_until = 
+        // uint32 utime_until =
         readUint32(data, cells, cellIdx, 32);
-        // uint16 total = 
+        // uint16 total =
         readUint16(data, cells, cellIdx, 16);
-        // uint16 main = 
+        // uint16 main =
         readUint16(data, cells, cellIdx, 16);
 
         uint256 subcellIdx = readCell(cells, cellIdx);
@@ -341,8 +335,12 @@ contract BlockParser is BitReader, IBlockParser {
         CellData[100] memory cells,
         uint256 prefixLength
     ) public view returns (ValidatorDescription[32] memory validators) {
-        
-        uint256[32] memory txIdxs = parseDict(data, cells, cellIdx, prefixLength);
+        uint256[32] memory txIdxs = parseDict(
+            data,
+            cells,
+            cellIdx,
+            prefixLength
+        );
 
         // ValidatorDescription[32] memory validators;
         for (uint256 i = 0; i < 32; i++) {
@@ -350,7 +348,6 @@ contract BlockParser is BitReader, IBlockParser {
                 break;
             }
             validators[i] = readValidatorDescription(data, txIdxs[i], cells);
-            
         }
 
         return validators;
@@ -406,11 +403,11 @@ contract BlockParser is BitReader, IBlockParser {
         //     isVerifiedBlock(proofTreeOfCells[proofRootIdx]._hash[0]),
         //     "block is not verified"
         // );
-        // uint32 tag = 
+        // uint32 tag =
         readUint32(proofBoc, proofTreeOfCells, proofRootIdx, 32);
-        
+
         // blockInfo^ (pruned)
-        // uint256 blockInfoIdx = 
+        // uint256 blockInfoIdx =
         readCell(proofTreeOfCells, proofRootIdx);
         // require(check_block_info(proofTreeOfCells, blockInfoIdx, transaction), "lt doesn't belong to block interval");
         // value flow^ (pruned)
@@ -443,7 +440,7 @@ contract BlockParser is BitReader, IBlockParser {
                 last_one = i;
                 found = true;
             }
-            l = l << 1;
+            l <<= 1;
         }
         require(found, "not a UintLe");
         last_one++;
@@ -519,14 +516,14 @@ contract BlockParser is BitReader, IBlockParser {
         readCell(cells, cellIdx);
         // account_blocks^
         uint256 account_blocksIdx = readCell(cells, readCell(cells, cellIdx));
-        
+
         uint256[32] memory accountIdxs = parseDict(
             proofBoc,
             cells,
             account_blocksIdx,
             256
         );
-        
+
         for (uint256 i = 0; i < 32; i++) {
             if (accountIdxs[i] == 255) {
                 break;
@@ -567,11 +564,10 @@ contract BlockParser is BitReader, IBlockParser {
         return false;
     }
 
-    function readInt(bytes calldata data, uint256 size)
-        public
-        pure
-        returns (uint256 value)
-    {
+    function readInt(
+        bytes calldata data,
+        uint256 size
+    ) public pure returns (uint256 value) {
         uint256 res = 0;
         uint256 cursor = 0;
         while (size > 0) {

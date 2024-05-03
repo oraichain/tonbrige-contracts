@@ -81,7 +81,7 @@ impl ITreeOfCellsParser for TreeOfCellsParser {
         }
 
         header.cell_count = read_int(&boc[ptr..], header.ref_byte_size);
-        if header.cell_count <= 0 {
+        if header.cell_count == 0 {
             return Err(StdError::generic_err("bag-of-cells: invalid header"));
         }
         if sz < 2 * header.ref_byte_size {
@@ -228,7 +228,7 @@ fn count_setbits(mut n: u32) -> usize {
     let mut cnt = 0;
     while n > 0 {
         cnt += n & 1;
-        n = n >> 1;
+        n >>= 1;
     }
     cnt as usize
 }
@@ -322,7 +322,7 @@ fn get_hashes_count_from_mask(mut mask: u32) -> u8 {
 
     for _ in 0..3 {
         n += (mask & 1) as u8;
-        mask = mask >> 1;
+        mask >>= 1;
     }
     n + 1
 }
@@ -332,7 +332,7 @@ fn get_level_from_mask(mut mask: u32) -> u8 {
         if mask == 0 {
             return i;
         }
-        mask = mask >> 1;
+        mask >>= 1;
     }
     3
 }
@@ -471,11 +471,9 @@ fn calc_hash_for_refs(
 
                 _hash.extend_from_slice(&get_hash(data, level_i, cells, cells[i].refs[j])?);
             }
-
-            cells[i].hashes[hash_i - hash_i_offset] = sha256(&_hash)?;
-        } else {
-            cells[i].hashes[hash_i - hash_i_offset] = sha256(&_hash)?;
         }
+
+        cells[i].hashes[hash_i - hash_i_offset] = sha256(&_hash);
 
         hash_i += 1;
     }

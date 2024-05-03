@@ -8,15 +8,14 @@ import "../types/TransactionTypes.sol";
 import "../parser/BitReader.sol";
 
 interface ITreeOfCellsParser {
-    function parseSerializedHeader(bytes calldata boc)
-        external
-        pure
-        returns (BagOfCellsInfo memory header);
+    function parseSerializedHeader(
+        bytes calldata boc
+    ) external pure returns (BagOfCellsInfo memory header);
 
-    function get_tree_of_cells(bytes calldata boc, BagOfCellsInfo memory info)
-        external
-        view
-        returns (CellData[100] memory cells);
+    function get_tree_of_cells(
+        bytes calldata boc,
+        BagOfCellsInfo memory info
+    ) external view returns (CellData[100] memory cells);
 }
 
 contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
@@ -27,11 +26,10 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
     receive() external payable {} // to support receiving ETH by default
     fallback() external payable {}
 
-    function readInt(bytes calldata data, uint256 size)
-        public
-        pure
-        returns (uint256 value)
-    {
+    function readInt(
+        bytes calldata data,
+        uint256 size
+    ) public pure returns (uint256 value) {
         uint256 res = 0;
         uint256 cursor = 0;
         while (size > 0) {
@@ -42,11 +40,9 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
         return res;
     }
 
-    function parseSerializedHeader(bytes calldata boc)
-        external
-        pure
-        returns (BagOfCellsInfo memory header)
-    {
+    function parseSerializedHeader(
+        bytes calldata boc
+    ) external pure returns (BagOfCellsInfo memory header) {
         uint256 sz = boc.length;
         require(!(sz < 4), "Not enough bytes");
 
@@ -175,11 +171,10 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
         return header;
     }
 
-    function get_tree_of_cells(bytes calldata boc, BagOfCellsInfo memory info)
-        public
-        pure
-        returns (CellData[100] memory cells)
-    {
+    function get_tree_of_cells(
+        bytes calldata boc,
+        BagOfCellsInfo memory info
+    ) public pure returns (CellData[100] memory cells) {
         uint256[100] memory custom_index = get_indexes(boc, info);
 
         bytes calldata cells_slice = boc[info.data_offset:info.data_offset +
@@ -201,11 +196,10 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
         return cells;
     }
 
-    function get_indexes(bytes calldata boc, BagOfCellsInfo memory info)
-        public
-        pure
-        returns (uint256[100] memory custom_index)
-    {
+    function get_indexes(
+        bytes calldata boc,
+        BagOfCellsInfo memory info
+    ) public pure returns (uint256[100] memory custom_index) {
         // require(!info.has_index, "has index logic has not realised");
 
         bytes calldata cells_slice_for_indexes = boc[info.data_offset:info
@@ -239,12 +233,10 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
         cellInfo.refs_cnt = d1 & 7;
         cellInfo.level_mask = d1 >> 5;
         cellInfo.special = (d1 & 8) != 0;
-        
 
         cellInfo.with_hashes = (d1 & 16) != 0;
 
         if (cellInfo.refs_cnt > 4) {
-            
             require(
                 !(cellInfo.refs_cnt != 7 || !cellInfo.with_hashes),
                 "Invalid first byte"
@@ -278,7 +270,7 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
         uint256 cnt = 0;
         while (n > 0) {
             cnt += n & 1;
-            n = n >> 1;
+            n >>= 1;
         }
         return cnt;
     }
@@ -372,7 +364,7 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
                 cells_slice,
                 custom_index
             );
-            
+
             CellSerializationInfo
                 memory cell_info = init_cell_serialization_info(
                     cell_slice,
@@ -419,11 +411,10 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
         return getLevelFromMask(mask & 7);
     }
 
-    function isLevelSignificant(uint8 level, uint32 mask)
-        public
-        pure
-        returns (bool)
-    {
+    function isLevelSignificant(
+        uint8 level,
+        uint32 mask
+    ) public pure returns (bool) {
         return (level == 0) || ((mask >> (level - 1)) % 2 != 0);
     }
 
@@ -442,7 +433,6 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
         if (cells[cellIdx].cellType == PrunnedBranchCell) {
             uint8 this_hash_i = getHashesCount(cells[cellIdx].level_mask) - 1;
             if (hash_i != this_hash_i) {
-                
                 uint256 cursor = 16 +
                     uint256(this_hash_i) *
                     32 *
@@ -451,24 +441,23 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
                     2 *
                     8;
                 cells[cellIdx].cursor += cursor;
-                
+
                 uint16 childDepth = readUint16(data, cells, cellIdx, 16);
-                
+
                 cells[cellIdx].cursor -= cursor + 16;
-                
+
                 return childDepth;
             }
             hash_i = 0;
         }
-        
+
         return cells[cellIdx].depth[hash_i];
     }
 
-    function applyLevelMask(uint8 level, uint32 levelMask)
-        public
-        pure
-        returns (uint32)
-    {
+    function applyLevelMask(
+        uint8 level,
+        uint32 levelMask
+    ) public pure returns (uint32) {
         return uint32(levelMask & ((1 << level) - 1));
     }
 
@@ -492,9 +481,6 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
             );
         uint8 hash_i = 0;
 
-        
-
-
         uint8 level = getLevel(cell_info.level_mask);
 
         for (uint8 level_i = 0; level_i <= level; level_i++) {
@@ -506,7 +492,6 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
                 hash_i++;
                 continue;
             }
-            
 
             bytes memory _hash;
             {
@@ -525,7 +510,7 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
                             }
                             refsCount++;
                         }
-                        
+
                         uint32 new_level_mask = applyLevelMask(
                             level_i,
                             cells[i].level_mask
@@ -566,7 +551,7 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
                             getDepth(data, level_i, cells, cells[i].refs[j])
                         )
                     );
-                   
+
                     if (
                         getDepth(data, level_i, cells, cells[i].refs[j]) >
                         cells[i].depth[hash_i - hash_i_offset]
@@ -581,28 +566,21 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
                 }
 
                 cells[i].depth[hash_i - hash_i_offset]++;
-                
-                
+
                 for (j = 0; j < 4; j++) {
                     if (cells[i].refs[j] == 255) {
                         break;
                     }
-                    
+
                     _hash = bytes.concat(
                         _hash,
                         getHash(data, level_i, cells, cells[i].refs[j])
                     );
                 }
-                
-                
+
                 cells[i]._hash[hash_i - hash_i_offset] = sha256(_hash);
-                
             } else {
-                
-                
-                
                 cells[i]._hash[hash_i - hash_i_offset] = sha256(_hash);
-                
             }
 
             hash_i++;
@@ -624,7 +602,6 @@ contract TreeOfCellsParser is BitReader, ITreeOfCellsParser {
         if (cells[cellIdx].cellType == PrunnedBranchCell) {
             uint8 this_hash_i = getHashesCount(cells[cellIdx].level_mask) - 1;
             if (hash_i != this_hash_i) {
-                
                 uint256 cursor = 16 + uint256(hash_i) * 2 * 8;
                 cells[cellIdx].cursor += cursor;
                 uint256 hash_num = readUint(data, cells, cellIdx, 256);

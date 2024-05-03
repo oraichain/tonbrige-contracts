@@ -58,7 +58,7 @@ impl ITransactionParser for TransactionParser {
         let message_idx = read_cell(cells, root_idx);
         let mut messages = self.parse_messages_header(boc, cells, message_idx)?;
 
-        return self.get_data_from_messages(boc, cells, &mut messages.out_messages);
+        self.get_data_from_messages(boc, cells, &mut messages.out_messages)
     }
 
     fn parse_transaction_header(
