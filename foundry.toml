@@ -2,7 +2,7 @@
 src = 'contracts'
 out = 'out'
 libs = ['lib']
-solc_version = "0.8.10"
+solc_version = "0.8.15"
 
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

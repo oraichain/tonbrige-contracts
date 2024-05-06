@@ -63,12 +63,12 @@ const config: HardhatUserConfig = {
     },
     testnet_bnb: {
       url: "https://data-seed-prebsc-1-s3.binance.org:8545",
-      accounts: [process.env.PRIVATE_KEY || ""],
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       gas: 8000000,
     },
     sepolia: {
       url: `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`,
-      accounts: [process.env.PRIVATE_KEY || ""],
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
   },
   typechain: {
