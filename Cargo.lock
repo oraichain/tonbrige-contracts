@@ -218,6 +218,8 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
  "cw20",
+ "thiserror",
+ "tonbridge-adapter",
  "tonbridge-parser",
  "tonbridge-validator",
 ]
@@ -232,6 +234,8 @@ dependencies = [
  "cw-tonbridge-adapter",
  "cw-tonbridge-validator",
  "cw20",
+ "thiserror",
+ "tonbridge-bridge",
  "tonbridge-parser",
  "tonbridge-validator",
 ]
@@ -246,6 +250,7 @@ dependencies = [
  "cw-storage-plus",
  "cw20",
  "sha2 0.10.8",
+ "thiserror",
  "tonbridge-parser",
  "tonbridge-validator",
 ]
@@ -749,6 +754,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.60",
+]
+
+[[package]]
+name = "tonbridge-adapter"
+version = "0.2.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "tonbridge-parser",
+]
+
+[[package]]
+name = "tonbridge-bridge"
+version = "0.2.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "tonbridge-parser",
 ]
 
 [[package]]

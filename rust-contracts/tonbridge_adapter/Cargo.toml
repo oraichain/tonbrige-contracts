@@ -25,3 +25,5 @@ cw-storage-plus = { workspace = true }
 cosmwasm-schema = { workspace = true }
 tonbridge-parser = { workspace = true }
 tonbridge-validator = { workspace = true }
+thiserror = { workspace = true }
+tonbridge-adapter = { workspace = true }

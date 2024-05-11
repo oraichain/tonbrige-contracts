@@ -39,6 +39,8 @@ test-tube = { git = "https://github.com/oraichain/test-tube.git", rev = "354d580
 
 tonbridge-parser = { path = "./packages/parser" }
 tonbridge-validator = { path = "./packages/validator" }
+tonbridge-adapter = { path = "./packages/adapter" }
+tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./rust-contracts/tonbridge_validator" }
 cw-tonbridge-adapter = { path = "./rust-contracts/tonbridge_adapter" }
 
