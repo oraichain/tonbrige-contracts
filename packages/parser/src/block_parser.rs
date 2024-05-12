@@ -1,3 +1,4 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdError, StdResult, Uint256};
 
 use crate::bit_reader::sha256;
@@ -43,6 +44,7 @@ pub trait IBlockParser {
     ) -> StdResult<bool>;
 }
 
+#[cw_serde]
 #[derive(Default)]
 pub struct BlockParser {}
 

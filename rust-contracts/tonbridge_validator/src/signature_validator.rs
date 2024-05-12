@@ -1,3 +1,4 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, StdError, StdResult, Storage};
 use tonbridge_parser::{
     block_parser::{compute_node_id, BlockParser, IBlockParser, ValidatorSet20},
@@ -51,6 +52,7 @@ pub trait ISignatureValidator {
 }
 
 // need to deserialize from storage and better access directly from storage
+#[cw_serde]
 #[derive(Default)]
 pub struct SignatureValidator {
     pub validator_set: ValidatorSet20,

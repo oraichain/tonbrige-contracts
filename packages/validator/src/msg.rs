@@ -1,12 +1,15 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Binary};
 
 #[cw_serde]
 pub struct InstantiateMsg {}
 
 #[cw_serde]
-pub enum ExecuteMsg {}
+pub enum ExecuteMsg {
+    ParseCandidatesRootBlock { boc: Binary },
+    InitValidators {},
+}
 
 /// We currently take no arguments for migrations
 #[cw_serde]
@@ -17,14 +20,23 @@ pub struct MigrateMsg {}
 pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
+    #[returns(Vec<UserFriendlyValidator>)]
+    GetCandidatesForValidators {},
+    #[returns(Vec<UserFriendlyValidator>)]
+    GetValidators {},
 }
 
 // We define a custom struct for each query response
 #[cw_serde]
 pub struct ConfigResponse {
-    pub owner: Addr,
-    pub rewarder: Addr,
-    pub oracle_addr: Addr,
-    pub factory_addr: Addr,
-    pub base_denom: String,
+    pub owner: Option<String>,
+}
+
+#[cw_serde]
+pub struct UserFriendlyValidator {
+    pub ctype: u8,
+    pub weight: u64,
+    pub adnl_addr: String,
+    pub pub_key: String,
+    pub node_id: String,
 }

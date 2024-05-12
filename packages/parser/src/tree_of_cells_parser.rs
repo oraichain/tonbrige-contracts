@@ -1,3 +1,4 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdError, StdResult};
 
 use super::{
@@ -27,6 +28,7 @@ pub trait ITreeOfCellsParser {
     fn get_tree_of_cells(&self, boc: &[u8], info: &mut BagOfCellsInfo) -> StdResult<Vec<CellData>>;
 }
 
+#[cw_serde]
 #[derive(Default)]
 pub struct TreeOfCellsParser {}
 

@@ -1,20 +1,22 @@
-use cosmwasm_std::{Addr, Api, DepsMut, StdError, StdResult, Storage};
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{Addr, Api, Binary, DepsMut, StdError, StdResult, Storage};
 use tonbridge_parser::{
     block_parser::ValidatorSet20,
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser, EMPTY_HASH},
-    types::{Bytes32, CachedCell, Vdata, VerifiedBlockInfo},
+    types::{Bytes32, CachedCell, ValidatorDescription, Vdata, VerifiedBlockInfo},
 };
-use tonbridge_validator::shard_validator::{IShardValidator, ShardValidator};
+use tonbridge_validator::{msg::UserFriendlyValidator, shard_validator::{IShardValidator, ShardValidator}};
 
 use crate::{
     signature_validator::{ISignatureValidator, SignatureValidator},
-    state::{OWNER, VERIFIED_BLOCKS},
+    state::{OWNER, VALIDATOR, VERIFIED_BLOCKS},
 };
 
 pub trait IValidator {
     fn is_verified_block(&self, storage: &dyn Storage, root_hash: Bytes32) -> StdResult<bool>;
 }
 
+#[cw_serde]
 #[derive(Default)]
 pub struct Validator {
     signature_validator: SignatureValidator,
@@ -67,14 +69,15 @@ impl Validator {
     }
 
     pub fn init_validators(&mut self, deps: DepsMut, caller: &Addr) -> StdResult<()> {
-        if !OWNER.is_admin(deps.as_ref(), caller)? {
-            return Err(StdError::generic_err("unauthorized"));
-        }
+        OWNER
+            .assert_admin(deps.as_ref(), caller)
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
         let key_block_root_hash = self.signature_validator.init_validators()?;
         let mut verified_block_info = VerifiedBlockInfo::default();
         verified_block_info.verified = true;
 
-        VERIFIED_BLOCKS.save(deps.storage, &key_block_root_hash, &verified_block_info)
+        VERIFIED_BLOCKS.save(deps.storage, &key_block_root_hash, &verified_block_info)?;
+        VALIDATOR.save(deps.storage, &self)
     }
 
     pub fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
@@ -228,6 +231,16 @@ impl Validator {
         block.seq_no = seq_no;
 
         VERIFIED_BLOCKS.save(deps_mut.storage, &root_hash, &block)
+    }
+
+    pub fn parse_user_friendly_validator(&self, validator_description: ValidatorDescription) -> UserFriendlyValidator {
+        UserFriendlyValidator {
+            ctype: validator_description.c_type,
+            weight: validator_description.weight,
+            adnl_addr: Binary::from(validator_description.adnl_addr).to_base64(),
+            pub_key: Binary::from(validator_description.pubkey).to_base64(),
+            node_id: Binary::from(validator_description.node_id).to_base64(),
+        }
     }
 }
 

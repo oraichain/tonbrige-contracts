@@ -1,3 +1,4 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdError, StdResult};
 use tonbridge_parser::{
     bit_reader::{
@@ -43,6 +44,7 @@ pub trait IShardValidator {
     ) -> StdResult<([Bytes32; 10], [VerifiedBlockInfo; 10])>;
 }
 
+#[cw_serde]
 #[derive(Default)]
 pub struct ShardValidator {}
 
