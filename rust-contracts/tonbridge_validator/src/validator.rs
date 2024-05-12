@@ -5,7 +5,10 @@ use tonbridge_parser::{
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser, EMPTY_HASH},
     types::{Bytes32, CachedCell, ValidatorDescription, Vdata, VerifiedBlockInfo},
 };
-use tonbridge_validator::{msg::UserFriendlyValidator, shard_validator::{IShardValidator, ShardValidator}};
+use tonbridge_validator::{
+    msg::UserFriendlyValidator,
+    shard_validator::{IShardValidator, ShardValidator},
+};
 
 use crate::{
     signature_validator::{ISignatureValidator, SignatureValidator},
@@ -233,7 +236,10 @@ impl Validator {
         VERIFIED_BLOCKS.save(deps_mut.storage, &root_hash, &block)
     }
 
-    pub fn parse_user_friendly_validator(&self, validator_description: ValidatorDescription) -> UserFriendlyValidator {
+    pub fn parse_user_friendly_validator(
+        &self,
+        validator_description: ValidatorDescription,
+    ) -> UserFriendlyValidator {
         UserFriendlyValidator {
             ctype: validator_description.c_type,
             weight: validator_description.weight,
@@ -241,6 +247,15 @@ impl Validator {
             pub_key: Binary::from(validator_description.pubkey).to_base64(),
             node_id: Binary::from(validator_description.node_id).to_base64(),
         }
+    }
+
+    pub fn parse_user_friendly_validators(
+        &self,
+        validator_description: [ValidatorDescription; 20],
+    ) -> Vec<UserFriendlyValidator> {
+        validator_description
+            .map(|candidate| self.parse_user_friendly_validator(candidate))
+            .to_vec()
     }
 }
 

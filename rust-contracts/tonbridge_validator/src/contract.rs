@@ -62,17 +62,13 @@ pub fn get_config(deps: Deps) -> StdResult<ConfigResponse> {
 pub fn get_candidates_for_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
     let validator = VALIDATOR.load(deps.storage)?;
     let result = validator.get_candidates_for_validators();
-    Ok(result
-        .map(|candidate| validator.parse_user_friendly_validator(candidate))
-        .to_vec())
+    Ok(validator.parse_user_friendly_validators(result))
 }
 
 pub fn get_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
     let validator = VALIDATOR.load(deps.storage)?;
     let result = validator.get_validators();
-    Ok(result
-        .map(|candidate| validator.parse_user_friendly_validator(candidate))
-        .to_vec())
+    Ok(validator.parse_user_friendly_validators(result))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
