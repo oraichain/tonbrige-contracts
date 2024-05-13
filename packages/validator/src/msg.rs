@@ -24,6 +24,10 @@ pub enum QueryMsg {
     GetCandidatesForValidators {},
     #[returns(Vec<UserFriendlyValidator>)]
     GetValidators {},
+    #[returns(bool)]
+    IsVerifiedBlock {
+      root_hash: Binary
+    },
 }
 
 // We define a custom struct for each query response

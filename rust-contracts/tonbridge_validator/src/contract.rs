@@ -1,12 +1,13 @@
 use cosmwasm_std::{entry_point, to_binary, Addr};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use tonbridge_parser::types::Bytes32;
 use tonbridge_validator::msg::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, UserFriendlyValidator,
 };
 
 use crate::error::ContractError;
 use crate::state::{OWNER, VALIDATOR};
-use crate::validator::Validator;
+use crate::validator::{IValidator, Validator};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -51,6 +52,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => to_binary(&get_config(deps)?),
         QueryMsg::GetCandidatesForValidators {} => to_binary(&get_candidates_for_validators(deps)?),
         QueryMsg::GetValidators {} => to_binary(&get_validators(deps)?),
+        QueryMsg::IsVerifiedBlock { root_hash } => to_binary(&is_verified_block(deps, root_hash)?),
     }
 }
 
@@ -69,6 +71,13 @@ pub fn get_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
     let validator = VALIDATOR.load(deps.storage)?;
     let result = validator.get_validators();
     Ok(validator.parse_user_friendly_validators(result))
+}
+
+pub fn is_verified_block(deps: Deps, root_hash: Binary) -> StdResult<bool> {
+    let validator = VALIDATOR.load(deps.storage)?;
+    let mut root_hash_bytes = Bytes32::default();
+    root_hash_bytes.copy_from_slice(root_hash.as_slice());
+    validator.is_verified_block(deps.storage, root_hash_bytes)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
