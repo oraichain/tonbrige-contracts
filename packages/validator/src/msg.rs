@@ -16,6 +16,9 @@ pub enum ExecuteMsg {
         file_hash: String,
         vdata: [VdataHex; 5],
     },
+    AddCurrentBlockToVerifiedSet {
+        root_hash: String,
+    },
 }
 
 /// We currently take no arguments for migrations

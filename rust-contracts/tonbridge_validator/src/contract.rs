@@ -36,6 +36,9 @@ pub fn execute(
             file_hash,
             vdata,
         } => verify_validators(deps, root_hash, file_hash, vdata),
+        ExecuteMsg::AddCurrentBlockToVerifiedSet { root_hash } => {
+            add_current_block_to_verified_set(deps, root_hash)
+        }
     }
 }
 
@@ -88,6 +91,17 @@ pub fn verify_validators(
         &vdata_bytes,
     )?;
     Ok(Response::new().add_attributes(vec![("action", "verify_validators")]))
+}
+
+pub fn add_current_block_to_verified_set(
+    deps: DepsMut,
+    root_hash: String,
+) -> Result<Response, ContractError> {
+    let validator = VALIDATOR.load(deps.storage)?;
+    let mut root_hash_bytes = Bytes32::default();
+    root_hash_bytes.copy_from_slice(root_hash.as_bytes());
+    validator.add_current_block_to_verified_set(deps.storage, root_hash_bytes)?;
+    Ok(Response::new().add_attributes(vec![("action", "add_current_block_to_verified_set")]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
