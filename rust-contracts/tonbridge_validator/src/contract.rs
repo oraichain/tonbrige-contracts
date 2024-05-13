@@ -39,6 +39,8 @@ pub fn execute(
         ExecuteMsg::AddCurrentBlockToVerifiedSet { root_hash } => {
             add_current_block_to_verified_set(deps, root_hash)
         }
+        ExecuteMsg::ReadStateProof { boc, root_hash } => read_state_proof(deps, boc, root_hash),
+        ExecuteMsg::ParseShardProofPath { boc } => parse_shard_proof_path(deps, boc),
     }
 }
 
@@ -104,6 +106,24 @@ pub fn add_current_block_to_verified_set(
     Ok(Response::new().add_attributes(vec![("action", "add_current_block_to_verified_set")]))
 }
 
+pub fn read_state_proof(
+    deps: DepsMut,
+    boc: String,
+    root_hash: String,
+) -> Result<Response, ContractError> {
+    let validator = VALIDATOR.load(deps.storage)?;
+    let mut root_hash_bytes = Bytes32::default();
+    root_hash_bytes.copy_from_slice(root_hash.as_bytes());
+    validator.read_state_proof(deps.storage, boc.as_bytes(), root_hash_bytes)?;
+    Ok(Response::new().add_attributes(vec![("action", "read_state_proof")]))
+}
+
+pub fn parse_shard_proof_path(deps: DepsMut, boc: String) -> Result<Response, ContractError> {
+    let validator = VALIDATOR.load(deps.storage)?;
+    validator.parse_shard_proof_path(deps.storage, boc.as_bytes())?;
+    Ok(Response::new().add_attributes(vec![("action", "parse_shard_proof_path")]))
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -139,6 +159,6 @@ pub fn is_verified_block(deps: Deps, root_hash: String) -> StdResult<bool> {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     Ok(Response::default())
 }

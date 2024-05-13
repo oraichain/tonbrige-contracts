@@ -19,6 +19,13 @@ pub enum ExecuteMsg {
     AddCurrentBlockToVerifiedSet {
         root_hash: String,
     },
+    ReadStateProof {
+        boc: String,
+        root_hash: String,
+    },
+    ParseShardProofPath {
+        boc: String,
+    },
 }
 
 /// We currently take no arguments for migrations
