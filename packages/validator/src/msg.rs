@@ -9,6 +9,7 @@ pub struct InstantiateMsg {}
 pub enum ExecuteMsg {
     ParseCandidatesRootBlock { boc: Binary },
     InitValidators {},
+    SetValidatorSet {},
 }
 
 /// We currently take no arguments for migrations

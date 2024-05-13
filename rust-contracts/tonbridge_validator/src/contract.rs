@@ -30,6 +30,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::ParseCandidatesRootBlock { boc } => parse_candidates_root_block(deps, boc),
         ExecuteMsg::InitValidators {} => init_validators(deps, &info.sender),
+        ExecuteMsg::SetValidatorSet {} => set_validator_set(deps),
     }
 }
 
@@ -44,6 +45,12 @@ pub fn init_validators(deps: DepsMut, sender: &Addr) -> Result<Response, Contrac
     let mut validator = Validator::default();
     validator.init_validators(deps, sender)?;
     Ok(Response::new().add_attributes(vec![("action", "init_validators")]))
+}
+
+pub fn set_validator_set(deps: DepsMut) -> Result<Response, ContractError> {
+    let mut validator = VALIDATOR.load(deps.storage)?;
+    validator.set_validator_set(deps.storage)?;
+    Ok(Response::new().add_attributes(vec![("action", "set_validator_set")]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
