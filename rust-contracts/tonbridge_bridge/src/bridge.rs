@@ -1,6 +1,7 @@
-use cosmwasm_std::{Deps, Response, StdResult, Uint256};
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, Response, StdResult, Uint256};
 use cw_tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
-use cw_tonbridge_validator::validator::Validator;
+use cw_tonbridge_validator::wrapper::ValidatorWrapper;
 use tonbridge_parser::{
     block_parser::BlockParser,
     transaction_parser::TransactionParser,
@@ -8,22 +9,34 @@ use tonbridge_parser::{
     types::{Address, Bytes32},
 };
 
+#[cw_serde]
 pub struct Bridge {
-    block_parser: BlockParser,
-    transaction_parser: TransactionParser,
-    tree_of_cells_parser: TreeOfCellsParser,
-    validator: Validator,
+    pub block_parser: BlockParser,
+    pub transaction_parser: TransactionParser,
+    pub tree_of_cells_parser: TreeOfCellsParser,
+    pub validator: ValidatorWrapper,
+}
+
+impl Bridge {
+    pub fn new(validator_contract_addr: Addr) -> Self {
+        Self {
+            block_parser: BlockParser::default(),
+            transaction_parser: TransactionParser::default(),
+            tree_of_cells_parser: TreeOfCellsParser::default(),
+            validator: ValidatorWrapper(validator_contract_addr),
+        }
+    }
 }
 
 impl Bridge {
     pub fn read_transaction(
         &self,
-        deps: Deps,
+        deps: DepsMut,
         tx_boc: &[u8],
         block_boc: &[u8],
         adapter: &Adapter,
         opcode: Bytes32,
-    ) -> StdResult<()> {
+    ) -> StdResult<Vec<CosmosMsg>> {
         let mut tx_header = self.tree_of_cells_parser.parse_serialized_header(tx_boc)?;
         // BagOfCellsInfo memory blockHeader = self.tree_of_cells_parser
         //     .parseSerializedHeader(block_boc);

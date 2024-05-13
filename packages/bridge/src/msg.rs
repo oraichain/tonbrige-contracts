@@ -6,7 +6,15 @@ use cosmwasm_std::Addr;
 pub struct InstantiateMsg {}
 
 #[cw_serde]
-pub enum ExecuteMsg {}
+pub enum ExecuteMsg {
+  ReadTransaction {
+    tx_boc: String, // in hex form
+    block_boc: String, // in hex form
+    opcode: String, // in hex form
+    ton_token: String,
+    validator_contract_addr: String,
+  }
+}
 
 /// We currently take no arguments for migrations
 #[cw_serde]

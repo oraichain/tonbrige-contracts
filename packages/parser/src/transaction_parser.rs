@@ -1,3 +1,4 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdError, StdResult, Uint256};
 
 use crate::bit_reader::address;
@@ -44,6 +45,7 @@ pub trait ITransactionParser {
     ) -> StdResult<TestData>;
 }
 
+#[cw_serde]
 #[derive(Default)]
 pub struct TransactionParser {}
 
