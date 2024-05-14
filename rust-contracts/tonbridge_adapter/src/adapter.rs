@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Deps, Event, Response, StdResult, Uint128, Uint256};
+use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, Event, Response, StdResult, Uint128, Uint256};
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
 use tonbridge_parser::{
     bit_reader::{address, read_cell, read_uint256},
@@ -10,12 +10,12 @@ use tonbridge_parser::{
 pub trait IBaseAdapter {
     fn execute(
         &self,
-        deps: Deps,
+        deps: DepsMut,
         boc: &[u8],
         opcode: Bytes32,
         cells: &mut [CellData],
         root_idx: usize,
-    ) -> StdResult<()>;
+    ) -> StdResult<Vec<CosmosMsg>>;
     fn swap_eth(&self, to: Uint256, amount: Uint256) -> Response; // payable => hook
     fn swap_token(
         &self,
@@ -41,14 +41,15 @@ impl Adapter {
 }
 
 impl IBaseAdapter for Adapter {
+    // FIXME: this function in Solidity is onlyOwner called, not for public!
     fn execute(
         &self,
-        deps: Deps,
+        deps: DepsMut,
         boc: &[u8],
         opcode: Bytes32,
         cells: &mut [CellData],
         root_idx: usize,
-    ) -> StdResult<()> {
+    ) -> StdResult<Vec<CosmosMsg>> {
         self.transaction_parser
             .parse_transaction_header(boc, cells, root_idx)?;
         let cell_idx = read_cell(cells, root_idx);
@@ -77,7 +78,8 @@ impl IBaseAdapter for Adapter {
             // receiver.transfer(msg_data.amount);
         }
 
-        Ok(())
+        // FIXME: return actual cosmos msgs for minting & swapping tokens
+        Ok(vec![])
     }
 
     fn swap_eth(&self, to: Uint256, amount: Uint256) -> Response {

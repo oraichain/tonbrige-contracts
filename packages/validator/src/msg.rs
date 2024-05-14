@@ -1,14 +1,31 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-
-use cosmwasm_std::{Addr, Binary};
+use tonbridge_parser::types::VdataHex;
 
 #[cw_serde]
 pub struct InstantiateMsg {}
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    ParseCandidatesRootBlock { boc: Binary },
+    ParseCandidatesRootBlock {
+        boc: String, // in hex form
+    },
     InitValidators {},
+    SetValidatorSet {},
+    VerifyValidators {
+        root_hash: String, // in hex form
+        file_hash: String, // in hex form
+        vdata: [VdataHex; 5],
+    },
+    AddCurrentBlockToVerifiedSet {
+        root_hash: String,
+    },
+    ReadStateProof {
+        boc: String,       // in hex form
+        root_hash: String, // in hex form
+    },
+    ParseShardProofPath {
+        boc: String, // in hex form
+    },
 }
 
 /// We currently take no arguments for migrations
@@ -24,6 +41,8 @@ pub enum QueryMsg {
     GetCandidatesForValidators {},
     #[returns(Vec<UserFriendlyValidator>)]
     GetValidators {},
+    #[returns(bool)]
+    IsVerifiedBlock { root_hash: String }, // in hex form
 }
 
 // We define a custom struct for each query response
@@ -37,6 +56,6 @@ pub struct UserFriendlyValidator {
     pub ctype: u8,
     pub weight: u64,
     pub adnl_addr: String,
-    pub pub_key: String,
-    pub node_id: String,
+    pub pub_key: String, // in hex form
+    pub node_id: String, // in hex form
 }

@@ -45,6 +45,13 @@ pub struct Vdata {
 }
 
 #[cw_serde]
+pub struct VdataHex {
+    pub node_id: String,
+    pub r: String,
+    pub s: String,
+}
+
+#[cw_serde]
 #[derive(Copy, Default)]
 pub struct CachedCell {
     pub prefix_length: u128,
