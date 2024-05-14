@@ -230,10 +230,12 @@ version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-controllers",
  "cw-storage-plus",
  "cw-tonbridge-adapter",
  "cw-tonbridge-validator",
  "cw20",
+ "hex",
  "thiserror",
  "tonbridge-bridge",
  "tonbridge-parser",
