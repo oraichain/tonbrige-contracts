@@ -1,13 +1,13 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, Response, StdError, StdResult, Uint256};
-use cw_tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
-use cw_tonbridge_validator::wrapper::ValidatorWrapper;
+use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
 use tonbridge_parser::{
     block_parser::{BlockParser, IBlockParser},
     transaction_parser::{ITransactionParser, TransactionParser},
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser},
     types::{Address, Bytes32},
 };
+use tonbridge_validator::wrapper::ValidatorWrapper;
 extern crate hex;
 use hex::encode;
 

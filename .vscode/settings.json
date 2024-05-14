@@ -6,5 +6,8 @@
     "solidity.remappings": [
         "forge-std/=lib/forge-std/src/",
         "@openzeppelin/=lib/openzeppelin-contracts/"
-    ]
+    ],
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+      },
 }

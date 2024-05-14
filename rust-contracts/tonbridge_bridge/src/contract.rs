@@ -1,6 +1,6 @@
 use cosmwasm_std::{entry_point, to_binary};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
-use cw_tonbridge_adapter::adapter::Adapter;
+use tonbridge_adapter::adapter::Adapter;
 use tonbridge_bridge::msg::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use tonbridge_parser::types::Bytes32;
 

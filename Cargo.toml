@@ -42,7 +42,6 @@ tonbridge-validator = { path = "./packages/validator" }
 tonbridge-adapter = { path = "./packages/adapter" }
 tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./rust-contracts/tonbridge_validator" }
-cw-tonbridge-adapter = { path = "./rust-contracts/tonbridge_adapter" }
 
 [profile.release]
 opt-level = 3

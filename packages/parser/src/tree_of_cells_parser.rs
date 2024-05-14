@@ -124,7 +124,7 @@ impl ITreeOfCellsParser for TreeOfCellsParser {
             &boc[ptr + 3 * header.ref_byte_size..],
             header.offset_byte_size,
         );
-        if header.data_size > header.cell_count << 32 {
+        if (header.data_size as u64) > (header.cell_count as u64) << 32 {
             return Err(StdError::generic_err("bag-of-cells: invalid header"));
         }
 

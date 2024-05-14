@@ -1,9 +1,9 @@
+use crate::msg::{ExecuteMsg, QueryMsg};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     to_binary, Addr, CosmosMsg, CustomQuery, QuerierWrapper, QueryRequest, StdResult, WasmMsg,
     WasmQuery,
 };
-use tonbridge_validator::msg::{ExecuteMsg, QueryMsg};
 
 /// ValidatorWrapper is a wrapper around Addr that provides a lot of helpers for the Validator contract
 /// for working with this.

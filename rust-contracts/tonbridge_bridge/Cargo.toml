@@ -26,8 +26,7 @@ cw-controllers = { workspace = true }
 cosmwasm-schema = { workspace = true }
 tonbridge-parser = { workspace = true }
 tonbridge-validator = { workspace = true }
-cw-tonbridge-validator = { workspace = true }
-cw-tonbridge-adapter = { workspace = true }
+tonbridge-adapter = { workspace = true }
 thiserror = { workspace = true }
 tonbridge-bridge = { workspace = true }
 hex = "0.4"

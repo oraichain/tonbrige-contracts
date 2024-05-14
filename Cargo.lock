@@ -211,20 +211,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cw-tonbridge-adapter"
-version = "0.2.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-storage-plus",
- "cw20",
- "thiserror",
- "tonbridge-adapter",
- "tonbridge-parser",
- "tonbridge-validator",
-]
-
-[[package]]
 name = "cw-tonbridge-bridge"
 version = "0.2.0"
 dependencies = [
@@ -232,11 +218,10 @@ dependencies = [
  "cosmwasm-std",
  "cw-controllers",
  "cw-storage-plus",
- "cw-tonbridge-adapter",
- "cw-tonbridge-validator",
  "cw20",
  "hex",
  "thiserror",
+ "tonbridge-adapter",
  "tonbridge-bridge",
  "tonbridge-parser",
  "tonbridge-validator",
@@ -764,6 +749,7 @@ version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw20",
  "tonbridge-parser",
 ]
 
