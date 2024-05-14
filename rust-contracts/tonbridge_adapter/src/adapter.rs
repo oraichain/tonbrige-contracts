@@ -50,6 +50,7 @@ impl IBaseAdapter for Adapter {
         cells: &mut [CellData],
         root_idx: usize,
     ) -> StdResult<Vec<CosmosMsg>> {
+        let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
         self.transaction_parser
             .parse_transaction_header(boc, cells, root_idx)?;
         let cell_idx = read_cell(cells, root_idx);
@@ -63,23 +64,20 @@ impl IBaseAdapter for Adapter {
 
         let amount = msg_data.amount.try_into()?;
         if opcode == OPCODE_1 {
-            self.token.call(Cw20ExecuteMsg::Mint {
+            cosmos_msgs.push(self.token.call(Cw20ExecuteMsg::Mint {
                 recipient: receiver.to_string(),
                 amount: amount * Uint128::from(1000000000u128),
-            })?;
+            })?);
             // _token.mint(msg_data.amount * 1000000000, msg_data.eth_address);
-        }
-
-        if opcode == OPCODE_2 {
-            self.token.call(Cw20ExecuteMsg::Transfer {
+        } else if opcode == OPCODE_2 {
+            cosmos_msgs.push(self.token.call(Cw20ExecuteMsg::Transfer {
                 recipient: receiver.to_string(),
                 amount,
-            })?;
+            })?);
             // receiver.transfer(msg_data.amount);
         }
 
-        // FIXME: return actual cosmos msgs for minting & swapping tokens
-        Ok(vec![])
+        Ok(cosmos_msgs)
     }
 
     fn swap_eth(&self, to: Uint256, amount: Uint256) -> Response {
