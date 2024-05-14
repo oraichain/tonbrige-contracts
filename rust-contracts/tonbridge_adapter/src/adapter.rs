@@ -41,6 +41,7 @@ impl Adapter {
 }
 
 impl IBaseAdapter for Adapter {
+    // FIXME: this function in Solidity is onlyOwner called, not for public!
     fn execute(
         &self,
         deps: DepsMut,
