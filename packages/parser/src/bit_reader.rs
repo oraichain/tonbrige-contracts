@@ -119,12 +119,12 @@ pub fn read_bytes32_bit_size(
     cell_idx: usize,
     mut size: u128,
 ) -> Bytes32 {
-    let mut value = 0u128;
+    let mut value = Uint256::zero();
     while size > 0 {
-        value = (value << 1) + read_bit(data, cells, cell_idx) as u128;
+        value = (value << 1) + Uint256::from(read_bit(data, cells, cell_idx));
         size -= 1;
     }
-    Uint256::from(value).to_be_bytes()
+    value.to_be_bytes()
 }
 
 pub fn read_bytes32_byte_size(

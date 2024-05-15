@@ -316,7 +316,7 @@ mod tests {
             .collect();
         println!(
             "val pubkey: {:?}",
-            validators[0].pubkey
+            HexBinary::from(validators[0].pubkey).to_hex()
         );
     }
 
