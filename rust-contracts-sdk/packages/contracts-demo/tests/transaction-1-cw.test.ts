@@ -78,7 +78,7 @@ describe("Tree of Cells parser tests 1", () => {
     });
   });
 
-  it("Should set initial validators and its block's hash", async () => {
+  it("Should set updated validator set and its block's hash", async () => {
     const boc = findBoc("proof-validators");
     await validator.parseCandidatesRootBlock({ boc: boc.toString("hex") });
     const signatures = data.find((el) => el.type === "proof-validators")!.signatures!;
