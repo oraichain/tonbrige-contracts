@@ -1,7 +1,7 @@
 use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, Event, Response, StdResult, Uint128, Uint256};
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
 use tonbridge_parser::{
-    bit_reader::{address, read_cell, read_uint256},
+    bit_reader::{address, read_bytes32_bit_size, read_cell, read_uint256},
     transaction_parser::{ITransactionParser, TransactionParser},
     tree_of_cells_parser::{OPCODE_1, OPCODE_2},
     types::{Address, Bytes32, CellData, Message, TestData},
@@ -122,7 +122,7 @@ pub fn get_data_from_messages(
         if out_messages[i].info.dest.hash == opcode {
             let idx = out_messages[i].body_idx;
             // cells[out_messages[i].body_idx].cursor += 634;
-            let hash = read_uint256(boc_data, cells, idx, 256)?.to_be_bytes();
+            let hash = read_bytes32_bit_size(boc_data, cells, idx, 256);
             data.eth_address = address(hash)?;
             data.amount = read_uint256(boc_data, cells, idx, 256)?;
         }

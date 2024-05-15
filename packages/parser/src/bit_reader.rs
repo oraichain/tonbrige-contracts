@@ -110,18 +110,18 @@ pub fn read_uint256(
     data: &[u8],
     cells: &mut [CellData],
     cell_idx: usize,
-    mut size: u16,
+    size: usize,
 ) -> StdResult<Uint256> {
     if size > 256 {
         return Err(StdError::generic_err("max size is 256 bits"));
     }
-    let mut value = Uint256::zero();
-    while size > 0 {
-        value = (value << 1) + Uint256::from(read_bit(data, cells, cell_idx));
-        size -= 1;
-    }
 
-    Ok(value)
+    Ok(Uint256::from_be_bytes(read_bytes32_bit_size(
+        data,
+        cells,
+        cell_idx,
+        size as usize,
+    )))
 }
 
 pub fn read_bytes32_bit_size(

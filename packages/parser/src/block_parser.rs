@@ -214,7 +214,7 @@ pub fn read_uint_leq(
     cell_idx: usize,
     n: u128,
 ) -> StdResult<Uint256> {
-    let mut last_one = 0u16;
+    let mut last_one = 0usize;
     let mut l = 1u128;
     let mut found = false;
     for i in 0..32 {
@@ -453,7 +453,7 @@ fn parse_config_param342(
     cell_idx: usize,
 ) -> StdResult<ValidatorSet32> {
     // uint256 skipped =
-    read_uint256(data, cells, cell_idx, 28)?;
+    read_bytes32_bit_size(data, cells, cell_idx, 28);
     // uint8 cType =
     read_u8(data, cells, cell_idx, 8)?;
 

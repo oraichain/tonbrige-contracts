@@ -134,7 +134,7 @@ impl ITransactionParser for TransactionParser {
             // console.logBytes(boc_data[cells[out_messages[i].body_idx].cursor / 8:]);
             if out_messages[i].info.dest.hash == bytes32_one {
                 let idx = out_messages[i].body_idx;
-                let hash = read_uint256(boc_data, cells, idx, 256)?.to_be_bytes();
+                let hash = read_bytes32_bit_size(boc_data, cells, idx, 256);
                 data.eth_address = address(hash)?;
                 // data.amount = 0;
                 // console.log("amount");
@@ -148,14 +148,13 @@ impl ITransactionParser for TransactionParser {
     }
 }
 
-pub fn parse_state_init(data: &[u8], cells: &mut [CellData], idx: usize) -> StdResult<()> {
+pub fn parse_state_init(data: &[u8], cells: &mut [CellData], idx: usize) {
     if read_bool(data, cells, idx) {
-        read_uint256(data, cells, idx, 5)?;
+        read_bytes32_bit_size(data, cells, idx, 5);
     }
     if read_bool(data, cells, idx) {
-        read_uint256(data, cells, idx, 2)?;
+        read_bytes32_bit_size(data, cells, idx, 2);
     }
-    Ok(())
 }
 
 fn parse_message(data: &[u8], cells: &mut [CellData], message_idx: usize) -> StdResult<Message> {

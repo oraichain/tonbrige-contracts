@@ -1,8 +1,10 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdError, StdResult};
 
+use crate::bit_reader::read_bytes32_bit_size;
+
 use super::{
-    bit_reader::{read_u16, read_u8, read_uint256, sha256},
+    bit_reader::{read_u16, read_u8, sha256},
     block_parser::read_int,
     types::{BagOfCellsInfo, Bytes32, Bytes4, CellData, CellSerializationInfo},
 };
@@ -469,7 +471,7 @@ fn calc_hash_for_refs(
                     break;
                 }
 
-                _hash.extend_from_slice(&get_hash(data, level_i, cells, cells[i].refs[j])?);
+                _hash.extend_from_slice(&get_hash(data, level_i, cells, cells[i].refs[j]));
             }
         }
 
@@ -488,7 +490,7 @@ fn get_hash(
     // uint256 cell_type,
     cells: &mut [CellData],
     cell_idx: usize,
-) -> StdResult<Bytes32> {
+) -> Bytes32 {
     let mut hash_i =
         get_hashes_count_from_mask(apply_level_mask(level, cells[cell_idx].level_mask)) - 1;
 
@@ -497,14 +499,14 @@ fn get_hash(
         if hash_i != this_hash_i {
             let cursor = 16 + (hash_i as usize) * 2 * 8;
             cells[cell_idx].cursor += cursor;
-            let hash_num = read_uint256(data, cells, cell_idx, 256)?;
+            let hash_num = read_bytes32_bit_size(data, cells, cell_idx, 256);
             cells[cell_idx].cursor -= cursor + 256;
 
-            return Ok(hash_num.to_be_bytes());
+            return hash_num;
         }
         hash_i = 0;
     }
-    Ok(cells[cell_idx].hashes[hash_i as usize])
+    cells[cell_idx].hashes[hash_i as usize]
 }
 
 #[cfg(test)]
