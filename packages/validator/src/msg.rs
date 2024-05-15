@@ -53,9 +53,9 @@ pub struct ConfigResponse {
 
 #[cw_serde]
 pub struct UserFriendlyValidator {
-    pub ctype: u8,
+    pub c_type: u8,
     pub weight: u64,
     pub adnl_addr: String,
-    pub pub_key: String, // in hex form
+    pub pubkey: String,  // in hex form
     pub node_id: String, // in hex form
 }

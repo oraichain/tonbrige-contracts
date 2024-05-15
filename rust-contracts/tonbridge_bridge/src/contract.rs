@@ -1,11 +1,12 @@
-use cosmwasm_std::entry_point;
-use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
-use cw_tonbridge_adapter::adapter::Adapter;
-use tonbridge_bridge::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
-use tonbridge_parser::types::Bytes32;
+use cosmwasm_std::{entry_point, to_binary};
+use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
+use tonbridge_adapter::adapter::Adapter;
+use tonbridge_bridge::msg::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use tonbridge_parser::bit_reader::to_bytes32;
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
+use crate::state::{OWNER, PROCESSED_TXS};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -52,14 +53,12 @@ pub fn read_transaction(
 ) -> Result<Response, ContractError> {
     let adapter = Adapter::new(deps.api.addr_validate(&ton_token)?);
     let bridge = Bridge::new(deps.api.addr_validate(&validator_contract_addr)?);
-    let mut opcode_bytes = Bytes32::default();
-    opcode_bytes.copy_from_slice(opcode.as_bytes());
     let cosmos_msgs = bridge.read_transaction(
         deps,
-        tx_boc.as_bytes(),
-        block_boc.as_bytes(),
+        HexBinary::from_hex(&tx_boc)?.as_slice(),
+        HexBinary::from_hex(&block_boc)?.as_slice(),
         &adapter,
-        opcode_bytes,
+        to_bytes32(&opcode)?,
     )?;
     Ok(Response::new()
         .add_messages(cosmos_msgs)
@@ -67,8 +66,22 @@ pub fn read_transaction(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
-    unimplemented!();
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::Config {} => to_binary(&get_config(deps)?),
+        QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
+    }
+}
+
+pub fn is_tx_processed(deps: Deps, tx_hash: String) -> StdResult<bool> {
+    PROCESSED_TXS
+        .may_load(deps.storage, &to_bytes32(&tx_hash)?)
+        .map(|res| res.unwrap_or(false))
+}
+
+pub fn get_config(deps: Deps) -> StdResult<ConfigResponse> {
+    let owner = OWNER.query_admin(deps)?;
+    Ok(ConfigResponse { owner: owner.admin })
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

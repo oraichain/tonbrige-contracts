@@ -75,7 +75,7 @@ contract TransactionParserTest is Test {
             }
         }
 
-        console.log(filterValidators.length);
+        console.logBytes32(filterValidators[0].pubkey);
     }
 
     function test_verifyValidators() public {

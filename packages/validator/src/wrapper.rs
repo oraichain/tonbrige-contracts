@@ -1,8 +1,9 @@
+use crate::msg::{ExecuteMsg, QueryMsg};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    to_binary, Addr, CosmosMsg, CustomQuery, QuerierWrapper, QueryRequest, StdResult, WasmMsg, WasmQuery
+    to_binary, Addr, CosmosMsg, CustomQuery, QuerierWrapper, QueryRequest, StdResult, WasmMsg,
+    WasmQuery,
 };
-use tonbridge_validator::msg::{ExecuteMsg, QueryMsg};
 
 /// ValidatorWrapper is a wrapper around Addr that provides a lot of helpers for the Validator contract
 /// for working with this.
@@ -33,18 +34,15 @@ impl ValidatorWrapper {
     }
 
     /// Check if a block is verified
-    pub fn is_verified_block<T, CQ>(
+    pub fn is_verified_block<CQ>(
         &self,
         querier: &QuerierWrapper<CQ>,
-        root_hash: T,
+        root_hash: String,
     ) -> StdResult<bool>
     where
-        T: Into<String>,
         CQ: CustomQuery,
     {
-        let query = self.encode_smart_query(QueryMsg::IsVerifiedBlock {
-            root_hash: root_hash.into(),
-        })?;
+        let query = self.encode_smart_query(QueryMsg::IsVerifiedBlock { root_hash })?;
         querier.query(&query)
     }
 }
