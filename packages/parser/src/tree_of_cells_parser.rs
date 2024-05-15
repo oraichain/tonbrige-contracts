@@ -414,36 +414,34 @@ fn calc_hash_for_refs(
         }
 
         let mut _hash = vec![];
-        {
-            if hash_i == hash_i_offset {
-                // uint32 new_level_mask = apply_level_mask(level_i);
-                if hash_i != 0 && cells[i].cell_type != PRUNNED_BRANCH_CELL {
-                    return Err(StdError::generic_err("Cannot deserialize cell"));
-                }
 
-                {
-                    let mut refs_count = 0;
-                    for t in 0..4 {
-                        if cells[i].refs[t] == 255 {
-                            break;
-                        }
-                        refs_count += 1;
-                    }
-
-                    let new_level_mask = apply_level_mask(level_i, cells[i].level_mask);
-                    // uint8 new_d1 =
-                    let d1 =
-                        refs_count + (if cells[i].special { 8 } else { 0 }) + new_level_mask * 32;
-                    _hash = vec![d1 as u8];
-                    _hash.extend_from_slice(&cell_slice[1..cell_info.refs_offset]);
-                }
-            } else {
-                if level_i == 0 || cells[i].cell_type == PRUNNED_BRANCH_CELL {
-                    return Err(StdError::generic_err("Cannot deserialize cell 2"));
-                }
-
-                _hash.extend_from_slice(&cells[i].hashes[hash_i - hash_i_offset - 1]);
+        if hash_i == hash_i_offset {
+            // uint32 new_level_mask = apply_level_mask(level_i);
+            if hash_i != 0 && cells[i].cell_type != PRUNNED_BRANCH_CELL {
+                return Err(StdError::generic_err("Cannot deserialize cell"));
             }
+
+            {
+                let mut refs_count = 0;
+                for t in 0..4 {
+                    if cells[i].refs[t] == 255 {
+                        break;
+                    }
+                    refs_count += 1;
+                }
+
+                let new_level_mask = apply_level_mask(level_i, cells[i].level_mask);
+                // uint8 new_d1 =
+                let d1 = refs_count + (if cells[i].special { 8 } else { 0 }) + new_level_mask * 32;
+                _hash = vec![d1 as u8];
+                _hash.extend_from_slice(&cell_slice[1..cell_info.refs_offset]);
+            }
+        } else {
+            if level_i == 0 || cells[i].cell_type == PRUNNED_BRANCH_CELL {
+                return Err(StdError::generic_err("Cannot deserialize cell 2"));
+            }
+
+            _hash.extend_from_slice(&cells[i].hashes[hash_i - hash_i_offset - 1]);
         }
 
         // uint8 dest_i = hash_i - hash_i_offset;
