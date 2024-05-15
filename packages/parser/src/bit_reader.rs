@@ -136,9 +136,7 @@ pub fn read_bytes32_bit_size(
         if bit != 0 {
             // set bit
             let position = 256 - size;
-            let index = position >> 3;
-            let mask_index = position & 7;
-            value[index] |= BIT_MASK[mask_index];
+            value[position >> 3] |= BIT_MASK[position & 7];
         }
 
         size -= 1;
