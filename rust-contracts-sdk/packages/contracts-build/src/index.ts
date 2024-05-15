@@ -3,20 +3,12 @@ import { readFileSync } from "fs";
 import path from "path";
 
 export type ContractName =
-  | "oraiswap-token"
-  | "oraiswap-orderbook"
-  | "oraiswap-pair"
-  | "oraiswap-oracle"
-  | "oraiswap-converter"
-  | "oraiswap-factory"
-  | "oraiswap_rewarder"
-  | "oraiswap-router"
-  | "oraiswap-staking"
-  | "oraidex-listing-contract";
+  | "cw-tonbridge-validator"
+  | "cw-tonbridge-bridge"
 
 const contractDir = path.join(path.dirname(module.filename), "..", "data");
 
-export const getContractDir = (name: ContractName = "oraiswap-orderbook") => {
+export const getContractDir = (name: ContractName = "cw-tonbridge-validator") => {
   return path.join(contractDir, name + ".wasm");
 };
 

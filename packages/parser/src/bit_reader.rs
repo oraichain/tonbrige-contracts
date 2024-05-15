@@ -1,6 +1,16 @@
+use std::array::TryFromSliceError;
+
 use super::types::{Address, Bytes32, CellData};
-use cosmwasm_std::{StdError, StdResult, Uint256};
+use cosmwasm_std::{HexBinary, StdError, StdResult, Uint256};
 use sha2::{Digest, Sha256};
+
+pub fn to_bytes32(str: &str) -> Result<Bytes32, StdError> {
+    HexBinary::from_hex(str)
+        .unwrap()
+        .as_slice()
+        .try_into()
+        .map_err(|err: TryFromSliceError| StdError::generic_err(err.to_string()))
+}
 
 pub fn read_bit(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> u8 {
     let cursor = cells[cell_idx].cursor >> 3;

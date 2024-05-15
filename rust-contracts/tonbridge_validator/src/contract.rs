@@ -1,6 +1,7 @@
-use cosmwasm_std::{entry_point, to_binary, Addr};
+use cosmwasm_std::{entry_point, to_binary, Addr, HexBinary};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
-use tonbridge_parser::types::{Bytes32, Vdata, VdataHex};
+use tonbridge_parser::bit_reader::to_bytes32;
+use tonbridge_parser::types::{Vdata, VdataHex};
 use tonbridge_validator::msg::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, UserFriendlyValidator,
 };
@@ -46,7 +47,7 @@ pub fn execute(
 
 pub fn parse_candidates_root_block(deps: DepsMut, boc: String) -> Result<Response, ContractError> {
     let mut validator = VALIDATOR.load(deps.storage)?;
-    validator.parse_candidates_root_block(boc.as_bytes())?;
+    validator.parse_candidates_root_block(HexBinary::from_hex(&boc)?.as_slice())?;
     VALIDATOR.save(deps.storage, &validator)?;
     Ok(Response::new().add_attributes(vec![("action", "parse_candidates_root_block")]))
 }
@@ -71,25 +72,18 @@ pub fn verify_validators(
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
     let vdata_bytes = vdata.map(|data| {
-        let mut node_id = Bytes32::default();
-        let mut r = Bytes32::default();
-        let mut s = Bytes32::default();
+        let node_id = to_bytes32(&data.node_id).unwrap();
+        let r = to_bytes32(&data.r).unwrap();
+        let s = to_bytes32(&data.s).unwrap();
 
         // transform from hex string to bytes32
-        node_id.copy_from_slice(data.node_id.as_bytes());
-        r.copy_from_slice(data.r.as_bytes());
-        s.copy_from_slice(data.s.as_bytes());
         Vdata { node_id, r, s }
     });
-    let mut root_hash_bytes = Bytes32::default();
-    let mut file_hash_bytes = Bytes32::default();
-    root_hash_bytes.copy_from_slice(root_hash.as_bytes());
-    file_hash_bytes.copy_from_slice(file_hash.as_bytes());
     validator.verify_validators(
         deps.storage,
         deps.api,
-        root_hash_bytes,
-        file_hash_bytes,
+        to_bytes32(&root_hash)?,
+        to_bytes32(&file_hash)?,
         &vdata_bytes,
     )?;
     Ok(Response::new().add_attributes(vec![("action", "verify_validators")]))
@@ -100,9 +94,7 @@ pub fn add_current_block_to_verified_set(
     root_hash: String,
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    let mut root_hash_bytes = Bytes32::default();
-    root_hash_bytes.copy_from_slice(root_hash.as_bytes());
-    validator.add_current_block_to_verified_set(deps.storage, root_hash_bytes)?;
+    validator.add_current_block_to_verified_set(deps.storage, to_bytes32(&root_hash)?)?;
     Ok(Response::new().add_attributes(vec![("action", "add_current_block_to_verified_set")]))
 }
 
@@ -112,15 +104,17 @@ pub fn read_state_proof(
     root_hash: String,
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    let mut root_hash_bytes = Bytes32::default();
-    root_hash_bytes.copy_from_slice(root_hash.as_bytes());
-    validator.read_state_proof(deps.storage, boc.as_bytes(), root_hash_bytes)?;
+    validator.read_state_proof(
+        deps.storage,
+        HexBinary::from_hex(&boc)?.as_slice(),
+        to_bytes32(&root_hash)?,
+    )?;
     Ok(Response::new().add_attributes(vec![("action", "read_state_proof")]))
 }
 
 pub fn parse_shard_proof_path(deps: DepsMut, boc: String) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    validator.parse_shard_proof_path(deps.storage, boc.as_bytes())?;
+    validator.parse_shard_proof_path(deps.storage, HexBinary::from_hex(&boc)?.as_slice())?;
     Ok(Response::new().add_attributes(vec![("action", "parse_shard_proof_path")]))
 }
 
@@ -153,9 +147,7 @@ pub fn get_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
 
 pub fn is_verified_block(deps: Deps, root_hash: String) -> StdResult<bool> {
     let validator = VALIDATOR.load(deps.storage)?;
-    let mut root_hash_bytes = Bytes32::default();
-    root_hash_bytes.copy_from_slice(root_hash.as_bytes());
-    validator.is_verified_block(deps.storage, root_hash_bytes)
+    validator.is_verified_block(deps.storage, to_bytes32(&root_hash)?)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

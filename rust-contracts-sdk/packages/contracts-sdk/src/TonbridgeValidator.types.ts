@@ -51,8 +51,8 @@ export interface ConfigResponse {
 export type ArrayOfUserFriendlyValidator = UserFriendlyValidator[];
 export interface UserFriendlyValidator {
   adnl_addr: string;
-  ctype: number;
+  c_type: number;
   node_id: string;
-  pub_key: string;
+  pubkey: string;
   weight: number;
 }

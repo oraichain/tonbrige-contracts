@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Api, Binary, DepsMut, StdError, StdResult, Storage};
+use cosmwasm_std::{Addr, Api, DepsMut, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
     block_parser::ValidatorSet20,
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser, EMPTY_HASH},
@@ -241,11 +241,11 @@ impl Validator {
         validator_description: ValidatorDescription,
     ) -> UserFriendlyValidator {
         UserFriendlyValidator {
-            ctype: validator_description.c_type,
+            c_type: validator_description.c_type,
             weight: validator_description.weight,
-            adnl_addr: Binary::from(validator_description.adnl_addr).to_base64(),
-            pub_key: Binary::from(validator_description.pubkey).to_base64(),
-            node_id: Binary::from(validator_description.node_id).to_base64(),
+            adnl_addr: HexBinary::from(&validator_description.adnl_addr).to_hex(),
+            pubkey: HexBinary::from(&validator_description.pubkey).to_hex(),
+            node_id: HexBinary::from(&validator_description.node_id).to_hex(),
         }
     }
 
@@ -314,8 +314,10 @@ mod tests {
             .into_iter()
             .filter(|c| c.c_type != 0)
             .collect();
-
-        println!("{}", validators.len());
+        println!(
+            "val pubkey: {:?}",
+            validators[0].pubkey
+        );
     }
 
     #[test]

@@ -1,8 +1,8 @@
 use cosmwasm_std::{entry_point, to_binary};
-use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use tonbridge_adapter::adapter::Adapter;
 use tonbridge_bridge::msg::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
-use tonbridge_parser::types::Bytes32;
+use tonbridge_parser::bit_reader::to_bytes32;
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
@@ -53,14 +53,12 @@ pub fn read_transaction(
 ) -> Result<Response, ContractError> {
     let adapter = Adapter::new(deps.api.addr_validate(&ton_token)?);
     let bridge = Bridge::new(deps.api.addr_validate(&validator_contract_addr)?);
-    let mut opcode_bytes = Bytes32::default();
-    opcode_bytes.copy_from_slice(opcode.as_bytes());
     let cosmos_msgs = bridge.read_transaction(
         deps,
-        tx_boc.as_bytes(),
-        block_boc.as_bytes(),
+        HexBinary::from_hex(&tx_boc)?.as_slice(),
+        HexBinary::from_hex(&block_boc)?.as_slice(),
         &adapter,
-        opcode_bytes,
+        to_bytes32(&opcode)?,
     )?;
     Ok(Response::new()
         .add_messages(cosmos_msgs)
@@ -76,10 +74,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 pub fn is_tx_processed(deps: Deps, tx_hash: String) -> StdResult<bool> {
-    let mut tx_hash_bytes = Bytes32::default();
-    tx_hash_bytes.copy_from_slice(tx_hash.as_bytes());
     PROCESSED_TXS
-        .may_load(deps.storage, &tx_hash_bytes)
+        .may_load(deps.storage, &to_bytes32(&tx_hash)?)
         .map(|res| res.unwrap_or(false))
 }
 
