@@ -18,6 +18,13 @@ export interface TonbridgeValidatorReadOnlyInterface {
   }: {
     rootHash: string;
   }) => Promise<Boolean>;
+  isSignedByValidator: ({
+    rootHash,
+    validatorNodeId
+  }: {
+    rootHash: string;
+    validatorNodeId: string;
+  }) => Promise<Boolean>;
 }
 export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnlyInterface {
   client: CosmWasmClient;
@@ -30,6 +37,7 @@ export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnly
     this.getCandidatesForValidators = this.getCandidatesForValidators.bind(this);
     this.getValidators = this.getValidators.bind(this);
     this.isVerifiedBlock = this.isVerifiedBlock.bind(this);
+    this.isSignedByValidator = this.isSignedByValidator.bind(this);
   }
 
   config = async (): Promise<ConfigResponse> => {
@@ -58,6 +66,20 @@ export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnly
       }
     });
   };
+  isSignedByValidator = async ({
+    rootHash,
+    validatorNodeId
+  }: {
+    rootHash: string;
+    validatorNodeId: string;
+  }): Promise<Boolean> => {
+    return this.client.queryContractSmart(this.contractAddress, {
+      is_signed_by_validator: {
+        root_hash: rootHash,
+        validator_node_id: validatorNodeId
+      }
+    });
+  };
 }
 export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyInterface {
   contractAddress: string;
@@ -67,8 +89,11 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
   }: {
     boc: string;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
-  initValidators: (_fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
-  setValidatorSet: (_fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
+  resetValidatorSet: ({
+    boc
+  }: {
+    boc: string;
+  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   verifyValidators: ({
     fileHash,
     rootHash,
@@ -107,8 +132,7 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     this.sender = sender;
     this.contractAddress = contractAddress;
     this.parseCandidatesRootBlock = this.parseCandidatesRootBlock.bind(this);
-    this.initValidators = this.initValidators.bind(this);
-    this.setValidatorSet = this.setValidatorSet.bind(this);
+    this.resetValidatorSet = this.resetValidatorSet.bind(this);
     this.verifyValidators = this.verifyValidators.bind(this);
     this.addCurrentBlockToVerifiedSet = this.addCurrentBlockToVerifiedSet.bind(this);
     this.readStateProof = this.readStateProof.bind(this);
@@ -126,14 +150,15 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
       }
     }, _fee, _memo, _funds);
   };
-  initValidators = async (_fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
+  resetValidatorSet = async ({
+    boc
+  }: {
+    boc: string;
+  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
-      init_validators: {}
-    }, _fee, _memo, _funds);
-  };
-  setValidatorSet = async (_fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
-    return await this.client.execute(this.sender, this.contractAddress, {
-      set_validator_set: {}
+      reset_validator_set: {
+        boc
+      }
     }, _fee, _memo, _funds);
   };
   verifyValidators = async ({

@@ -2,19 +2,23 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use tonbridge_parser::types::VdataHex;
 
 #[cw_serde]
-pub struct InstantiateMsg {}
+pub struct InstantiateMsg {
+    pub boc: Option<String>,
+}
 
 #[cw_serde]
 pub enum ExecuteMsg {
     ParseCandidatesRootBlock {
         boc: String, // in hex form
     },
-    InitValidators {},
-    SetValidatorSet {},
+    // SetValidatorSet {},
+    ResetValidatorSet {
+        boc: String,
+    },
     VerifyValidators {
         root_hash: String, // in hex form
         file_hash: String, // in hex form
-        vdata: [VdataHex; 5],
+        vdata: Vec<VdataHex>,
     },
     AddCurrentBlockToVerifiedSet {
         root_hash: String,
@@ -43,6 +47,11 @@ pub enum QueryMsg {
     GetValidators {},
     #[returns(bool)]
     IsVerifiedBlock { root_hash: String }, // in hex form
+    #[returns(bool)]
+    IsSignedByValidator {
+        validator_node_id: String,
+        root_hash: String,
+    },
 }
 
 // We define a custom struct for each query response

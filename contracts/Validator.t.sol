@@ -75,6 +75,7 @@ contract TransactionParserTest is Test {
             }
         }
 
+        console.log("first validator pubkey: ");
         console.logBytes32(filterValidators[0].pubkey);
     }
 

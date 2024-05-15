@@ -22,7 +22,7 @@ pub trait ISignatureValidator {
         api: &dyn Api,
         root_h: Bytes32,
         file_hash: Bytes32,
-        vdata: &[Vdata; 5],
+        vdata: &[Vdata],
     ) -> StdResult<()>;
 
     fn parse_candidates_root_block(
@@ -95,7 +95,7 @@ impl ISignatureValidator for SignatureValidator {
         }
 
         if current_weight * 3 <= self.total_weight * 2 {
-            return Err(StdError::generic_err("not enought votes"));
+            return Err(StdError::generic_err("not enough votes"));
         }
         Ok(root_h)
     }
@@ -106,7 +106,7 @@ impl ISignatureValidator for SignatureValidator {
         api: &dyn Api,
         root_h: Bytes32,
         file_hash: Bytes32,
-        vdata: &[Vdata; 5],
+        vdata: &[Vdata],
     ) -> StdResult<()> {
         let test_root_hash = if self.root_hash == EMPTY_HASH {
             root_h
@@ -119,7 +119,7 @@ impl ISignatureValidator for SignatureValidator {
         }
 
         let mut validator_idx = self.validator_set.len();
-        for i in 0..5 {
+        for i in 0..vdata.len() {
             // 1. found validator
             for j in 0..self.validator_set.len() {
                 if self.validator_set[j].node_id == vdata[i].node_id {
@@ -161,8 +161,6 @@ impl ISignatureValidator for SignatureValidator {
     }
 
     fn init_validators(&mut self) -> StdResult<Bytes32> {
-        // require(validator_set[0].weight == 0, "current validators not empty");
-
         // TODO: using Item storage
         self.validator_set = self.candidates_for_validator_set;
         self.candidates_for_validator_set = ValidatorSet20::default();
@@ -197,7 +195,7 @@ impl ISignatureValidator for SignatureValidator {
         }
 
         if current_weight * 3 <= self.total_weight * 2 {
-            return Err(StdError::generic_err("not enought votes"));
+            return Err(StdError::generic_err("not enough votes"));
         }
 
         self.validator_set = self.candidates_for_validator_set;

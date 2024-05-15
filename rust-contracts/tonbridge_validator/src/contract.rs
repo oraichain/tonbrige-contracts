@@ -1,4 +1,4 @@
-use cosmwasm_std::{entry_point, to_binary, Addr, HexBinary};
+use cosmwasm_std::{entry_point, to_binary, Addr, HexBinary, StdError};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use tonbridge_parser::bit_reader::to_bytes32;
 use tonbridge_parser::types::{Vdata, VdataHex};
@@ -15,8 +15,14 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    _msg: InstantiateMsg,
+    msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    let mut validator = Validator::default();
+    if let Some(boc) = msg.boc {
+        validator.parse_candidates_root_block(HexBinary::from_hex(&boc)?.as_slice())?;
+        validator.init_validators(deps.storage)?;
+    }
+    VALIDATOR.save(deps.storage, &validator)?;
     OWNER.set(deps, Some(info.sender))?;
     Ok(Response::new())
 }
@@ -30,8 +36,8 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::ParseCandidatesRootBlock { boc } => parse_candidates_root_block(deps, boc),
-        ExecuteMsg::InitValidators {} => init_validators(deps, &info.sender),
-        ExecuteMsg::SetValidatorSet {} => set_validator_set(deps),
+        ExecuteMsg::ResetValidatorSet { boc } => reset_validator_set(deps, &info.sender, boc),
+        // ExecuteMsg::SetValidatorSet {} => set_validator_set(deps),
         ExecuteMsg::VerifyValidators {
             root_hash,
             file_hash,
@@ -52,33 +58,53 @@ pub fn parse_candidates_root_block(deps: DepsMut, boc: String) -> Result<Respons
     Ok(Response::new().add_attributes(vec![("action", "parse_candidates_root_block")]))
 }
 
-pub fn init_validators(deps: DepsMut, sender: &Addr) -> Result<Response, ContractError> {
-    let mut validator = Validator::default();
-    validator.init_validators(deps, sender)?;
-    Ok(Response::new().add_attributes(vec![("action", "init_validators")]))
+pub fn reset_validator_set(
+    deps: DepsMut,
+    sender: &Addr,
+    boc: String,
+) -> Result<Response, ContractError> {
+    OWNER
+        .assert_admin(deps.as_ref(), sender)
+        .map_err(|err| StdError::generic_err(err.to_string()))?;
+    let storage = deps.storage;
+    let mut validator = VALIDATOR.load(storage)?;
+
+    // update new candidates given the new block data
+    validator.parse_candidates_root_block(HexBinary::from_hex(&boc)?.as_slice())?;
+
+    // skip verification and assume the new validator set is valid (only admin can call this)
+    validator.init_validators(storage)?;
+
+    // store the validator set in cache
+    VALIDATOR.save(storage, &validator)?;
+    Ok(Response::new().add_attributes(vec![("action", "reset_validator_set")]))
 }
 
-pub fn set_validator_set(deps: DepsMut) -> Result<Response, ContractError> {
-    let mut validator = VALIDATOR.load(deps.storage)?;
-    validator.set_validator_set(deps.storage)?;
-    Ok(Response::new().add_attributes(vec![("action", "set_validator_set")]))
-}
+// pub fn set_validator_set(deps: DepsMut) -> Result<Response, ContractError> {
+//     let mut validator = VALIDATOR.load(deps.storage)?;
+//     validator.set_validator_set(deps.storage)?;
+//     VALIDATOR.save(deps.storage, &validator)?;
+//     Ok(Response::new().add_attributes(vec![("action", "set_validator_set")]))
+// }
 
 pub fn verify_validators(
     deps: DepsMut,
     root_hash: String,
     file_hash: String,
-    vdata: [VdataHex; 5],
+    vdata: Vec<VdataHex>,
 ) -> Result<Response, ContractError> {
-    let validator = VALIDATOR.load(deps.storage)?;
-    let vdata_bytes = vdata.map(|data| {
-        let node_id = to_bytes32(&data.node_id).unwrap();
-        let r = to_bytes32(&data.r).unwrap();
-        let s = to_bytes32(&data.s).unwrap();
+    let mut validator = VALIDATOR.load(deps.storage)?;
+    let vdata_bytes = vdata
+        .iter()
+        .map(|data| {
+            let node_id = to_bytes32(&data.node_id).unwrap();
+            let r = to_bytes32(&data.r).unwrap();
+            let s = to_bytes32(&data.s).unwrap();
 
-        // transform from hex string to bytes32
-        Vdata { node_id, r, s }
-    });
+            // transform from hex string to bytes32
+            Vdata { node_id, r, s }
+        })
+        .collect::<Vec<Vdata>>();
     validator.verify_validators(
         deps.storage,
         deps.api,
@@ -86,6 +112,8 @@ pub fn verify_validators(
         to_bytes32(&file_hash)?,
         &vdata_bytes,
     )?;
+    validator.set_validator_set(deps.storage)?;
+    VALIDATOR.save(deps.storage, &validator)?;
     Ok(Response::new().add_attributes(vec![("action", "verify_validators")]))
 }
 
@@ -125,6 +153,10 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::GetCandidatesForValidators {} => to_binary(&get_candidates_for_validators(deps)?),
         QueryMsg::GetValidators {} => to_binary(&get_validators(deps)?),
         QueryMsg::IsVerifiedBlock { root_hash } => to_binary(&is_verified_block(deps, root_hash)?),
+        QueryMsg::IsSignedByValidator {
+            validator_node_id,
+            root_hash,
+        } => to_binary(&is_signed_by_validator(deps, validator_node_id, root_hash)?),
     }
 }
 
@@ -148,6 +180,19 @@ pub fn get_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
 pub fn is_verified_block(deps: Deps, root_hash: String) -> StdResult<bool> {
     let validator = VALIDATOR.load(deps.storage)?;
     validator.is_verified_block(deps.storage, to_bytes32(&root_hash)?)
+}
+
+pub fn is_signed_by_validator(
+    deps: Deps,
+    validator_node_id: String,
+    root_hash: String,
+) -> StdResult<bool> {
+    let validator = VALIDATOR.load(deps.storage)?;
+    Ok(validator.is_signed_by_validator(
+        deps.storage,
+        to_bytes32(&validator_node_id)?,
+        to_bytes32(&root_hash)?,
+    ))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
