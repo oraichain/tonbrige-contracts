@@ -172,7 +172,12 @@ pub fn read_coins(data: &[u8], cells: &mut [CellData], cell_idx: usize) -> StdRe
         return Ok(Bytes32::default());
     }
 
-    Ok(read_bytes32_byte_size(data, cells, cell_idx, bytes as u128))
+    Ok(read_bytes32_byte_size(
+        data,
+        cells,
+        cell_idx,
+        bytes as usize,
+    ))
 }
 
 pub fn parse_currency_collection(

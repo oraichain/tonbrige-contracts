@@ -237,7 +237,7 @@ fn read_address(data: &[u8], cells: &mut [CellData], message_idx: usize) -> StdR
     }
     if cell_type == 1 {
         let len = read_u64(data, cells, message_idx, 9)?;
-        addr.hash = read_bytes32_bit_size(data, cells, message_idx, len as u128);
+        addr.hash = read_bytes32_bit_size(data, cells, message_idx, len as usize);
         return Ok(addr);
     }
 

@@ -4,6 +4,17 @@ use super::types::{Address, Bytes32, CellData};
 use cosmwasm_std::{HexBinary, StdError, StdResult, Uint256};
 use sha2::{Digest, Sha256};
 
+const BIT_MASK: [u8; 8] = [
+    0b1000_0000,
+    0b0100_0000,
+    0b0010_0000,
+    0b0001_0000,
+    0b0000_1000,
+    0b0000_0100,
+    0b0000_0010,
+    0b0000_0001,
+];
+
 pub fn to_bytes32(str: &str) -> Result<Bytes32, StdError> {
     HexBinary::from_hex(str)
         .unwrap()
@@ -117,21 +128,29 @@ pub fn read_bytes32_bit_size(
     data: &[u8],
     cells: &mut [CellData],
     cell_idx: usize,
-    mut size: u128,
+    mut size: usize,
 ) -> Bytes32 {
-    let mut value = Uint256::zero();
+    let mut value = [0u8; 32]; // 32 bytes = 256 bits
     while size > 0 {
-        value = (value << 1) + Uint256::from(read_bit(data, cells, cell_idx));
+        let bit = read_bit(data, cells, cell_idx);
+        if bit != 0 {
+            // set bit
+            let position = 256 - size;
+            let index = position >> 3;
+            let mask_index = position & 7;
+            value[index] |= BIT_MASK[mask_index];
+        }
+
         size -= 1;
     }
-    value.to_be_bytes()
+    value
 }
 
 pub fn read_bytes32_byte_size(
     data: &[u8],
     cells: &mut [CellData],
     cell_idx: usize,
-    sizeb: u128,
+    sizeb: usize,
 ) -> Bytes32 {
     read_bytes32_bit_size(data, cells, cell_idx, sizeb * 8)
 }
