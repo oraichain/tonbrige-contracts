@@ -43,11 +43,15 @@ pub fn execute(
             file_hash,
             vdata,
         } => verify_validators(deps, root_hash, file_hash, vdata),
-        ExecuteMsg::AddCurrentBlockToVerifiedSet { root_hash } => {
-            add_current_block_to_verified_set(deps, root_hash)
-        }
+        // ExecuteMsg::AddCurrentBlockToVerifiedSet { root_hash } => {
+        //     add_current_block_to_verified_set(deps, root_hash)
+        // }
+        ExecuteMsg::ReadMasterProof { boc } => read_master_proof(deps, boc),
         ExecuteMsg::ReadStateProof { boc, root_hash } => read_state_proof(deps, boc, root_hash),
         ExecuteMsg::ParseShardProofPath { boc } => parse_shard_proof_path(deps, boc),
+        ExecuteMsg::SetVerifiedBlock { root_hash, seq_no } => {
+            set_verified_block(deps, &info.sender, root_hash, seq_no)
+        }
     }
 }
 
@@ -58,6 +62,8 @@ pub fn parse_candidates_root_block(deps: DepsMut, boc: String) -> Result<Respons
     Ok(Response::new().add_attributes(vec![("action", "parse_candidates_root_block")]))
 }
 
+// this entrypoint is used mostly for testing or initialization
+// where the admin knows the given validator set is already valid.
 pub fn reset_validator_set(
     deps: DepsMut,
     sender: &Addr,
@@ -80,13 +86,7 @@ pub fn reset_validator_set(
     Ok(Response::new().add_attributes(vec![("action", "reset_validator_set")]))
 }
 
-// pub fn set_validator_set(deps: DepsMut) -> Result<Response, ContractError> {
-//     let mut validator = VALIDATOR.load(deps.storage)?;
-//     validator.set_validator_set(deps.storage)?;
-//     VALIDATOR.save(deps.storage, &validator)?;
-//     Ok(Response::new().add_attributes(vec![("action", "set_validator_set")]))
-// }
-
+// should be called by relayers
 pub fn verify_validators(
     deps: DepsMut,
     root_hash: String,
@@ -117,13 +117,21 @@ pub fn verify_validators(
     Ok(Response::new().add_attributes(vec![("action", "verify_validators")]))
 }
 
-pub fn add_current_block_to_verified_set(
-    deps: DepsMut,
-    root_hash: String,
-) -> Result<Response, ContractError> {
+// this function is probably rarely used
+// since it simply adds a new block into the set of verified blocks given that the validators have validated it.
+// pub fn add_current_block_to_verified_set(
+//     deps: DepsMut,
+//     root_hash: String,
+// ) -> Result<Response, ContractError> {
+//     let validator = VALIDATOR.load(deps.storage)?;
+//     validator.add_current_block_to_verified_set(deps.storage, to_bytes32(&root_hash)?)?;
+//     Ok(Response::new().add_attributes(vec![("action", "add_current_block_to_verified_set")]))
+// }
+
+pub fn read_master_proof(deps: DepsMut, boc: String) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    validator.add_current_block_to_verified_set(deps.storage, to_bytes32(&root_hash)?)?;
-    Ok(Response::new().add_attributes(vec![("action", "add_current_block_to_verified_set")]))
+    validator.read_master_proof(deps.storage, HexBinary::from_hex(&boc)?.as_slice())?;
+    Ok(Response::new().add_attributes(vec![("action", "read_master_proof")]))
 }
 
 pub fn read_state_proof(
@@ -144,6 +152,19 @@ pub fn parse_shard_proof_path(deps: DepsMut, boc: String) -> Result<Response, Co
     let validator = VALIDATOR.load(deps.storage)?;
     validator.parse_shard_proof_path(deps.storage, HexBinary::from_hex(&boc)?.as_slice())?;
     Ok(Response::new().add_attributes(vec![("action", "parse_shard_proof_path")]))
+}
+
+// this entrypoint is used mostly for testing or initialization
+// where the admin knows the given block is surely verified.
+pub fn set_verified_block(
+    deps: DepsMut,
+    caller: &Addr,
+    root_hash: String,
+    seq_no: u32,
+) -> Result<Response, ContractError> {
+    let validator = VALIDATOR.load(deps.storage)?;
+    validator.set_verified_block(deps, caller, to_bytes32(&root_hash)?, seq_no)?;
+    Ok(Response::new().add_attributes(vec![("action", "set_verified_block")]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

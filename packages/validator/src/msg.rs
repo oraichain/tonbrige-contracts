@@ -11,7 +11,6 @@ pub enum ExecuteMsg {
     ParseCandidatesRootBlock {
         boc: String, // in hex form
     },
-    // SetValidatorSet {},
     ResetValidatorSet {
         boc: String,
     },
@@ -20,8 +19,12 @@ pub enum ExecuteMsg {
         file_hash: String, // in hex form
         vdata: Vec<VdataHex>,
     },
-    AddCurrentBlockToVerifiedSet {
-        root_hash: String,
+    // commented out because dont use yet
+    // AddCurrentBlockToVerifiedSet {
+    //     root_hash: String,
+    // },
+    ReadMasterProof {
+        boc: String, // in hex form
     },
     ReadStateProof {
         boc: String,       // in hex form
@@ -29,6 +32,10 @@ pub enum ExecuteMsg {
     },
     ParseShardProofPath {
         boc: String, // in hex form
+    },
+    SetVerifiedBlock {
+        root_hash: String,
+        seq_no: u32,
     },
 }
 

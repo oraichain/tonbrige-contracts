@@ -183,8 +183,8 @@ impl Validator {
     pub fn read_state_proof(
         &self,
         storage: &mut dyn Storage,
-        boc: &[u8],
-        rh: Bytes32,
+        boc: &[u8],  // older block data
+        rh: Bytes32, // newer root hash
     ) -> StdResult<()> {
         let mut header = self.toc_parser.parse_serialized_header(boc)?;
         let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
@@ -218,9 +218,9 @@ impl Validator {
         seq_no: u32,
     ) -> StdResult<()> {
         let deps = deps_mut.as_ref();
-        if !OWNER.is_admin(deps, caller)? {
-            return Err(StdError::generic_err("unauthorized"));
-        }
+        OWNER
+            .assert_admin(deps, caller)
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
         if self.is_verified_block(deps.storage, root_hash)? {
             return Err(StdError::generic_err("block already verified"));
         }
@@ -257,7 +257,10 @@ impl Validator {
 
 impl IValidator for Validator {
     fn is_verified_block(&self, storage: &dyn Storage, root_hash: Bytes32) -> StdResult<bool> {
-        Ok(VERIFIED_BLOCKS.load(storage, &root_hash)?.verified)
+        Ok(VERIFIED_BLOCKS
+            .may_load(storage, &root_hash)?
+            .unwrap_or_default()
+            .verified)
     }
 }
 
@@ -266,7 +269,7 @@ mod tests {
     use cosmwasm_std::{testing::mock_dependencies, HexBinary};
     use tonbridge_parser::{
         tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser},
-        types::{Bytes32, Vdata},
+        types::{Bytes32, Vdata, VerifiedBlockInfo},
     };
 
     use super::Validator;
@@ -280,6 +283,12 @@ mod tests {
             .as_slice()
             .try_into()
             .unwrap()
+    }
+
+    #[test]
+    fn test_default_verified_blocks_info() {
+        let default_block_info = VerifiedBlockInfo::default();
+        assert_eq!(default_block_info.verified, false);
     }
 
     #[test]
