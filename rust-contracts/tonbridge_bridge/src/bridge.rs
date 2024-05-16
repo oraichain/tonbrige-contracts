@@ -1,5 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, Response, StdError, StdResult, Uint256};
+use cosmwasm_std::{
+    Addr, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult, Uint256,
+};
 use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
 use tonbridge_parser::{
     block_parser::{BlockParser, IBlockParser},
@@ -8,8 +10,6 @@ use tonbridge_parser::{
     types::{Address, Bytes32},
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
-extern crate hex;
-use hex::encode;
 
 use crate::state::PROCESSED_TXS;
 
@@ -54,11 +54,10 @@ impl Bridge {
             .tree_of_cells_parser
             .get_tree_of_cells(block_boc, &mut block_header)?;
 
-        let root_hash = block_toc[block_header.root_idx].hashes[0];
-
-        let is_block_verified = self
-            .validator
-            .is_verified_block(&deps.querier, encode(&root_hash))?;
+        let is_block_verified = self.validator.is_verified_block(
+            &deps.querier,
+            HexBinary::from(block_toc[block_header.root_idx].hashes[0]).to_hex(),
+        )?;
         if !is_block_verified {
             return Err(StdError::generic_err(
                 "The block is not verified or invalid. Cannot bridge!",
@@ -75,7 +74,7 @@ impl Bridge {
             block_boc,
             &mut block_header,
             &mut block_toc,
-            root_hash,
+            tx_toc[tx_header.root_idx].hashes[0],
             &mut tx_info,
         )?;
         if !is_tx_in_correct_block {

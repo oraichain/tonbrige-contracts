@@ -62,18 +62,19 @@ impl IBaseAdapter for Adapter {
 
         let receiver = deps.api.addr_humanize(&msg_data.eth_address.into())?;
 
-        let amount = msg_data.amount.try_into()?;
+        let amount: Uint128 = msg_data.amount.try_into()?;
+        // FIXME: process minting and transferring tokens
         if opcode == OPCODE_1 {
-            cosmos_msgs.push(self.token.call(Cw20ExecuteMsg::Mint {
-                recipient: receiver.to_string(),
-                amount: amount * Uint128::from(1000000000u128),
-            })?);
+            // cosmos_msgs.push(self.token.call(Cw20ExecuteMsg::Mint {
+            //     recipient: receiver.to_string(),
+            //     amount: amount * Uint128::from(1000000000u128),
+            // })?);
             // _token.mint(msg_data.amount * 1000000000, msg_data.eth_address);
         } else if opcode == OPCODE_2 {
-            cosmos_msgs.push(self.token.call(Cw20ExecuteMsg::Transfer {
-                recipient: receiver.to_string(),
-                amount,
-            })?);
+            // cosmos_msgs.push(self.token.call(Cw20ExecuteMsg::Transfer {
+            //     recipient: receiver.to_string(),
+            //     amount,
+            // })?);
             // receiver.transfer(msg_data.amount);
         }
 
