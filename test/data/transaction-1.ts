@@ -403,7 +403,7 @@ export const updateValidators = [
 
 export const findBoc = function (type: string, isTx = false) {
   const bocItem = data.find((el) => el.type === type)!;
-  if (isTx) return Buffer.from(bocItem.txBoc!);
+  if (isTx) return Buffer.from(bocItem.txBoc!, "hex");
   const bocData = bocItem.boc;
   const boc = Buffer.from(
     typeof bocData === "string" ? bocData : bocData[0],

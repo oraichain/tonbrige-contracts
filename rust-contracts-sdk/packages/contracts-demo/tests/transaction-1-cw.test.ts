@@ -161,5 +161,18 @@ describe("Tree of Cells parser tests 1", () => {
     ).toEqual(true);
   });
 
-  it("bridge contract reads data from transaction", async () => {});
+  it("bridge contract reads data from transaction", async () => {
+    const blockBoc = findBoc("tx-proof").toString("hex");
+    const txBoc = findBoc("tx-proof", true).toString("hex");
+
+    await bridge.readTransaction({
+      txBoc,
+      blockBoc,
+      tonToken: validator.contractAddress, // FIXME: Change to the actual cw20 address
+      validatorContractAddr: validator.contractAddress,
+      opcode: "0000000000000000000000000000000000000000000000000000000000000001"
+    });
+
+    // expect(await token.balanceOf("0xe003de6861c9e3b82f293335d4cdf90c299cbbd3")).to.be.equal("12733090031156665196");
+  });
 });

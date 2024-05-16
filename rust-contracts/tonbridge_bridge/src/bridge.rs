@@ -59,6 +59,7 @@ impl Bridge {
         let is_block_verified = self
             .validator
             .is_verified_block(&deps.querier, Binary::from(&root_hash))?;
+
         if !is_block_verified {
             return Err(StdError::generic_err(
                 "The block is not verified or invalid. Cannot bridge!",
@@ -75,7 +76,7 @@ impl Bridge {
             block_boc,
             &mut block_header,
             &mut block_toc,
-            root_hash,
+            tx_toc[tx_header.root_idx].hashes[0],
             &mut tx_info,
         )?;
         if !is_tx_in_correct_block {
