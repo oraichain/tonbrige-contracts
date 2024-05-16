@@ -1,4 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::HexBinary;
 
 #[cw_serde]
 pub struct InstantiateMsg {}
@@ -6,9 +7,9 @@ pub struct InstantiateMsg {}
 #[cw_serde]
 pub enum ExecuteMsg {
     ReadTransaction {
-        tx_boc: String,    // in hex form
-        block_boc: String, // in hex form
-        opcode: String,    // in hex form
+        tx_boc: HexBinary,    // in hex form
+        block_boc: HexBinary, // in hex form
+        opcode: HexBinary,    // in hex form
         ton_token: String,
         validator_contract_addr: String,
     },
@@ -24,7 +25,7 @@ pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
     #[returns(bool)]
-    IsTxProcessed { tx_hash: String },
+    IsTxProcessed { tx_hash: HexBinary },
 }
 
 // We define a custom struct for each query response

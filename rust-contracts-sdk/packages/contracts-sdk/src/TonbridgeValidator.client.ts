@@ -6,7 +6,7 @@
 
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate";
 import { Coin, StdFee } from "@cosmjs/amino";
-import {Boolean} from "./types";
+import {HexBinary, Boolean} from "./types";
 import {InstantiateMsg, ExecuteMsg, VdataHex, QueryMsg, MigrateMsg, ConfigResponse, ArrayOfUserFriendlyValidator, UserFriendlyValidator} from "./TonbridgeValidator.types";
 export interface TonbridgeValidatorReadOnlyInterface {
   contractAddress: string;
@@ -16,14 +16,14 @@ export interface TonbridgeValidatorReadOnlyInterface {
   isVerifiedBlock: ({
     rootHash
   }: {
-    rootHash: string;
+    rootHash: HexBinary;
   }) => Promise<Boolean>;
   isSignedByValidator: ({
     rootHash,
     validatorNodeId
   }: {
-    rootHash: string;
-    validatorNodeId: string;
+    rootHash: HexBinary;
+    validatorNodeId: HexBinary;
   }) => Promise<Boolean>;
 }
 export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnlyInterface {
@@ -58,7 +58,7 @@ export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnly
   isVerifiedBlock = async ({
     rootHash
   }: {
-    rootHash: string;
+    rootHash: HexBinary;
   }): Promise<Boolean> => {
     return this.client.queryContractSmart(this.contractAddress, {
       is_verified_block: {
@@ -70,8 +70,8 @@ export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnly
     rootHash,
     validatorNodeId
   }: {
-    rootHash: string;
-    validatorNodeId: string;
+    rootHash: HexBinary;
+    validatorNodeId: HexBinary;
   }): Promise<Boolean> => {
     return this.client.queryContractSmart(this.contractAddress, {
       is_signed_by_validator: {
@@ -87,44 +87,44 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
   parseCandidatesRootBlock: ({
     boc
   }: {
-    boc: string;
+    boc: HexBinary;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   resetValidatorSet: ({
     boc
   }: {
-    boc: string;
+    boc: HexBinary;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   verifyValidators: ({
     fileHash,
     rootHash,
     vdata
   }: {
-    fileHash: string;
-    rootHash: string;
+    fileHash: HexBinary;
+    rootHash: HexBinary;
     vdata: VdataHex[];
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   readMasterProof: ({
     boc
   }: {
-    boc: string;
+    boc: HexBinary;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   readStateProof: ({
     boc,
     rootHash
   }: {
-    boc: string;
-    rootHash: string;
+    boc: HexBinary;
+    rootHash: HexBinary;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   parseShardProofPath: ({
     boc
   }: {
-    boc: string;
+    boc: HexBinary;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   setVerifiedBlock: ({
     rootHash,
     seqNo
   }: {
-    rootHash: string;
+    rootHash: HexBinary;
     seqNo: number;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
 }
@@ -150,7 +150,7 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
   parseCandidatesRootBlock = async ({
     boc
   }: {
-    boc: string;
+    boc: HexBinary;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
       parse_candidates_root_block: {
@@ -161,7 +161,7 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
   resetValidatorSet = async ({
     boc
   }: {
-    boc: string;
+    boc: HexBinary;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
       reset_validator_set: {
@@ -174,8 +174,8 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     rootHash,
     vdata
   }: {
-    fileHash: string;
-    rootHash: string;
+    fileHash: HexBinary;
+    rootHash: HexBinary;
     vdata: VdataHex[];
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
@@ -189,7 +189,7 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
   readMasterProof = async ({
     boc
   }: {
-    boc: string;
+    boc: HexBinary;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
       read_master_proof: {
@@ -201,8 +201,8 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     boc,
     rootHash
   }: {
-    boc: string;
-    rootHash: string;
+    boc: HexBinary;
+    rootHash: HexBinary;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
       read_state_proof: {
@@ -214,7 +214,7 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
   parseShardProofPath = async ({
     boc
   }: {
-    boc: string;
+    boc: HexBinary;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
       parse_shard_proof_path: {
@@ -226,7 +226,7 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     rootHash,
     seqNo
   }: {
-    rootHash: string;
+    rootHash: HexBinary;
     seqNo: number;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {

@@ -45,9 +45,9 @@ pub fn execute(
 
 pub fn read_transaction(
     deps: DepsMut,
-    tx_boc: String,
-    block_boc: String,
-    opcode: String,
+    tx_boc: HexBinary,
+    block_boc: HexBinary,
+    opcode: HexBinary,
     ton_token: String,
     validator_contract_addr: String,
 ) -> Result<Response, ContractError> {
@@ -55,8 +55,8 @@ pub fn read_transaction(
     let bridge = Bridge::new(deps.api.addr_validate(&validator_contract_addr)?);
     let cosmos_msgs = bridge.read_transaction(
         deps,
-        HexBinary::from_hex(&tx_boc)?.as_slice(),
-        HexBinary::from_hex(&block_boc)?.as_slice(),
+        tx_boc.as_slice(),
+        block_boc.as_slice(),
         &adapter,
         to_bytes32(&opcode)?,
     )?;
@@ -73,7 +73,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
-pub fn is_tx_processed(deps: Deps, tx_hash: String) -> StdResult<bool> {
+pub fn is_tx_processed(deps: Deps, tx_hash: HexBinary) -> StdResult<bool> {
     PROCESSED_TXS
         .may_load(deps.storage, &to_bytes32(&tx_hash)?)
         .map(|res| res.unwrap_or(false))

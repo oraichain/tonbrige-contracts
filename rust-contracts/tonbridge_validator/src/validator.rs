@@ -247,9 +247,9 @@ impl Validator {
         UserFriendlyValidator {
             c_type: validator_description.c_type,
             weight: validator_description.weight,
-            adnl_addr: HexBinary::from(&validator_description.adnl_addr).to_hex(),
-            pubkey: HexBinary::from(&validator_description.pubkey).to_hex(),
-            node_id: HexBinary::from(&validator_description.node_id).to_hex(),
+            adnl_addr: HexBinary::from(&validator_description.adnl_addr),
+            pubkey: HexBinary::from(&validator_description.pubkey),
+            node_id: HexBinary::from(&validator_description.node_id),
         }
     }
 

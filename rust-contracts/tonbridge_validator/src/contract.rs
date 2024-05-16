@@ -21,7 +21,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     let mut validator = Validator::default();
     if let Some(boc) = msg.boc {
-        validator.parse_candidates_root_block(HexBinary::from_hex(&boc)?.as_slice())?;
+        validator.parse_candidates_root_block(boc.as_slice())?;
         validator.init_validators(deps.storage)?;
     }
     VALIDATOR.save(deps.storage, &validator)?;
@@ -57,9 +57,12 @@ pub fn execute(
     }
 }
 
-pub fn parse_candidates_root_block(deps: DepsMut, boc: String) -> Result<Response, ContractError> {
+pub fn parse_candidates_root_block(
+    deps: DepsMut,
+    boc: HexBinary,
+) -> Result<Response, ContractError> {
     let mut validator = VALIDATOR.load(deps.storage)?;
-    validator.parse_candidates_root_block(HexBinary::from_hex(&boc)?.as_slice())?;
+    validator.parse_candidates_root_block(boc.as_slice())?;
     VALIDATOR.save(deps.storage, &validator)?;
     Ok(Response::new().add_attributes(vec![("action", "parse_candidates_root_block")]))
 }
@@ -69,7 +72,7 @@ pub fn parse_candidates_root_block(deps: DepsMut, boc: String) -> Result<Respons
 pub fn reset_validator_set(
     deps: DepsMut,
     sender: &Addr,
-    boc: String,
+    boc: HexBinary,
 ) -> Result<Response, ContractError> {
     OWNER
         .assert_admin(deps.as_ref(), sender)
@@ -78,7 +81,7 @@ pub fn reset_validator_set(
     let mut validator = VALIDATOR.load(storage)?;
 
     // update new candidates given the new block data
-    validator.parse_candidates_root_block(HexBinary::from_hex(&boc)?.as_slice())?;
+    validator.parse_candidates_root_block(boc.as_slice())?;
 
     // skip verification and assume the new validator set is valid (only admin can call this)
     validator.init_validators(storage)?;
@@ -91,8 +94,8 @@ pub fn reset_validator_set(
 // should be called by relayers
 pub fn verify_validators(
     deps: DepsMut,
-    root_hash: String,
-    file_hash: String,
+    root_hash: HexBinary,
+    file_hash: HexBinary,
     vdata: Vec<VdataHex>,
 ) -> Result<Response, ContractError> {
     let mut validator = VALIDATOR.load(deps.storage)?;
@@ -130,29 +133,25 @@ pub fn verify_validators(
 //     Ok(Response::new().add_attributes(vec![("action", "add_current_block_to_verified_set")]))
 // }
 
-pub fn read_master_proof(deps: DepsMut, boc: String) -> Result<Response, ContractError> {
+pub fn read_master_proof(deps: DepsMut, boc: HexBinary) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    validator.read_master_proof(deps.storage, HexBinary::from_hex(&boc)?.as_slice())?;
+    validator.read_master_proof(deps.storage, boc.as_slice())?;
     Ok(Response::new().add_attributes(vec![("action", "read_master_proof")]))
 }
 
 pub fn read_state_proof(
     deps: DepsMut,
-    boc: String,
-    root_hash: String,
+    boc: HexBinary,
+    root_hash: HexBinary,
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    validator.read_state_proof(
-        deps.storage,
-        HexBinary::from_hex(&boc)?.as_slice(),
-        to_bytes32(&root_hash)?,
-    )?;
+    validator.read_state_proof(deps.storage, boc.as_slice(), to_bytes32(&root_hash)?)?;
     Ok(Response::new().add_attributes(vec![("action", "read_state_proof")]))
 }
 
-pub fn parse_shard_proof_path(deps: DepsMut, boc: String) -> Result<Response, ContractError> {
+pub fn parse_shard_proof_path(deps: DepsMut, boc: HexBinary) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    validator.parse_shard_proof_path(deps.storage, HexBinary::from_hex(&boc)?.as_slice())?;
+    validator.parse_shard_proof_path(deps.storage, boc.as_slice())?;
     Ok(Response::new().add_attributes(vec![("action", "parse_shard_proof_path")]))
 }
 
@@ -161,7 +160,7 @@ pub fn parse_shard_proof_path(deps: DepsMut, boc: String) -> Result<Response, Co
 pub fn set_verified_block(
     deps: DepsMut,
     caller: &Addr,
-    root_hash: String,
+    root_hash: HexBinary,
     seq_no: u32,
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
@@ -213,8 +212,8 @@ pub fn is_verified_block(deps: Deps, root_hash: HexBinary) -> StdResult<bool> {
 
 pub fn is_signed_by_validator(
     deps: Deps,
-    validator_node_id: String,
-    root_hash: String,
+    validator_node_id: HexBinary,
+    root_hash: HexBinary,
 ) -> StdResult<bool> {
     let validator = VALIDATOR.load(deps.storage)?;
     Ok(validator.is_signed_by_validator(

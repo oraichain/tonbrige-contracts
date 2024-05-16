@@ -15,12 +15,8 @@ const BIT_MASK: [u8; 8] = [
     0b0000_0001,
 ];
 
-pub fn to_bytes32(str: &str) -> Result<Bytes32, StdError> {
-    let mut parse_str = str;
-    if let Some((_, hex_str)) = str.split_once("0x") {
-        parse_str = hex_str
-    }
-    HexBinary::from_hex(parse_str)?
+pub fn to_bytes32(hex_bin: &HexBinary) -> Result<Bytes32, StdError> {
+    hex_bin
         .as_slice()
         .try_into()
         .map_err(|err: TryFromSliceError| StdError::generic_err(err.to_string()))

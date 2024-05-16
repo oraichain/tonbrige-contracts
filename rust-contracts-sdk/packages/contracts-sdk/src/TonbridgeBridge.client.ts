@@ -6,7 +6,7 @@
 
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate";
 import { Coin, StdFee } from "@cosmjs/amino";
-import {Boolean} from "./types";
+import {HexBinary, Boolean} from "./types";
 import {InstantiateMsg, ExecuteMsg, QueryMsg, MigrateMsg, ConfigResponse} from "./TonbridgeBridge.types";
 export interface TonbridgeBridgeReadOnlyInterface {
   contractAddress: string;
@@ -14,7 +14,7 @@ export interface TonbridgeBridgeReadOnlyInterface {
   isTxProcessed: ({
     txHash
   }: {
-    txHash: string;
+    txHash: HexBinary;
   }) => Promise<Boolean>;
 }
 export class TonbridgeBridgeQueryClient implements TonbridgeBridgeReadOnlyInterface {
@@ -36,7 +36,7 @@ export class TonbridgeBridgeQueryClient implements TonbridgeBridgeReadOnlyInterf
   isTxProcessed = async ({
     txHash
   }: {
-    txHash: string;
+    txHash: HexBinary;
   }): Promise<Boolean> => {
     return this.client.queryContractSmart(this.contractAddress, {
       is_tx_processed: {
@@ -55,10 +55,10 @@ export interface TonbridgeBridgeInterface extends TonbridgeBridgeReadOnlyInterfa
     txBoc,
     validatorContractAddr
   }: {
-    blockBoc: string;
-    opcode: string;
+    blockBoc: HexBinary;
+    opcode: HexBinary;
     tonToken: string;
-    txBoc: string;
+    txBoc: HexBinary;
     validatorContractAddr: string;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
 }
@@ -82,10 +82,10 @@ export class TonbridgeBridgeClient extends TonbridgeBridgeQueryClient implements
     txBoc,
     validatorContractAddr
   }: {
-    blockBoc: string;
-    opcode: string;
+    blockBoc: HexBinary;
+    opcode: HexBinary;
     tonToken: string;
-    txBoc: string;
+    txBoc: HexBinary;
     validatorContractAddr: string;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {

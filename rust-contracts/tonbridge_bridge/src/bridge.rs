@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, Binary, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult, Uint256,
+    Addr, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult, Uint256,
 };
 use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
 use tonbridge_parser::{

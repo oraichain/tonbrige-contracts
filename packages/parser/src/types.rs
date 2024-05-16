@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Uint256;
+use cosmwasm_std::{HexBinary, Uint256};
 
 pub type Bytes32 = [u8; 32];
 pub type Bytes4 = [u8; 4];
@@ -46,9 +46,9 @@ pub struct Vdata {
 
 #[cw_serde]
 pub struct VdataHex {
-    pub node_id: String,
-    pub r: String,
-    pub s: String,
+    pub node_id: HexBinary,
+    pub r: HexBinary,
+    pub s: HexBinary,
 }
 
 #[cw_serde]

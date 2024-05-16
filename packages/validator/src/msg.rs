@@ -4,20 +4,20 @@ use tonbridge_parser::types::VdataHex;
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    pub boc: Option<String>,
+    pub boc: Option<HexBinary>,
 }
 
 #[cw_serde]
 pub enum ExecuteMsg {
     ParseCandidatesRootBlock {
-        boc: String, // in hex form
+        boc: HexBinary, // in hex form
     },
     ResetValidatorSet {
-        boc: String,
+        boc: HexBinary,
     },
     VerifyValidators {
-        root_hash: String, // in hex form
-        file_hash: String, // in hex form
+        root_hash: HexBinary, // in hex form
+        file_hash: HexBinary, // in hex form
         vdata: Vec<VdataHex>,
     },
     // commented out because dont use yet
@@ -25,17 +25,17 @@ pub enum ExecuteMsg {
     //     root_hash: String,
     // },
     ReadMasterProof {
-        boc: String, // in hex form
+        boc: HexBinary, // in hex form
     },
     ReadStateProof {
-        boc: String,       // in hex form
-        root_hash: String, // in hex form
+        boc: HexBinary,       // in hex form
+        root_hash: HexBinary, // in hex form
     },
     ParseShardProofPath {
-        boc: String, // in hex form
+        boc: HexBinary, // in hex form
     },
     SetVerifiedBlock {
-        root_hash: String,
+        root_hash: HexBinary,
         seq_no: u32,
     },
 }
@@ -57,8 +57,8 @@ pub enum QueryMsg {
     IsVerifiedBlock { root_hash: HexBinary }, // in hex form
     #[returns(bool)]
     IsSignedByValidator {
-        validator_node_id: String,
-        root_hash: String,
+        validator_node_id: HexBinary,
+        root_hash: HexBinary,
     },
 }
 
@@ -72,7 +72,7 @@ pub struct ConfigResponse {
 pub struct UserFriendlyValidator {
     pub c_type: u8,
     pub weight: u64,
-    pub adnl_addr: String,
-    pub pubkey: String,  // in hex form
-    pub node_id: String, // in hex form
+    pub adnl_addr: HexBinary,
+    pub pubkey: HexBinary,  // in hex form
+    pub node_id: HexBinary, // in hex form
 }
