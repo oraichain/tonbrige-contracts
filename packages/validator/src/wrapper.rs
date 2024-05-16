@@ -1,8 +1,8 @@
 use crate::msg::{ExecuteMsg, QueryMsg};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    to_binary, Addr, CosmosMsg, CustomQuery, QuerierWrapper, QueryRequest, StdResult, WasmMsg,
-    WasmQuery,
+    to_binary, Addr, Binary, CosmosMsg, CustomQuery, QuerierWrapper, QueryRequest, StdResult,
+    WasmMsg, WasmQuery,
 };
 
 /// ValidatorWrapper is a wrapper around Addr that provides a lot of helpers for the Validator contract
@@ -37,7 +37,7 @@ impl ValidatorWrapper {
     pub fn is_verified_block<CQ>(
         &self,
         querier: &QuerierWrapper<CQ>,
-        root_hash: String,
+        root_hash: Binary,
     ) -> StdResult<bool>
     where
         CQ: CustomQuery,

@@ -120,10 +120,7 @@ pub fn read_uint256(
     }
 
     Ok(Uint256::from_be_bytes(read_bytes32_bit_size(
-        data,
-        cells,
-        cell_idx,
-        size as usize,
+        data, cells, cell_idx, size,
     )))
 }
 

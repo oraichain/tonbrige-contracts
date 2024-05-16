@@ -1,4 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::Binary;
 use tonbridge_parser::types::VdataHex;
 
 #[cw_serde]
@@ -53,7 +54,7 @@ pub enum QueryMsg {
     #[returns(Vec<UserFriendlyValidator>)]
     GetValidators {},
     #[returns(bool)]
-    IsVerifiedBlock { root_hash: String }, // in hex form
+    IsVerifiedBlock { root_hash: Binary }, // in hex form
     #[returns(bool)]
     IsSignedByValidator {
         validator_node_id: String,

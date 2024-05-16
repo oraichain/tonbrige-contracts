@@ -73,16 +73,20 @@ impl Validator {
 
     pub fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
         let key_block_root_hash = self.signature_validator.init_validators()?;
-        let mut verified_block_info = VerifiedBlockInfo::default();
-        verified_block_info.verified = true;
+        let verified_block_info = VerifiedBlockInfo {
+            verified: true,
+            ..Default::default()
+        };
 
         VERIFIED_BLOCKS.save(storage, &key_block_root_hash, &verified_block_info)
     }
 
     pub fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
         let key_block_root_hash = self.signature_validator.set_validator_set(storage)?;
-        let mut verified_block_info = VerifiedBlockInfo::default();
-        verified_block_info.verified = true;
+        let verified_block_info = VerifiedBlockInfo {
+            verified: true,
+            ..Default::default()
+        };
         VERIFIED_BLOCKS.save(storage, &key_block_root_hash, &verified_block_info)
     }
 
@@ -110,8 +114,10 @@ impl Validator {
         let rh = self
             .signature_validator
             .add_current_block_to_verified_set(storage, root_h)?;
-        let mut verified_block_info = VerifiedBlockInfo::default();
-        verified_block_info.verified = true;
+        let verified_block_info = VerifiedBlockInfo {
+            verified: true,
+            ..Default::default()
+        };
         VERIFIED_BLOCKS.save(storage, &rh, &verified_block_info)
     }
 
@@ -225,9 +231,11 @@ impl Validator {
             return Err(StdError::generic_err("block already verified"));
         }
 
-        let mut block = VerifiedBlockInfo::default();
-        block.verified = true;
-        block.seq_no = seq_no;
+        let block = VerifiedBlockInfo {
+            seq_no,
+            verified: true,
+            ..Default::default()
+        };
 
         VERIFIED_BLOCKS.save(deps_mut.storage, &root_hash, &block)
     }

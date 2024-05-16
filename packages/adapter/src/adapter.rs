@@ -118,10 +118,10 @@ pub fn get_data_from_messages(
     out_messages: &mut [Message; 5],
 ) -> StdResult<TestData> {
     let mut data = TestData::default();
-    for i in 0..5 {
-        if out_messages[i].info.dest.hash == opcode {
-            let idx = out_messages[i].body_idx;
-            // cells[out_messages[i].body_idx].cursor += 634;
+    for out_message in out_messages {
+        if out_message.info.dest.hash == opcode {
+            let idx = out_message.body_idx;
+            // cells[out_message.body_idx].cursor += 634;
             let hash = read_bytes32_bit_size(boc_data, cells, idx, 256);
             data.eth_address = address(hash)?;
             data.amount = read_uint256(boc_data, cells, idx, 256)?;

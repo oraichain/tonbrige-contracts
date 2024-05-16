@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, StdError, StdResult, Storage};
 use tonbridge_parser::{
-    block_parser::{compute_node_id, BlockParser, IBlockParser, ValidatorSet20},
+    block_parser::{compute_node_id, BlockParser, IBlockParser, ValidatorSet20, ValidatorSet32},
     tree_of_cells_parser::EMPTY_HASH,
     types::{Bytes32, CachedCell, CellData, Vdata},
 };
@@ -68,6 +68,33 @@ impl SignatureValidator {
     pub fn new() -> Self {
         Self::default()
     }
+    fn parse_validators(&mut self, validators: &mut ValidatorSet32) {
+        for i in 0..32 {
+            for j in 0..20 {
+                // is empty
+                if self.candidates_for_validator_set[j].weight == 0 {
+                    self.candidates_total_weight += validators[i].weight;
+                    self.candidates_for_validator_set[j] = validators[i];
+                    self.candidates_for_validator_set[j].node_id =
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
+                    break;
+                }
+                // old validator has less weight then new
+                if self.candidates_for_validator_set[j].weight < validators[i].weight {
+                    self.candidates_total_weight += validators[i].weight;
+                    self.candidates_total_weight -= self.candidates_for_validator_set[j].weight;
+
+                    std::mem::swap(
+                        &mut self.candidates_for_validator_set[j],
+                        &mut validators[i],
+                    );
+
+                    self.candidates_for_validator_set[j].node_id =
+                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
+                }
+            }
+        }
+    }
 }
 
 impl ISignatureValidator for SignatureValidator {
@@ -119,10 +146,10 @@ impl ISignatureValidator for SignatureValidator {
         }
 
         let mut validator_idx = self.validator_set.len();
-        for i in 0..vdata.len() {
+        for vdata_item in vdata {
             // 1. found validator
             for j in 0..self.validator_set.len() {
-                if self.validator_set[j].node_id == vdata[i].node_id {
+                if self.validator_set[j].node_id == vdata_item.node_id {
                     validator_idx = j;
                     break;
                 }
@@ -145,7 +172,7 @@ impl ISignatureValidator for SignatureValidator {
             // signature = r + s
             if api.ed25519_verify(
                 &message,
-                &[vdata[i].r, vdata[i].s].concat(),
+                &[vdata_item.r, vdata_item.s].concat(),
                 &self.validator_set[validator_idx].pubkey,
             )? {
                 // update as verified
@@ -224,30 +251,7 @@ impl ISignatureValidator for SignatureValidator {
             self.block_parser
                 .parse_candidates_root_block(boc, root_idx, tree_of_cells)?;
 
-        for i in 0..32 {
-            for j in 0..20 {
-                // is empty
-                if self.candidates_for_validator_set[j].weight == 0 {
-                    self.candidates_total_weight += validators[i].weight;
-                    self.candidates_for_validator_set[j] = validators[i];
-                    self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
-                    break;
-                }
-                // old validator has less weight then new
-                if self.candidates_for_validator_set[j].weight < validators[i].weight {
-                    self.candidates_total_weight += validators[i].weight;
-                    self.candidates_total_weight -= self.candidates_for_validator_set[j].weight;
-
-                    let tmp = self.candidates_for_validator_set[j];
-                    self.candidates_for_validator_set[j] = validators[i];
-                    validators[i] = tmp;
-
-                    self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
-                }
-            }
-        }
+        self.parse_validators(&mut validators);
 
         Ok(())
     }
@@ -276,30 +280,7 @@ impl ISignatureValidator for SignatureValidator {
             self.block_parser
                 .parse_part_validators(data, cell_idx, cells, prefix_length)?;
 
-        for i in 0..32 {
-            for j in 0..20 {
-                // is empty
-                if self.candidates_for_validator_set[j].weight == 0 {
-                    self.candidates_total_weight += validators[i].weight;
-                    self.candidates_for_validator_set[j] = validators[i];
-                    self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
-                    break;
-                }
-                // old validator has less weight then new
-                if self.candidates_for_validator_set[j].weight < validators[i].weight {
-                    self.candidates_total_weight += validators[i].weight;
-                    self.candidates_total_weight -= self.candidates_for_validator_set[j].weight;
-
-                    let tmp = self.candidates_for_validator_set[j];
-                    self.candidates_for_validator_set[j] = validators[i];
-                    validators[i] = tmp;
-
-                    self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
-                }
-            }
-        }
+        self.parse_validators(&mut validators);
 
         Ok(())
     }

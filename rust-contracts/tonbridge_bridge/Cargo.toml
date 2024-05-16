@@ -29,4 +29,3 @@ tonbridge-validator = { workspace = true }
 tonbridge-adapter = { workspace = true }
 thiserror = { workspace = true }
 tonbridge-bridge = { workspace = true }
-hex = "0.4"

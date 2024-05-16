@@ -107,9 +107,9 @@ impl ITransactionParser for TransactionParser {
             let message_idx = read_cell(cells, messages_idx);
             let cell_idxs = parse_dict(data, cells, message_idx, 15)?;
             let mut j = 0;
-            for i in 0..5 {
-                if cell_idxs[i] != 255 {
-                    let message_idx = read_cell(cells, cell_idxs[i]);
+            for cell_idx in cell_idxs {
+                if cell_idx != 255 {
+                    let message_idx = read_cell(cells, cell_idx);
                     message_header.out_messages[j] = parse_message(data, cells, message_idx)?;
                     j += 1;
                 }
@@ -127,13 +127,13 @@ impl ITransactionParser for TransactionParser {
     ) -> StdResult<TestData> {
         let bytes32_one = Uint256::one().to_be_bytes();
         let mut data = TestData::default();
-        for i in 0..5 {
+        for out_message in out_messages {
             // console.log(out_messages[i].body_idx, cells[out_messages[i].body_idx].cursor);
             // 0xF0A28992
             // 0xc0470ccf
             // console.logBytes(boc_data[cells[out_messages[i].body_idx].cursor / 8:]);
-            if out_messages[i].info.dest.hash == bytes32_one {
-                let idx = out_messages[i].body_idx;
+            if out_message.info.dest.hash == bytes32_one {
+                let idx = out_message.body_idx;
                 let hash = read_bytes32_bit_size(boc_data, cells, idx, 256);
                 data.eth_address = address(hash)?;
                 // data.amount = 0;

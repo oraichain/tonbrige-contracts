@@ -254,30 +254,30 @@ fn parse_block_extra(
 
     let account_idxs = parse_dict(proof_boc, cells, account_blocks_idx, 256)?;
 
-    for i in 0..32 {
-        if account_idxs[i] == 255 {
+    for account_idx in account_idxs {
+        if account_idx == 255 {
             break;
         }
         // _ (HashmapAugE 256 AccountBlock CurrencyCollection) = ShardAccountBlocks;
-        parse_currency_collection(proof_boc, cells, account_idxs[i])?;
-        if read_u8(proof_boc, cells, account_idxs[i], 4)? != 5 {
+        parse_currency_collection(proof_boc, cells, account_idx)?;
+        if read_u8(proof_boc, cells, account_idx, 4)? != 5 {
             return Err(StdError::generic_err("is not account block"));
         }
 
-        let address_hash = read_bytes32_byte_size(proof_boc, cells, account_idxs[i], 32);
+        let address_hash = read_bytes32_byte_size(proof_boc, cells, account_idx, 32);
 
         if address_hash != transaction.address_hash {
             continue;
         }
 
         // get transactions of this account
-        let tx_idxs = parse_dict(proof_boc, cells, account_idxs[i], 64)?;
+        let tx_idxs = parse_dict(proof_boc, cells, account_idx, 64)?;
 
-        for j in 0..32 {
-            if tx_idxs[j] == 255 {
+        for tx_idx in tx_idxs {
+            if tx_idx == 255 {
                 break;
             }
-            if cells[read_cell(cells, tx_idxs[j])].hashes[0] == tx_root_hash {
+            if cells[read_cell(cells, tx_idx)].hashes[0] == tx_root_hash {
                 return Ok(true);
             }
         }
@@ -510,7 +510,7 @@ pub fn check_block_info(
     // read_bool(cells, cell_idx);
     // // vert seqno incer
     // read_bool(cells, cell_idx);
-    cells[cell_idx].cursor += 32 + 1 * 8;
+    cells[cell_idx].cursor += 32 + 8;
     // flags
     if read_u8(proof_boc, cells, cell_idx, 8)? > 1 {
         return Err(StdError::generic_err("data.flags > 1"));

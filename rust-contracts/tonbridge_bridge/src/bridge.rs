@@ -1,5 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, Response, StdError, StdResult, Uint256};
+use cosmwasm_std::{
+    Addr, Binary, CosmosMsg, Deps, DepsMut, Response, StdError, StdResult, Uint256,
+};
 use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
 use tonbridge_parser::{
     block_parser::{BlockParser, IBlockParser},
@@ -8,8 +10,6 @@ use tonbridge_parser::{
     types::{Address, Bytes32},
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
-extern crate hex;
-use hex::encode;
 
 use crate::state::PROCESSED_TXS;
 
@@ -58,7 +58,7 @@ impl Bridge {
 
         let is_block_verified = self
             .validator
-            .is_verified_block(&deps.querier, encode(&root_hash))?;
+            .is_verified_block(&deps.querier, Binary::from(&root_hash))?;
         if !is_block_verified {
             return Err(StdError::generic_err(
                 "The block is not verified or invalid. Cannot bridge!",

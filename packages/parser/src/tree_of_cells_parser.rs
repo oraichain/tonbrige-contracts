@@ -282,11 +282,12 @@ fn get_cell_slice<'a>(idx: usize, cells_slice: &'a [u8], custom_index: &'a [usiz
 }
 
 fn create_data_cell(refs: [usize; 4], cell_info: &CellSerializationInfo) -> CellData {
-    let mut cell = CellData::default();
-    cell.refs = refs;
-    cell.special = cell_info.special;
-    cell.cursor_ref = 0;
-    cell
+    CellData {
+        refs,
+        special: cell_info.special,
+        cursor_ref: 0,
+        ..Default::default()
+    }
 }
 
 fn calc_hashes_for_toc(

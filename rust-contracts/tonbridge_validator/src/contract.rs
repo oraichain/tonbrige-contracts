@@ -1,3 +1,5 @@
+use std::array::TryFromSliceError;
+
 use cosmwasm_std::{entry_point, to_binary, Addr, HexBinary, StdError};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use tonbridge_parser::bit_reader::to_bytes32;
@@ -198,9 +200,15 @@ pub fn get_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
     Ok(validator.parse_user_friendly_validators(result))
 }
 
-pub fn is_verified_block(deps: Deps, root_hash: String) -> StdResult<bool> {
+pub fn is_verified_block(deps: Deps, root_hash: Binary) -> StdResult<bool> {
     let validator = VALIDATOR.load(deps.storage)?;
-    validator.is_verified_block(deps.storage, to_bytes32(&root_hash)?)
+    validator.is_verified_block(
+        deps.storage,
+        root_hash
+            .as_slice()
+            .try_into()
+            .map_err(|err: TryFromSliceError| StdError::generic_err(err.to_string()))?,
+    )
 }
 
 pub fn is_signed_by_validator(

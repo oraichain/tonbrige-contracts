@@ -219,7 +219,6 @@ dependencies = [
  "cw-controllers",
  "cw-storage-plus",
  "cw20",
- "hex",
  "thiserror",
  "tonbridge-adapter",
  "tonbridge-bridge",
