@@ -1,4 +1,9 @@
 import { SimulateCosmWasmClient } from "@oraichain/cw-simulate";
+import { toAmount } from "@oraichain/oraidex-common";
+import {
+  InstantiateMsg as Cw20InstantiateMsg,
+  MinterResponse
+} from "@oraichain/oraidex-contracts-sdk/build/OraiswapToken.types";
 import {
   data,
   findBoc,
@@ -8,6 +13,7 @@ import {
   updateValidatorsRootHash
 } from "../../../../test/data/transaction-1";
 import { deployContract } from "../../contracts-build/src";
+import { OraiswapTokenClient } from "../../contracts-sdk/build/OraiswapToken.client";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "../../contracts-sdk/src";
 
 describe("Tree of Cells parser tests 1", () => {
@@ -18,6 +24,7 @@ describe("Tree of Cells parser tests 1", () => {
   const sender = "orai12zyu8w93h0q2lcnt50g3fn0w3yqnhy4fvawaqz";
   let validator: TonbridgeValidatorClient;
   let bridge: TonbridgeBridgeClient;
+  let dummyToken: OraiswapTokenClient;
 
   beforeAll(async function () {
     // deploy contracts
@@ -29,9 +36,33 @@ describe("Tree of Cells parser tests 1", () => {
       "cw-tonbridge-validator"
     );
     const bridgeDeployResult = await deployContract(client, sender, {}, "bridge-bridge", "cw-tonbridge-bridge");
+    const dummyTokenDeployResult = await deployContract(
+      client,
+      sender,
+      {
+        decimals: 6,
+        initial_balances: [{ address: sender, amount: toAmount(10000).toString() }],
+        name: "Dummy Token",
+        symbol: "DUMMY",
+        mint: {
+          minter: bridgeDeployResult.contractAddress
+        } as MinterResponse
+      } as Cw20InstantiateMsg,
+      "dummy-token",
+      "oraiswap-token"
+    );
 
     validator = new TonbridgeValidatorClient(client, sender, validatorDeployResult.contractAddress);
     bridge = new TonbridgeBridgeClient(client, sender, bridgeDeployResult.contractAddress);
+    dummyToken = new OraiswapTokenClient(client, sender, dummyTokenDeployResult.contractAddress);
+
+    await bridge.updateMappingPair({
+      denom: "",
+      localAssetInfo: { token: { contract_addr: dummyToken.contractAddress } },
+      localChannelId: "",
+      localAssetInfoDecimals: 6,
+      remoteDecimals: 6
+    });
   });
 
   it("Should throw an error when use wrong boc for parseCandidatesRootBlock", async () => {
@@ -60,7 +91,7 @@ describe("Tree of Cells parser tests 1", () => {
     expect(validators.length).toEqual(0);
   });
 
-  it("Verify validator signatures", async () => {
+  it("Verify updated validator signatures in new block", async () => {
     const boc = findBoc("proof-validators");
     await validator.parseCandidatesRootBlock({ boc: boc.toString("hex") });
 
@@ -104,6 +135,7 @@ describe("Tree of Cells parser tests 1", () => {
       expect(validator.pubkey).toEqual(item?.pubkey);
     });
 
+    // candidates now should be empty because we the list has been verified
     validators = (await validator.getCandidatesForValidators()).filter((validator) => validator.c_type !== 0);
 
     expect(validators.length).toEqual(0);
@@ -143,7 +175,7 @@ describe("Tree of Cells parser tests 1", () => {
   });
 
   it("shard block test", async () => {
-    // prerequisite. Need the new masterchain's block to be verified first
+    // Prerequisite: need the new masterchain's block to be verified first
     const masterBlockRootHash = "456ae983e2af89959179ed8b0e47ab702f06addef7022cb6c365aac4b0e5a0b9";
     expect(
       await validator.isVerifiedBlock({
@@ -168,7 +200,6 @@ describe("Tree of Cells parser tests 1", () => {
     await bridge.readTransaction({
       txBoc,
       blockBoc,
-      tonToken: validator.contractAddress, // FIXME: Change to the actual cw20 address
       validatorContractAddr: validator.contractAddress,
       opcode: "0000000000000000000000000000000000000000000000000000000000000001"
     });

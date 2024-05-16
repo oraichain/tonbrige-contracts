@@ -74,9 +74,7 @@ pub fn reset_validator_set(
     sender: &Addr,
     boc: HexBinary,
 ) -> Result<Response, ContractError> {
-    OWNER
-        .assert_admin(deps.as_ref(), sender)
-        .map_err(|err| StdError::generic_err(err.to_string()))?;
+    OWNER.assert_admin(deps.as_ref(), sender)?;
     let storage = deps.storage;
     let mut validator = VALIDATOR.load(storage)?;
 

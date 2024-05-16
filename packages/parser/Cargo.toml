@@ -17,3 +17,4 @@ backtraces = ["cosmwasm-std/backtraces"]
 cosmwasm-schema = { workspace = true }
 cosmwasm-std = { workspace = true }
 sha2 = { workspace = true }
+oraiswap = { workspace = true }

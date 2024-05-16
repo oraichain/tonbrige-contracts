@@ -158,9 +158,10 @@ pub struct TransactionHeader {
 }
 
 #[cw_serde]
-#[derive(Copy, Default)]
-pub struct TestData {
+#[derive(Default)]
+pub struct PacketData {
     // should change to cannonical addr, same as Address with 20 bytes
-    pub eth_address: Address,
+    pub receiving_address: Address,
+    // pub receiving_token: AssetInfo,
     pub amount: Uint256,
 }

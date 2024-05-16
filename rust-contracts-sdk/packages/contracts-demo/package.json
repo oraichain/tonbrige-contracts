@@ -19,7 +19,9 @@
     "bignumber.js": "^9.1.2",
     "cosmjs-types": "0.8.0",
     "@oraichain/tonbridge-contracts-sdk": "1.0.0",
-    "@oraichain/tonbridge-contracts-build": "1.0.0"
+    "@oraichain/tonbridge-contracts-build": "1.0.0",
+    "@oraichain/oraidex-contracts-sdk": "latest",
+    "@oraichain/oraidex-common": "latest"
   },
   "devDependencies": {},
   "resolutions": {

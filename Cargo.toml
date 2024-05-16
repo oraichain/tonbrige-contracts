@@ -36,6 +36,8 @@ sha2 = "0.10.8"
 
 osmosis-test-tube = { git = "https://github.com/oraichain/test-tube.git", rev = "354d580" }
 test-tube = { git = "https://github.com/oraichain/test-tube.git", rev = "354d580" }
+oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "daef7e664000a36214cc451a3965c398595be5e0" }
+cw20-ics20-msg = {git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev = "0a33b5ade31419b82617d0b3ab7958899d9598b7"}
 
 tonbridge-parser = { path = "./packages/parser" }
 tonbridge-validator = { path = "./packages/validator" }

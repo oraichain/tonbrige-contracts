@@ -1,8 +1,10 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult, Uint256,
+    Addr, CanonicalAddr, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult,
+    Uint256,
 };
 use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
+use tonbridge_bridge::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
 use tonbridge_parser::{
     block_parser::{BlockParser, IBlockParser},
     transaction_parser::{ITransactionParser, TransactionParser},
@@ -11,7 +13,7 @@ use tonbridge_parser::{
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
 
-use crate::state::PROCESSED_TXS;
+use crate::state::{ics20_denoms, PROCESSED_TXS};
 
 #[cw_serde]
 pub struct Bridge {
@@ -36,9 +38,9 @@ impl Bridge {
     pub fn read_transaction(
         &self,
         deps: DepsMut,
+        contract_address: &str,
         tx_boc: &[u8],
         block_boc: &[u8],
-        adapter: &Adapter,
         opcode: Bytes32,
     ) -> StdResult<Vec<CosmosMsg>> {
         let mut tx_header = self.tree_of_cells_parser.parse_serialized_header(tx_boc)?;
@@ -92,7 +94,25 @@ impl Bridge {
         }
 
         PROCESSED_TXS.save(deps.storage, &tx_info.address_hash, &true)?;
-        adapter.execute(deps, tx_boc, opcode, &mut tx_toc, tx_header.root_idx)
+        let adapter = Adapter::new();
+        // FIXME: packet data should have something for the bridge contract to query mapping pair
+        let packet_data =
+            adapter.parse_packet_data(tx_boc, opcode, &mut tx_toc, tx_header.root_idx)?;
+
+        deps.api
+            .debug(&format!("packet data: {:?}", packet_data.amount));
+        deps.api.debug(&format!(
+            "recieving address: {:?}",
+            deps.api
+                .addr_humanize(&CanonicalAddr::from(packet_data.receiving_address.clone()))?
+        ));
+
+        let mapping = ics20_denoms().load(
+            deps.storage,
+            // FIXME: remove hardcode ics denom key
+            &get_key_ics20_ibc_denom(&parse_ibc_wasm_port_id(contract_address), "", ""),
+        )?;
+        adapter.execute(deps, packet_data, opcode, mapping)
     }
 
     pub fn swap_eth(to: Uint256, amount: Uint256, adapter: &Adapter) -> Response {

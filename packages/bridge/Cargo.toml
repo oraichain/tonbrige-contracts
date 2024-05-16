@@ -14,6 +14,7 @@ description = "Common helpers for tonbridge contracts"
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
+oraiswap = { workspace = true }
 cosmwasm-schema = { workspace = true }
 cosmwasm-std = { workspace = true }
 tonbridge-parser = { workspace = true }

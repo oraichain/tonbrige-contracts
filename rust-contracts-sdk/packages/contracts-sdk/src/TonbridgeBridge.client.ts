@@ -7,7 +7,7 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate";
 import { Coin, StdFee } from "@cosmjs/amino";
 import {HexBinary, Boolean} from "./types";
-import {InstantiateMsg, ExecuteMsg, QueryMsg, MigrateMsg, ConfigResponse} from "./TonbridgeBridge.types";
+import {InstantiateMsg, ExecuteMsg, AssetInfo, Addr, UpdatePairMsg, QueryMsg, MigrateMsg, ConfigResponse} from "./TonbridgeBridge.types";
 export interface TonbridgeBridgeReadOnlyInterface {
   contractAddress: string;
   config: () => Promise<ConfigResponse>;
@@ -51,15 +51,26 @@ export interface TonbridgeBridgeInterface extends TonbridgeBridgeReadOnlyInterfa
   readTransaction: ({
     blockBoc,
     opcode,
-    tonToken,
     txBoc,
     validatorContractAddr
   }: {
     blockBoc: HexBinary;
     opcode: HexBinary;
-    tonToken: string;
     txBoc: HexBinary;
     validatorContractAddr: string;
+  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
+  updateMappingPair: ({
+    denom,
+    localAssetInfo,
+    localAssetInfoDecimals,
+    localChannelId,
+    remoteDecimals
+  }: {
+    denom: string;
+    localAssetInfo: AssetInfo;
+    localAssetInfoDecimals: number;
+    localChannelId: string;
+    remoteDecimals: number;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
 }
 export class TonbridgeBridgeClient extends TonbridgeBridgeQueryClient implements TonbridgeBridgeInterface {
@@ -73,18 +84,17 @@ export class TonbridgeBridgeClient extends TonbridgeBridgeQueryClient implements
     this.sender = sender;
     this.contractAddress = contractAddress;
     this.readTransaction = this.readTransaction.bind(this);
+    this.updateMappingPair = this.updateMappingPair.bind(this);
   }
 
   readTransaction = async ({
     blockBoc,
     opcode,
-    tonToken,
     txBoc,
     validatorContractAddr
   }: {
     blockBoc: HexBinary;
     opcode: HexBinary;
-    tonToken: string;
     txBoc: HexBinary;
     validatorContractAddr: string;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
@@ -92,9 +102,31 @@ export class TonbridgeBridgeClient extends TonbridgeBridgeQueryClient implements
       read_transaction: {
         block_boc: blockBoc,
         opcode,
-        ton_token: tonToken,
         tx_boc: txBoc,
         validator_contract_addr: validatorContractAddr
+      }
+    }, _fee, _memo, _funds);
+  };
+  updateMappingPair = async ({
+    denom,
+    localAssetInfo,
+    localAssetInfoDecimals,
+    localChannelId,
+    remoteDecimals
+  }: {
+    denom: string;
+    localAssetInfo: AssetInfo;
+    localAssetInfoDecimals: number;
+    localChannelId: string;
+    remoteDecimals: number;
+  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
+    return await this.client.execute(this.sender, this.contractAddress, {
+      update_mapping_pair: {
+        denom,
+        local_asset_info: localAssetInfo,
+        local_asset_info_decimals: localAssetInfoDecimals,
+        local_channel_id: localChannelId,
+        remote_decimals: remoteDecimals
       }
     }, _fee, _memo, _funds);
   };

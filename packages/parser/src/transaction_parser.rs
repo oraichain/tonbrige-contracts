@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdError, StdResult, Uint256};
 
-use crate::bit_reader::address;
+use crate::{bit_reader::address, types::Bytes32};
 
 use super::{
     bit_reader::{
@@ -10,7 +10,7 @@ use super::{
     },
     block_parser::{parse_currency_collection, read_coins},
     types::{
-        CellData, Message, MessagesHeader, RawCommonMessageInfo, TestData, TonAddress,
+        CellData, Message, MessagesHeader, PacketData, RawCommonMessageInfo, TonAddress,
         TransactionHeader,
     },
 };
@@ -19,9 +19,10 @@ pub trait ITransactionParser {
     fn deserialize_msg_date(
         &self,
         boc: &[u8],
+        opcode: Bytes32,
         cells: &mut [CellData],
         root_idx: usize,
-    ) -> StdResult<TestData>;
+    ) -> StdResult<PacketData>;
 
     fn parse_transaction_header(
         &self,
@@ -40,9 +41,10 @@ pub trait ITransactionParser {
     fn get_data_from_messages(
         &self,
         boc_data: &[u8],
+        opcode: Bytes32,
         cells: &mut [CellData],
         out_messages: &mut [Message; 5],
-    ) -> StdResult<TestData>;
+    ) -> StdResult<PacketData>;
 }
 
 #[cw_serde]
@@ -53,14 +55,15 @@ impl ITransactionParser for TransactionParser {
     fn deserialize_msg_date(
         &self,
         boc: &[u8],
+        opcode: Bytes32,
         cells: &mut [CellData],
         root_idx: usize,
-    ) -> StdResult<TestData> {
+    ) -> StdResult<PacketData> {
         self.parse_transaction_header(boc, cells, root_idx)?;
         let message_idx = read_cell(cells, root_idx);
         let mut messages = self.parse_messages_header(boc, cells, message_idx)?;
 
-        self.get_data_from_messages(boc, cells, &mut messages.out_messages)
+        self.get_data_from_messages(boc, opcode, cells, &mut messages.out_messages)
     }
 
     fn parse_transaction_header(
@@ -122,25 +125,30 @@ impl ITransactionParser for TransactionParser {
     fn get_data_from_messages(
         &self,
         boc_data: &[u8],
+        opcode: Bytes32,
         cells: &mut [CellData],
         out_messages: &mut [Message; 5],
-    ) -> StdResult<TestData> {
-        let bytes32_one = Uint256::one().to_be_bytes();
-        let mut data = TestData::default();
+    ) -> StdResult<PacketData> {
+        let mut data = PacketData {
+            receiving_address: Default::default(),
+            amount: Uint256::default(),
+        };
+        // FIXME: exhaust all packet data from the messages
         for out_message in out_messages {
             // console.log(out_messages[i].body_idx, cells[out_messages[i].body_idx].cursor);
             // 0xF0A28992
             // 0xc0470ccf
             // console.logBytes(boc_data[cells[out_messages[i].body_idx].cursor / 8:]);
-            if out_message.info.dest.hash == bytes32_one {
+            if out_message.info.dest.hash == opcode {
                 let idx = out_message.body_idx;
                 let hash = read_bytes32_bit_size(boc_data, cells, idx, 256);
-                data.eth_address = address(hash)?;
+                data.receiving_address = address(hash)?;
                 // data.amount = 0;
                 // console.log("amount");
                 // console.log(uint(read_coins(boc_data, cells, idx)));
                 // data.amount = read_u64(boc_data, cells, idx, 16);
                 data.amount = read_uint256(boc_data, cells, idx, 256)?;
+                // FIXME: add receiving token parser as well
             }
         }
 

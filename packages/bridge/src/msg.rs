@@ -1,5 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::HexBinary;
+use oraiswap::asset::AssetInfo;
 
 #[cw_serde]
 pub struct InstantiateMsg {}
@@ -10,9 +11,20 @@ pub enum ExecuteMsg {
         tx_boc: HexBinary,    // in hex form
         block_boc: HexBinary, // in hex form
         opcode: HexBinary,    // in hex form
-        ton_token: String,
         validator_contract_addr: String,
     },
+    UpdateMappingPair(UpdatePairMsg),
+}
+
+#[cw_serde]
+pub struct UpdatePairMsg {
+    pub local_channel_id: String,
+    /// native denom of the remote chain. Eg: orai
+    pub denom: String,
+    /// asset info of the local chain.
+    pub local_asset_info: AssetInfo,
+    pub remote_decimals: u8,
+    pub local_asset_info_decimals: u8,
 }
 
 /// We currently take no arguments for migrations

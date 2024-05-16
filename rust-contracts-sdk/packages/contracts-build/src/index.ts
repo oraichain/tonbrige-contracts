@@ -5,6 +5,7 @@ import path from "path";
 export type ContractName =
   | "cw-tonbridge-validator"
   | "cw-tonbridge-bridge"
+  | "oraiswap-token"
 
 const contractDir = path.join(path.dirname(module.filename), "..", "data");
 

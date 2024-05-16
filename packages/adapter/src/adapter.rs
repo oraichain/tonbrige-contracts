@@ -1,20 +1,31 @@
-use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, Event, Response, StdResult, Uint128, Uint256};
+use cosmwasm_std::{
+    CosmosMsg, Deps, DepsMut, Event, Response, StdError, StdResult, Uint128, Uint256,
+};
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
+use cw20_ics20_msg::amount::convert_remote_to_local;
+use oraiswap::asset::{Asset, AssetInfo};
+use tonbridge_bridge::state::MappingMetadata;
 use tonbridge_parser::{
-    bit_reader::{address, read_bytes32_bit_size, read_cell, read_uint256},
+    bit_reader::read_cell,
     transaction_parser::{ITransactionParser, TransactionParser},
     tree_of_cells_parser::{OPCODE_1, OPCODE_2},
-    types::{Address, Bytes32, CellData, Message, TestData},
+    types::{Address, Bytes32, CellData, PacketData},
 };
 
 pub trait IBaseAdapter {
-    fn execute(
+    fn parse_packet_data(
         &self,
-        deps: DepsMut,
         boc: &[u8],
         opcode: Bytes32,
         cells: &mut [CellData],
         root_idx: usize,
+    ) -> StdResult<PacketData>;
+    fn execute(
+        &self,
+        deps: DepsMut,
+        data: PacketData,
+        opcode: Bytes32,
+        bridge_token_mapping: MappingMetadata,
     ) -> StdResult<Vec<CosmosMsg>>;
     fn swap_eth(&self, to: Uint256, amount: Uint256) -> Response; // payable => hook
     fn swap_token(
@@ -27,30 +38,25 @@ pub trait IBaseAdapter {
 }
 
 pub struct Adapter {
-    token: Cw20Contract,
     transaction_parser: TransactionParser,
 }
 
 impl Adapter {
-    pub fn new(ton_token: Addr) -> Self {
+    pub fn new() -> Self {
         Self {
             transaction_parser: Default::default(),
-            token: Cw20Contract(ton_token),
         }
     }
 }
 
 impl IBaseAdapter for Adapter {
-    // FIXME: this function in Solidity is onlyOwner called, not for public!
-    fn execute(
+    fn parse_packet_data(
         &self,
-        deps: DepsMut,
         boc: &[u8],
         opcode: Bytes32,
         cells: &mut [CellData],
         root_idx: usize,
-    ) -> StdResult<Vec<CosmosMsg>> {
-        let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    ) -> StdResult<PacketData> {
         self.transaction_parser
             .parse_transaction_header(boc, cells, root_idx)?;
         let cell_idx = read_cell(cells, root_idx);
@@ -58,24 +64,50 @@ impl IBaseAdapter for Adapter {
             .transaction_parser
             .parse_messages_header(boc, cells, cell_idx)?;
 
-        let msg_data = get_data_from_messages(boc, opcode, cells, &mut messages.out_messages)?;
+        let msg_data = self.transaction_parser.get_data_from_messages(
+            boc,
+            opcode,
+            cells,
+            &mut messages.out_messages,
+        )?;
+        Ok(msg_data)
+    }
 
-        let receiver = deps.api.addr_humanize(&msg_data.eth_address.into())?;
+    fn execute(
+        &self,
+        deps: DepsMut,
+        data: PacketData,
+        opcode: Bytes32,
+        mapping: MappingMetadata,
+    ) -> StdResult<Vec<CosmosMsg>> {
+        let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+        let recipient = deps.api.addr_humanize(&data.receiving_address.into())?;
 
-        let amount: Uint128 = msg_data.amount.try_into()?;
-        // FIXME: process minting and transferring tokens
+        let remote_amount: Uint128 = data.amount.try_into()?;
+        let local_amount = convert_remote_to_local(
+            remote_amount,
+            mapping.remote_decimals,
+            mapping.asset_info_decimals,
+        )?;
+        let msg = Asset {
+            info: mapping.asset_info.clone(),
+            amount: local_amount.clone(),
+        };
         if opcode == OPCODE_1 {
-            // cosmos_msgs.push(self.token.call(Cw20ExecuteMsg::Mint {
-            //     recipient: receiver.to_string(),
-            //     amount: amount * Uint128::from(1000000000u128),
-            // })?);
-            // _token.mint(msg_data.amount * 1000000000, msg_data.eth_address);
+            let msg = match msg.info {
+                AssetInfo::NativeToken { denom: _ } => {
+                    return Err(StdError::generic_err("Cannot mint a native token"))
+                }
+                AssetInfo::Token { contract_addr } => {
+                    Cw20Contract(contract_addr).call(Cw20ExecuteMsg::Mint {
+                        recipient: recipient.to_string(),
+                        amount: local_amount,
+                    })
+                }
+            }?;
+            cosmos_msgs.push(msg);
         } else if opcode == OPCODE_2 {
-            // cosmos_msgs.push(self.token.call(Cw20ExecuteMsg::Transfer {
-            //     recipient: receiver.to_string(),
-            //     amount,
-            // })?);
-            // receiver.transfer(msg_data.amount);
+            cosmos_msgs.push(msg.into_msg(None, &deps.querier, recipient)?);
         }
 
         Ok(cosmos_msgs)
@@ -90,8 +122,8 @@ impl IBaseAdapter for Adapter {
 
     fn swap_token(
         &self,
-        deps: Deps,
-        from: Address,
+        _deps: Deps,
+        _from: Address,
         amount: Uint256,
         to: Uint256,
     ) -> StdResult<Response> {
@@ -99,35 +131,15 @@ impl IBaseAdapter for Adapter {
         // emit SwapWTONInitialized(to, amount / 1e9);
         let burn_amount = amount / Uint256::from(1000000000u128);
 
-        let owner = deps.api.addr_humanize(&from.into())?.to_string();
-        self.token.call(Cw20ExecuteMsg::BurnFrom {
-            owner,
-            amount: burn_amount.try_into()?,
-        })?;
+        // let owner = deps.api.addr_humanize(&from.into())?.to_string();
+        // self.token.call(Cw20ExecuteMsg::BurnFrom {
+        //     owner,
+        //     amount: burn_amount.try_into()?,
+        // })?;
 
         Ok(Response::new()
             .add_event(Event::new("swap_eth"))
             .add_attribute("to", to.to_string())
             .add_attribute("amount", burn_amount.to_string()))
     }
-}
-
-pub fn get_data_from_messages(
-    boc_data: &[u8],
-    opcode: Bytes32,
-    cells: &mut [CellData],
-    out_messages: &mut [Message; 5],
-) -> StdResult<TestData> {
-    let mut data = TestData::default();
-    for out_message in out_messages {
-        if out_message.info.dest.hash == opcode {
-            let idx = out_message.body_idx;
-            // cells[out_message.body_idx].cursor += 634;
-            let hash = read_bytes32_bit_size(boc_data, cells, idx, 256);
-            data.eth_address = address(hash)?;
-            data.amount = read_uint256(boc_data, cells, idx, 256)?;
-        }
-    }
-
-    Ok(data)
 }
