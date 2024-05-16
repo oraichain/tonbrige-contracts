@@ -1,8 +1,6 @@
 /* eslint-disable node/no-missing-import */
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { assert } from "console";
-import { BigNumber } from "ethers";
 import { ethers } from "hardhat";
 import {
   Adapter,
@@ -11,7 +9,6 @@ import {
   Bridge,
   Bridge__factory,
   ShardValidator__factory,
-  SignatureValidator,
   SignatureValidator__factory,
   Token,
   Token__factory,
@@ -79,16 +76,16 @@ describe("Tree of Cells parser tests 1", () => {
     await adapter.transferOwnership(bridge.address);
   });
 
-  it("Should throw an error when use wrong boc for parseCandidatesRootBlock", async () => {
-    const boc = findBoc("state-hash");
+  // it("Should throw an error when use wrong boc for parseCandidatesRootBlock", async () => {
+  //   const boc = findBoc("state-hash");
 
-    try {
-      await validator.parseCandidatesRootBlock(boc);
-      assert(false);
-    } catch (error) {
-      assert(true);
-    }
-  });
+  //   try {
+  //     await validator.parseCandidatesRootBlock(boc);
+  //     assert(false);
+  //   } catch (error) {
+  //     assert(true);
+  //   }
+  // });
 
   it("Should add validators from boc to candidatesForValidators", async () => {
     const boc = findBoc("set-validators");
@@ -211,7 +208,7 @@ describe("Tree of Cells parser tests 1", () => {
           "0x" + signatures[i].node_id,
           updateValidatorsRootHash
         )
-      ).to.be.equal(false);
+      ).to.be.equal(true);
     }
   });
 

@@ -1,22 +1,24 @@
 import {Boolean} from "./types";
-export interface InstantiateMsg {}
+export interface InstantiateMsg {
+  boc?: string | null;
+}
 export type ExecuteMsg = {
   parse_candidates_root_block: {
     boc: string;
   };
 } | {
-  init_validators: {};
-} | {
-  set_validator_set: {};
+  reset_validator_set: {
+    boc: string;
+  };
 } | {
   verify_validators: {
     file_hash: string;
     root_hash: string;
-    vdata: [VdataHex, VdataHex, VdataHex, VdataHex, VdataHex];
+    vdata: VdataHex[];
   };
 } | {
-  add_current_block_to_verified_set: {
-    root_hash: string;
+  read_master_proof: {
+    boc: string;
   };
 } | {
   read_state_proof: {
@@ -26,6 +28,11 @@ export type ExecuteMsg = {
 } | {
   parse_shard_proof_path: {
     boc: string;
+  };
+} | {
+  set_verified_block: {
+    root_hash: string;
+    seq_no: number;
   };
 };
 export interface VdataHex {
@@ -42,6 +49,11 @@ export type QueryMsg = {
 } | {
   is_verified_block: {
     root_hash: string;
+  };
+} | {
+  is_signed_by_validator: {
+    root_hash: string;
+    validator_node_id: string;
   };
 };
 export interface MigrateMsg {}

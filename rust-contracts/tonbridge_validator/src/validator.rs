@@ -12,7 +12,7 @@ use tonbridge_validator::{
 
 use crate::{
     signature_validator::{ISignatureValidator, SignatureValidator},
-    state::{OWNER, VALIDATOR, VERIFIED_BLOCKS},
+    state::{OWNER, VERIFIED_BLOCKS},
 };
 
 pub trait IValidator {
@@ -71,16 +71,12 @@ impl Validator {
         Ok(())
     }
 
-    pub fn init_validators(&mut self, deps: DepsMut, caller: &Addr) -> StdResult<()> {
-        OWNER
-            .assert_admin(deps.as_ref(), caller)
-            .map_err(|err| StdError::generic_err(err.to_string()))?;
+    pub fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
         let key_block_root_hash = self.signature_validator.init_validators()?;
         let mut verified_block_info = VerifiedBlockInfo::default();
         verified_block_info.verified = true;
 
-        VERIFIED_BLOCKS.save(deps.storage, &key_block_root_hash, &verified_block_info)?;
-        VALIDATOR.save(deps.storage, &self)
+        VERIFIED_BLOCKS.save(storage, &key_block_root_hash, &verified_block_info)
     }
 
     pub fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
@@ -96,7 +92,7 @@ impl Validator {
         api: &dyn Api,
         root_h: Bytes32,
         file_hash: Bytes32,
-        vdata: &[Vdata; 5],
+        vdata: &[Vdata],
     ) -> StdResult<()> {
         self.signature_validator
             .verify_validators(storage, api, root_h, file_hash, vdata)
@@ -187,8 +183,8 @@ impl Validator {
     pub fn read_state_proof(
         &self,
         storage: &mut dyn Storage,
-        boc: &[u8],
-        rh: Bytes32,
+        boc: &[u8],  // older block data
+        rh: Bytes32, // newer root hash
     ) -> StdResult<()> {
         let mut header = self.toc_parser.parse_serialized_header(boc)?;
         let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
@@ -222,9 +218,9 @@ impl Validator {
         seq_no: u32,
     ) -> StdResult<()> {
         let deps = deps_mut.as_ref();
-        if !OWNER.is_admin(deps, caller)? {
-            return Err(StdError::generic_err("unauthorized"));
-        }
+        OWNER
+            .assert_admin(deps, caller)
+            .map_err(|err| StdError::generic_err(err.to_string()))?;
         if self.is_verified_block(deps.storage, root_hash)? {
             return Err(StdError::generic_err("block already verified"));
         }
@@ -261,7 +257,10 @@ impl Validator {
 
 impl IValidator for Validator {
     fn is_verified_block(&self, storage: &dyn Storage, root_hash: Bytes32) -> StdResult<bool> {
-        Ok(VERIFIED_BLOCKS.load(storage, &root_hash)?.verified)
+        Ok(VERIFIED_BLOCKS
+            .may_load(storage, &root_hash)?
+            .unwrap_or_default()
+            .verified)
     }
 }
 
@@ -270,7 +269,7 @@ mod tests {
     use cosmwasm_std::{testing::mock_dependencies, HexBinary};
     use tonbridge_parser::{
         tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser},
-        types::{Bytes32, Vdata},
+        types::{Bytes32, Vdata, VerifiedBlockInfo},
     };
 
     use super::Validator;
@@ -284,6 +283,12 @@ mod tests {
             .as_slice()
             .try_into()
             .unwrap()
+    }
+
+    #[test]
+    fn test_default_verified_blocks_info() {
+        let default_block_info = VerifiedBlockInfo::default();
+        assert_eq!(default_block_info.verified, false);
     }
 
     #[test]
@@ -464,29 +469,21 @@ mod tests {
 
         let mut deps = mock_dependencies();
         let validator = Validator::default();
-        for arr in signatures.chunks(5) {
-            let mut sub_arr = arr.to_vec();
-
-            while sub_arr.len() < 5 {
-                sub_arr.push(signatures[0].clone());
-            }
-
-            validator
-                .verify_validators(
-                    &mut deps.storage,
-                    &deps.api,
-                    root_hash,
-                    file_hash,
-                    &sub_arr.try_into().unwrap(),
-                )
-                .unwrap();
-        }
+        validator
+            .verify_validators(
+                &mut deps.storage,
+                &deps.api,
+                root_hash,
+                file_hash,
+                &signatures,
+            )
+            .unwrap();
 
         let err = validator
             .add_current_block_to_verified_set(&mut deps.storage, root_hash)
             .unwrap_err();
 
-        assert!(err.to_string().contains("not enought votes"));
+        assert!(err.to_string().contains("not enough votes"));
 
         // for (let i = 0; i < signatures.length; i++) {
         //   expect(
