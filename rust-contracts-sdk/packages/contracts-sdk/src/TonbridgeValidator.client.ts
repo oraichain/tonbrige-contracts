@@ -103,10 +103,10 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
     rootHash: string;
     vdata: VdataHex[];
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
-  addCurrentBlockToVerifiedSet: ({
-    rootHash
+  readMasterProof: ({
+    boc
   }: {
-    rootHash: string;
+    boc: string;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   readStateProof: ({
     boc,
@@ -119,6 +119,13 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
     boc
   }: {
     boc: string;
+  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
+  setVerifiedBlock: ({
+    rootHash,
+    seqNo
+  }: {
+    rootHash: string;
+    seqNo: number;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
 }
 export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient implements TonbridgeValidatorInterface {
@@ -134,9 +141,10 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     this.parseCandidatesRootBlock = this.parseCandidatesRootBlock.bind(this);
     this.resetValidatorSet = this.resetValidatorSet.bind(this);
     this.verifyValidators = this.verifyValidators.bind(this);
-    this.addCurrentBlockToVerifiedSet = this.addCurrentBlockToVerifiedSet.bind(this);
+    this.readMasterProof = this.readMasterProof.bind(this);
     this.readStateProof = this.readStateProof.bind(this);
     this.parseShardProofPath = this.parseShardProofPath.bind(this);
+    this.setVerifiedBlock = this.setVerifiedBlock.bind(this);
   }
 
   parseCandidatesRootBlock = async ({
@@ -178,14 +186,14 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
       }
     }, _fee, _memo, _funds);
   };
-  addCurrentBlockToVerifiedSet = async ({
-    rootHash
+  readMasterProof = async ({
+    boc
   }: {
-    rootHash: string;
+    boc: string;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
-      add_current_block_to_verified_set: {
-        root_hash: rootHash
+      read_master_proof: {
+        boc
       }
     }, _fee, _memo, _funds);
   };
@@ -211,6 +219,20 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     return await this.client.execute(this.sender, this.contractAddress, {
       parse_shard_proof_path: {
         boc
+      }
+    }, _fee, _memo, _funds);
+  };
+  setVerifiedBlock = async ({
+    rootHash,
+    seqNo
+  }: {
+    rootHash: string;
+    seqNo: number;
+  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
+    return await this.client.execute(this.sender, this.contractAddress, {
+      set_verified_block: {
+        root_hash: rootHash,
+        seq_no: seqNo
       }
     }, _fee, _memo, _funds);
   };

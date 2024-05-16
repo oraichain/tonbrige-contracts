@@ -17,8 +17,8 @@ export type ExecuteMsg = {
     vdata: VdataHex[];
   };
 } | {
-  add_current_block_to_verified_set: {
-    root_hash: string;
+  read_master_proof: {
+    boc: string;
   };
 } | {
   read_state_proof: {
@@ -28,6 +28,11 @@ export type ExecuteMsg = {
 } | {
   parse_shard_proof_path: {
     boc: string;
+  };
+} | {
+  set_verified_block: {
+    root_hash: string;
+    seq_no: number;
   };
 };
 export interface VdataHex {

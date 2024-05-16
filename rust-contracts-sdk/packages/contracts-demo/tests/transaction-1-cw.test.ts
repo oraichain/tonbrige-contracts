@@ -60,12 +60,11 @@ describe("Tree of Cells parser tests 1", () => {
     expect(validators.length).toEqual(0);
   });
 
-  it("Should change to a new set of validators from boc to candidatesForValidators", async () => {
+  it("Verify validator signatures", async () => {
     const boc = findBoc("proof-validators");
-
     await validator.parseCandidatesRootBlock({ boc: boc.toString("hex") });
 
-    const validators = (await validator.getCandidatesForValidators())
+    let validators = (await validator.getCandidatesForValidators())
       .filter((validator) => validator.c_type !== 0)
       .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
@@ -76,11 +75,7 @@ describe("Tree of Cells parser tests 1", () => {
       expect(item).not.toBeUndefined();
       expect(validator.pubkey).toEqual(item?.pubkey);
     });
-  });
 
-  it("Should set updated validator set and its block's hash", async () => {
-    const boc = findBoc("proof-validators");
-    await validator.parseCandidatesRootBlock({ boc: boc.toString("hex") });
     const signatures = data.find((el) => el.type === "proof-validators")!.signatures!;
 
     await validator.verifyValidators({
@@ -97,12 +92,11 @@ describe("Tree of Cells parser tests 1", () => {
         })
       ).toEqual(true);
     }
+    expect(await validator.isVerifiedBlock({ rootHash: updateValidatorsRootHash })).toEqual(true);
 
-    let validators = (await validator.getValidators())
+    validators = (await validator.getValidators())
       .filter((validator) => validator.c_type !== 0)
       .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
-
-    expect(await validator.isVerifiedBlock({ rootHash: updateValidatorsRootHash })).toEqual(true);
 
     validators.forEach((validator) => {
       const item = updateValidators.find((v) => v.node_id === validator.node_id);
@@ -115,20 +109,57 @@ describe("Tree of Cells parser tests 1", () => {
     expect(validators.length).toEqual(0);
   });
 
-  it("Should add validators for update from boc to candidatesForValidators", async () => {});
+  it("keyblock test", async () => {
+    // fixture. Setting up a new verified block
+    // Normally, this should be verified using validator signatures.
+    const masterBlockRootHash = "0x456ae983e2af89959179ed8b0e47ab702f06addef7022cb6c365aac4b0e5a0b9";
+    const stateHashBoc = findBoc("state-hash").toString("hex");
+    await validator.setVerifiedBlock({
+      rootHash: masterBlockRootHash,
+      seqNo: 0
+    });
+    expect(
+      await validator.isVerifiedBlock({
+        rootHash: masterBlockRootHash
+      })
+    ).toEqual(true);
 
-  it("Should throw an exception for set validators when signatures was not checked", async () => {});
+    // Store state hash of the block so that we can use it to validate older blocks
+    await validator.readMasterProof({ boc: stateHashBoc });
 
-  // TODO: check signatures for wrong boc/fileHash/vdata
-  it("Should verify signatures", async () => {});
+    // testing. Validate an older block on the masterchain
+    const shardStateBoc = findBoc("shard-state").toString("hex");
+    await validator.readStateProof({
+      boc: shardStateBoc,
+      rootHash: masterBlockRootHash
+    });
 
-  it("should update validators", async () => {});
+    expect(
+      await validator.isVerifiedBlock({
+        // root block hash of the older block compared to the master block
+        rootHash: "0xef2b87352875737c44346b7588cb799b6ca7c10e47015515026f035fe8b6a5c7"
+      })
+    ).toEqual(true);
+  });
 
-  it("verify-signature test", async () => {});
+  it("shard block test", async () => {
+    // prerequisite. Need the new masterchain's block to be verified first
+    const masterBlockRootHash = "0x456ae983e2af89959179ed8b0e47ab702f06addef7022cb6c365aac4b0e5a0b9";
+    expect(
+      await validator.isVerifiedBlock({
+        rootHash: masterBlockRootHash
+      })
+    ).toEqual(true);
+    const boc = findBoc("shard-block").toString("hex");
 
-  it("shard state test", async () => {});
-
-  it("shard block test", async () => {});
+    await validator.parseShardProofPath({ boc });
+    expect(
+      await validator.isVerifiedBlock({
+        // root hash of the shard block
+        rootHash: "0x641ccceabf2d7944f87e7c7d0e5de8c5e00b890044cc6d21ce14103becc6196a"
+      })
+    ).toEqual(true);
+  });
 
   it("bridge contract reads data from transaction", async () => {});
 });
