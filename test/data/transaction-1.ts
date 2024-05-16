@@ -224,7 +224,7 @@ export const data = [
 ];
 
 export const initialValidatorsBlockRootHash =
-  "0xcaf60c4ec9f988441d8bc7b2c33aeb5cc26b04a8143210bbf764f51da89e37b6";
+  "caf60c4ec9f988441d8bc7b2c33aeb5cc26b04a8143210bbf764f51da89e37b6";
 export const initialValidatorsList = [
   {
     node_id:
@@ -313,7 +313,7 @@ export const initialValidatorsList = [
 ];
 
 export const updateValidatorsRootHash =
-  "0x292edb12dadb1b56db5c44687bf1311dcac38089f8b895b11bf0c8fbd605989e";
+  "292edb12dadb1b56db5c44687bf1311dcac38089f8b895b11bf0c8fbd605989e";
 export const updateValidators = [
   {
     node_id:

@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, Binary, CosmosMsg, Deps, DepsMut, Response, StdError, StdResult, Uint256,
+    Addr, Binary, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult, Uint256,
 };
 use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
 use tonbridge_parser::{
@@ -58,7 +58,7 @@ impl Bridge {
 
         let is_block_verified = self
             .validator
-            .is_verified_block(&deps.querier, Binary::from(&root_hash))?;
+            .is_verified_block(&deps.querier, HexBinary::from(&root_hash))?;
 
         if !is_block_verified {
             return Err(StdError::generic_err(

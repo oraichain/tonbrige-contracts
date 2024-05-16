@@ -1,7 +1,7 @@
 use crate::msg::{ExecuteMsg, QueryMsg};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    to_binary, Addr, Binary, CosmosMsg, CustomQuery, QuerierWrapper, QueryRequest, StdResult,
+    to_binary, Addr, CosmosMsg, CustomQuery, HexBinary, QuerierWrapper, QueryRequest, StdResult,
     WasmMsg, WasmQuery,
 };
 
@@ -37,7 +37,7 @@ impl ValidatorWrapper {
     pub fn is_verified_block<CQ>(
         &self,
         querier: &QuerierWrapper<CQ>,
-        root_hash: Binary,
+        root_hash: HexBinary,
     ) -> StdResult<bool>
     where
         CQ: CustomQuery,

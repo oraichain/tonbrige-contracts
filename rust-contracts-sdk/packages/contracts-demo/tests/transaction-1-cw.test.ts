@@ -112,7 +112,7 @@ describe("Tree of Cells parser tests 1", () => {
   it("keyblock test", async () => {
     // fixture. Setting up a new verified block
     // Normally, this should be verified using validator signatures.
-    const masterBlockRootHash = "0x456ae983e2af89959179ed8b0e47ab702f06addef7022cb6c365aac4b0e5a0b9";
+    const masterBlockRootHash = "456ae983e2af89959179ed8b0e47ab702f06addef7022cb6c365aac4b0e5a0b9";
     const stateHashBoc = findBoc("state-hash").toString("hex");
     await validator.setVerifiedBlock({
       rootHash: masterBlockRootHash,
@@ -137,14 +137,14 @@ describe("Tree of Cells parser tests 1", () => {
     expect(
       await validator.isVerifiedBlock({
         // root block hash of the older block compared to the master block
-        rootHash: "0xef2b87352875737c44346b7588cb799b6ca7c10e47015515026f035fe8b6a5c7"
+        rootHash: "ef2b87352875737c44346b7588cb799b6ca7c10e47015515026f035fe8b6a5c7"
       })
     ).toEqual(true);
   });
 
   it("shard block test", async () => {
     // prerequisite. Need the new masterchain's block to be verified first
-    const masterBlockRootHash = "0x456ae983e2af89959179ed8b0e47ab702f06addef7022cb6c365aac4b0e5a0b9";
+    const masterBlockRootHash = "456ae983e2af89959179ed8b0e47ab702f06addef7022cb6c365aac4b0e5a0b9";
     expect(
       await validator.isVerifiedBlock({
         rootHash: masterBlockRootHash
@@ -156,7 +156,7 @@ describe("Tree of Cells parser tests 1", () => {
     expect(
       await validator.isVerifiedBlock({
         // root hash of the shard block
-        rootHash: "0x641ccceabf2d7944f87e7c7d0e5de8c5e00b890044cc6d21ce14103becc6196a"
+        rootHash: "641ccceabf2d7944f87e7c7d0e5de8c5e00b890044cc6d21ce14103becc6196a"
       })
     ).toEqual(true);
   });

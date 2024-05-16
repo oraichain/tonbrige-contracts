@@ -200,7 +200,7 @@ pub fn get_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
     Ok(validator.parse_user_friendly_validators(result))
 }
 
-pub fn is_verified_block(deps: Deps, root_hash: Binary) -> StdResult<bool> {
+pub fn is_verified_block(deps: Deps, root_hash: HexBinary) -> StdResult<bool> {
     let validator = VALIDATOR.load(deps.storage)?;
     validator.is_verified_block(
         deps.storage,
