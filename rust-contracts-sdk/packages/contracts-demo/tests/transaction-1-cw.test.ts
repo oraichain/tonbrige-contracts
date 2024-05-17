@@ -1,5 +1,6 @@
 import { SimulateCosmWasmClient } from "@oraichain/cw-simulate";
 import { toAmount } from "@oraichain/oraidex-common";
+import { OraiswapTokenClient } from "@oraichain/oraidex-contracts-sdk";
 import {
   InstantiateMsg as Cw20InstantiateMsg,
   MinterResponse
@@ -13,7 +14,6 @@ import {
   updateValidatorsRootHash
 } from "../../../../test/data/transaction-1";
 import { deployContract } from "../../contracts-build/src";
-import { OraiswapTokenClient } from "../../contracts-sdk/build/OraiswapToken.client";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "../../contracts-sdk/src";
 
 describe("Tree of Cells parser tests 1", () => {
