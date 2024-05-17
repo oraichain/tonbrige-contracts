@@ -16,10 +16,3 @@ pub struct ChannelState {
     pub outstanding: Uint128,
     pub total_sent: Uint128,
 }
-
-#[cw_serde]
-#[derive(Default)]
-pub struct ChannelKey {
-    pub channel_id: String,
-    pub denom: String,
-}

@@ -106,12 +106,15 @@ impl Bridge {
             deps.api
                 .addr_humanize(&CanonicalAddr::from(packet_data.receiving_address.clone()))?
         ));
+        // FIXME: remove hardcode ics denom key
+        let channel_id = "";
+        let denom = "";
 
         let mapping = ics20_denoms().load(
             deps.storage,
-            // FIXME: remove hardcode ics denom key
-            &get_key_ics20_ibc_denom(&parse_ibc_wasm_port_id(contract_address), "", ""),
+            &get_key_ics20_ibc_denom(&parse_ibc_wasm_port_id(contract_address), channel_id, denom),
         )?;
+        // TODO: add increase channel balance here.
         adapter.execute(deps, packet_data, opcode, mapping)
     }
 

@@ -1,7 +1,7 @@
 use cw_storage_plus::{Index, IndexList, IndexedMap, Map, MultiIndex};
 
 use cw_controllers::Admin;
-use tonbridge_bridge::state::{ChannelKey, ChannelState, MappingMetadata};
+use tonbridge_bridge::state::{ChannelState, MappingMetadata};
 use tonbridge_parser::types::Bytes32;
 
 /// Owner admin
@@ -13,7 +13,7 @@ pub const PROCESSED_TXS: Map<&Bytes32, bool> = Map::new("processed_txs");
 // =============================== Reference from: https://github.com/oraichain/ibc-bridge-wasm.git
 /// This channel state is used when a REMOTE chain initiates ibc transfer to LOCAL chain
 /// LOCAL chain is the chain hosting this smart contract.
-pub const REMOTE_INITIATED_CHANNEL_STATE: Map<ChannelKey, ChannelState> =
+pub const REMOTE_INITIATED_CHANNEL_STATE: Map<(&str, &str), ChannelState> =
     Map::new("remote_initiated_channel_state");
 
 // MappingMetadataIndexex structs keeps a list of indexers
