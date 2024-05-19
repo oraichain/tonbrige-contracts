@@ -15,7 +15,7 @@ use tonbridge_parser::{
 pub trait IBaseAdapter {
     fn parse_packet_data(
         &self,
-        boc: &[u8],
+        tx_boc: &[u8],
         opcode: Bytes32,
         cells: &mut [CellData],
         root_idx: usize,
@@ -52,20 +52,20 @@ impl Adapter {
 impl IBaseAdapter for Adapter {
     fn parse_packet_data(
         &self,
-        boc: &[u8],
+        tx_boc: &[u8],
         opcode: Bytes32,
         cells: &mut [CellData],
         root_idx: usize,
     ) -> StdResult<PacketData> {
         self.transaction_parser
-            .parse_transaction_header(boc, cells, root_idx)?;
+            .parse_transaction_header(tx_boc, cells, root_idx)?;
         let cell_idx = read_cell(cells, root_idx);
         let mut messages = self
             .transaction_parser
-            .parse_messages_header(boc, cells, cell_idx)?;
+            .parse_messages_header(tx_boc, cells, cell_idx)?;
 
         let msg_data = self.transaction_parser.get_data_from_messages(
-            boc,
+            tx_boc,
             opcode,
             cells,
             &mut messages.out_messages,

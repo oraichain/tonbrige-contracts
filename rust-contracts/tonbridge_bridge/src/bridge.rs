@@ -1,10 +1,13 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     Addr, CanonicalAddr, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult,
-    Uint256,
+    Uint128, Uint256,
 };
 use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
-use tonbridge_bridge::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
+use tonbridge_bridge::{
+    msg::Ics20Packet,
+    parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
+};
 use tonbridge_parser::{
     block_parser::{BlockParser, IBlockParser},
     transaction_parser::{ITransactionParser, TransactionParser},
@@ -131,5 +134,32 @@ impl Bridge {
         adapter: &Adapter,
     ) -> StdResult<Response> {
         adapter.swap_token(deps, from, amount, to)
+    }
+
+    pub fn validate_basic_ics20_packet(
+        packet: &Ics20Packet,
+        amount: &Uint128,
+        denom: &str,
+        sender: &str,
+    ) -> StdResult<()> {
+        if packet.amount.ne(amount) {
+            return Err(StdError::generic_err(format!(
+                "Sent amount {:?} is not equal to amount given in boc, which is {:?}",
+                amount, packet.amount
+            )));
+        }
+        if packet.denom.ne(denom) {
+            return Err(StdError::generic_err(format!(
+                "Denom {:?} is not equal to denom given in boc, which is {:?}",
+                denom, packet.denom
+            )));
+        }
+        if packet.sender.ne(sender) {
+            return Err(StdError::generic_err(format!(
+                "Sender {:?} is not equal to sender given in boc, which is {:?}",
+                sender, packet.sender
+            )));
+        }
+        Ok(())
     }
 }

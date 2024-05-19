@@ -1,5 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::HexBinary;
+use cosmwasm_std::{HexBinary, Uint128};
+use cw20::Cw20ReceiveMsg;
 use oraiswap::asset::AssetInfo;
 
 #[cw_serde]
@@ -14,6 +15,8 @@ pub enum ExecuteMsg {
         validator_contract_addr: String,
     },
     UpdateMappingPair(UpdatePairMsg),
+    BridgeToTon(BridgeToTonMsg),
+    Receive(Cw20ReceiveMsg),
 }
 
 #[cw_serde]
@@ -25,6 +28,11 @@ pub struct UpdatePairMsg {
     pub local_asset_info: AssetInfo,
     pub remote_decimals: u8,
     pub local_asset_info_decimals: u8,
+}
+
+#[cw_serde]
+pub struct BridgeToTonMsg {
+    pub boc: HexBinary,
 }
 
 /// We currently take no arguments for migrations
@@ -44,4 +52,40 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct ConfigResponse {
     pub owner: Option<String>,
+}
+
+/// The format for sending an ics20 packet.
+/// Proto defined here: https://github.com/cosmos/cosmos-sdk/blob/v0.42.0/proto/ibc/applications/transfer/v1/transfer.proto#L11-L20
+/// This is compatible with the JSON serialization
+#[cw_serde]
+#[derive(Default)]
+pub struct Ics20Packet {
+    /// amount of tokens to transfer is encoded as a string
+    pub amount: Uint128,
+    /// the token denomination to be transferred
+    pub denom: String,
+    /// the recipient address on the destination chain
+    pub receiver: String,
+    /// the sender address
+    pub sender: String,
+    /// optional memo
+    pub memo: Option<String>,
+}
+
+impl Ics20Packet {
+    pub fn new<T: Into<String>>(
+        amount: Uint128,
+        denom: T,
+        sender: &str,
+        receiver: &str,
+        memo: Option<String>,
+    ) -> Self {
+        Ics20Packet {
+            denom: denom.into(),
+            amount,
+            sender: sender.to_string(),
+            receiver: receiver.to_string(),
+            memo,
+        }
+    }
 }

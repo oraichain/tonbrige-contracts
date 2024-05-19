@@ -300,7 +300,9 @@ dependencies = [
  "cosmwasm-std",
  "cw-controllers",
  "cw-storage-plus 1.1.0",
+ "cw-utils 1.0.1",
  "cw20",
+ "cw20-ics20-msg",
  "thiserror",
  "tonbridge-adapter",
  "tonbridge-bridge",
@@ -1127,6 +1129,7 @@ version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw20",
  "oraiswap 0.2.0 (git+https://github.com/oraichain/oraiswap.git?rev=daef7e664000a36214cc451a3965c398595be5e0)",
  "tonbridge-parser",
 ]

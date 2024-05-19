@@ -18,3 +18,4 @@ oraiswap = { workspace = true }
 cosmwasm-schema = { workspace = true }
 cosmwasm-std = { workspace = true }
 tonbridge-parser = { workspace = true }
+cw20 = { workspace = true }
