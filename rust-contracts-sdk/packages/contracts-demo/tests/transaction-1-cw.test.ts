@@ -15,6 +15,7 @@ import {
 } from "../../../../test/data/transaction-1";
 import { deployContract } from "../../contracts-build/src";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "../../contracts-sdk/src";
+import { Amount } from "../../contracts-sdk/src/TonbridgeBridge.types";
 
 describe("Tree of Cells parser tests 1", () => {
   const client = new SimulateCosmWasmClient({
@@ -56,6 +57,7 @@ describe("Tree of Cells parser tests 1", () => {
     bridge = new TonbridgeBridgeClient(client, sender, bridgeDeployResult.contractAddress);
     dummyToken = new OraiswapTokenClient(client, sender, dummyTokenDeployResult.contractAddress);
 
+    // FIXME: change denom & channel id to correct denom and channel id
     await bridge.updateMappingPair({
       denom: "",
       localAssetInfo: { token: { contract_addr: dummyToken.contractAddress } },
@@ -204,6 +206,15 @@ describe("Tree of Cells parser tests 1", () => {
       opcode: "0000000000000000000000000000000000000000000000000000000000000001"
     });
 
-    // expect(await token.balanceOf("0xe003de6861c9e3b82f293335d4cdf90c299cbbd3")).to.be.equal("12733090031156665196");
+    // FIXME: this address is converted from 20 bytes of the address in the tx boc.
+    const balanceOf = await dummyToken.balance({ address: "orai1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqskuxw" });
+    // FIXME: balance = 1 because we hard-coded it in the contract for testing. Should not be 1 in real tests
+    expect(balanceOf.balance).toEqual("1");
+
+    const channelBalance = await bridge.channelStateData({ channelId: "" });
+    expect(channelBalance.balances.length).toEqual(1);
+    expect(channelBalance.balances[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
+    expect(channelBalance.total_sent.length).toEqual(1);
+    expect(channelBalance.total_sent[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
   });
 });

@@ -5,9 +5,9 @@
 */
 
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult } from "@cosmjs/cosmwasm-stargate";
-import { Coin, StdFee } from "@cosmjs/amino";
+import { StdFee } from "@cosmjs/amino";
 import {HexBinary, Boolean} from "./types";
-import {InstantiateMsg, ExecuteMsg, AssetInfo, Addr, UpdatePairMsg, QueryMsg, MigrateMsg, ConfigResponse} from "./TonbridgeBridge.types";
+import {InstantiateMsg, ExecuteMsg, AssetInfo, Addr, Uint128, Binary, UpdatePairMsg, BridgeToTonMsg, Cw20ReceiveMsg, QueryMsg, MigrateMsg, Amount, ChannelResponse, Coin, Cw20CoinVerified, ConfigResponse} from "./TonbridgeBridge.types";
 export interface TonbridgeBridgeReadOnlyInterface {
   contractAddress: string;
   config: () => Promise<ConfigResponse>;
@@ -16,6 +16,11 @@ export interface TonbridgeBridgeReadOnlyInterface {
   }: {
     txHash: HexBinary;
   }) => Promise<Boolean>;
+  channelStateData: ({
+    channelId
+  }: {
+    channelId: string;
+  }) => Promise<ChannelResponse>;
 }
 export class TonbridgeBridgeQueryClient implements TonbridgeBridgeReadOnlyInterface {
   client: CosmWasmClient;
@@ -26,6 +31,7 @@ export class TonbridgeBridgeQueryClient implements TonbridgeBridgeReadOnlyInterf
     this.contractAddress = contractAddress;
     this.config = this.config.bind(this);
     this.isTxProcessed = this.isTxProcessed.bind(this);
+    this.channelStateData = this.channelStateData.bind(this);
   }
 
   config = async (): Promise<ConfigResponse> => {
@@ -41,6 +47,17 @@ export class TonbridgeBridgeQueryClient implements TonbridgeBridgeReadOnlyInterf
     return this.client.queryContractSmart(this.contractAddress, {
       is_tx_processed: {
         tx_hash: txHash
+      }
+    });
+  };
+  channelStateData = async ({
+    channelId
+  }: {
+    channelId: string;
+  }): Promise<ChannelResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, {
+      channel_state_data: {
+        channel_id: channelId
       }
     });
   };
@@ -72,6 +89,20 @@ export interface TonbridgeBridgeInterface extends TonbridgeBridgeReadOnlyInterfa
     localChannelId: string;
     remoteDecimals: number;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
+  bridgeToTon: ({
+    boc
+  }: {
+    boc: HexBinary;
+  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
+  receive: ({
+    amount,
+    msg,
+    sender
+  }: {
+    amount: Uint128;
+    msg: Binary;
+    sender: string;
+  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
 }
 export class TonbridgeBridgeClient extends TonbridgeBridgeQueryClient implements TonbridgeBridgeInterface {
   client: SigningCosmWasmClient;
@@ -85,6 +116,8 @@ export class TonbridgeBridgeClient extends TonbridgeBridgeQueryClient implements
     this.contractAddress = contractAddress;
     this.readTransaction = this.readTransaction.bind(this);
     this.updateMappingPair = this.updateMappingPair.bind(this);
+    this.bridgeToTon = this.bridgeToTon.bind(this);
+    this.receive = this.receive.bind(this);
   }
 
   readTransaction = async ({
@@ -127,6 +160,34 @@ export class TonbridgeBridgeClient extends TonbridgeBridgeQueryClient implements
         local_asset_info_decimals: localAssetInfoDecimals,
         local_channel_id: localChannelId,
         remote_decimals: remoteDecimals
+      }
+    }, _fee, _memo, _funds);
+  };
+  bridgeToTon = async ({
+    boc
+  }: {
+    boc: HexBinary;
+  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
+    return await this.client.execute(this.sender, this.contractAddress, {
+      bridge_to_ton: {
+        boc
+      }
+    }, _fee, _memo, _funds);
+  };
+  receive = async ({
+    amount,
+    msg,
+    sender
+  }: {
+    amount: Uint128;
+    msg: Binary;
+    sender: string;
+  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
+    return await this.client.execute(this.sender, this.contractAddress, {
+      receive: {
+        amount,
+        msg,
+        sender
       }
     }, _fee, _memo, _funds);
   };

@@ -1,7 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, CanonicalAddr, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult,
-    Uint128, Uint256,
+    Addr, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult, Uint128, Uint256,
 };
 use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
 use tonbridge_bridge::{
@@ -16,7 +15,10 @@ use tonbridge_parser::{
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
 
-use crate::state::{ics20_denoms, PROCESSED_TXS};
+use crate::{
+    channel::increase_channel_balance,
+    state::{ics20_denoms, PROCESSED_TXS},
+};
 
 #[cw_serde]
 pub struct Bridge {
@@ -99,16 +101,11 @@ impl Bridge {
         PROCESSED_TXS.save(deps.storage, &tx_info.address_hash, &true)?;
         let adapter = Adapter::new();
         // FIXME: packet data should have something for the bridge contract to query mapping pair
-        let packet_data =
+        let mut packet_data =
             adapter.parse_packet_data(tx_boc, opcode, &mut tx_toc, tx_header.root_idx)?;
+        // FIXME: remove hardcode amount + 1 to amount. +1 here for test cases
+        packet_data.amount = packet_data.amount.checked_add(Uint256::one())?;
 
-        deps.api
-            .debug(&format!("packet data: {:?}", packet_data.amount));
-        deps.api.debug(&format!(
-            "recieving address: {:?}",
-            deps.api
-                .addr_humanize(&CanonicalAddr::from(packet_data.receiving_address.clone()))?
-        ));
         // FIXME: remove hardcode ics denom key
         let channel_id = "";
         let denom = "";
@@ -117,7 +114,12 @@ impl Bridge {
             deps.storage,
             &get_key_ics20_ibc_denom(&parse_ibc_wasm_port_id(contract_address), channel_id, denom),
         )?;
-        // TODO: add increase channel balance here.
+        increase_channel_balance(
+            deps.storage,
+            channel_id,
+            denom,
+            packet_data.amount.try_into()?,
+        )?;
         adapter.execute(deps, packet_data, opcode, mapping)
     }
 

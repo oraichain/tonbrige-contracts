@@ -1130,6 +1130,7 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw20",
+ "cw20-ics20-msg",
  "oraiswap 0.2.0 (git+https://github.com/oraichain/oraiswap.git?rev=daef7e664000a36214cc451a3965c398595be5e0)",
  "tonbridge-parser",
 ]

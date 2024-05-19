@@ -1,10 +1,11 @@
-use cosmwasm_std::{entry_point, from_binary, to_binary, Addr};
+use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Order};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use cw_utils::{nonpayable, one_coin};
 use tonbridge_bridge::msg::{
-    BridgeToTonMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, UpdatePairMsg,
+    BridgeToTonMsg, ChannelResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
+    QueryMsg, UpdatePairMsg,
 };
 use tonbridge_bridge::parser::{
     get_key_ics20_ibc_denom, parse_ibc_wasm_port_id, parse_packet_boc_to_ics_20,
@@ -14,7 +15,7 @@ use tonbridge_parser::bit_reader::to_bytes32;
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
-use crate::state::{ics20_denoms, OWNER, PROCESSED_TXS};
+use crate::state::{ics20_denoms, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -150,6 +151,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&get_config(deps)?),
         QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
+        QueryMsg::ChannelStateData { channel_id } => to_binary(&query_channel(deps, channel_id)?),
     }
 }
 
@@ -162,6 +164,29 @@ pub fn is_tx_processed(deps: Deps, tx_hash: HexBinary) -> StdResult<bool> {
 pub fn get_config(deps: Deps) -> StdResult<ConfigResponse> {
     let owner = OWNER.query_admin(deps)?;
     Ok(ConfigResponse { owner: owner.admin })
+}
+
+// make public for ibc tests
+pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelResponse> {
+    let state = REMOTE_INITIATED_CHANNEL_STATE
+        .prefix(&channel_id)
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|r| {
+            // this denom is
+            r.map(|(denom, v)| {
+                let outstanding = Amount::from_parts(denom.clone(), v.outstanding);
+                let total = Amount::from_parts(denom, v.total_sent);
+                (outstanding, total)
+            })
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+    // we want (Vec<outstanding>, Vec<total>)
+    let (balances, total_sent): (Vec<Amount>, Vec<Amount>) = state.into_iter().unzip();
+
+    Ok(ChannelResponse {
+        balances,
+        total_sent,
+    })
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

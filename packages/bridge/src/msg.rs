@@ -1,6 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{HexBinary, Uint128};
 use cw20::Cw20ReceiveMsg;
+use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
 #[cw_serde]
@@ -46,6 +47,9 @@ pub enum QueryMsg {
     Config {},
     #[returns(bool)]
     IsTxProcessed { tx_hash: HexBinary },
+    /// Returns the details of the name channel, error if not created.
+    #[returns(ChannelResponse)]
+    ChannelStateData { channel_id: String },
 }
 
 // We define a custom struct for each query response
@@ -88,4 +92,13 @@ impl Ics20Packet {
             memo,
         }
     }
+}
+
+#[cw_serde]
+pub struct ChannelResponse {
+    /// How many tokens we currently have pending over this channel
+    pub balances: Vec<Amount>,
+    /// The total number of tokens that have been sent over this channel
+    /// (even if many have been returned, so balance is low)
+    pub total_sent: Vec<Amount>,
 }

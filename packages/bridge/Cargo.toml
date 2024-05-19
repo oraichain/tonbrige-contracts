@@ -19,3 +19,4 @@ cosmwasm-schema = { workspace = true }
 cosmwasm-std = { workspace = true }
 tonbridge-parser = { workspace = true }
 cw20 = { workspace = true }
+cw20-ics20-msg = { workspace = true }
