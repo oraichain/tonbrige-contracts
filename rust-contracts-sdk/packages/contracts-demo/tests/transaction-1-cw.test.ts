@@ -8,6 +8,7 @@ import {
 import {
   data,
   findBoc,
+  findTxHash,
   initialValidatorsBlockRootHash,
   initialValidatorsList,
   updateValidators,
@@ -216,5 +217,11 @@ describe("Tree of Cells parser tests 1", () => {
     expect(channelBalance.balances[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
     expect(channelBalance.total_sent.length).toEqual(1);
     expect(channelBalance.total_sent[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
+
+    const txHash = findTxHash();
+    const isTxProcessed = await bridge.isTxProcessed({
+      txHash
+    });
+    expect(isTxProcessed).toEqual(true);
   });
 });

@@ -412,3 +412,7 @@ export const findBoc = function (type: string, isTx = false) {
 
   return boc;
 };
+
+export const findTxHash = function () {
+  return data.find((el) => el.type === "tx-proof")!.addr!.split(":")[1];
+};
