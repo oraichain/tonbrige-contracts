@@ -34,6 +34,7 @@
     "@swc/core": "^1.4.11",
     "@swc/jest": "^0.2.36",
     "@types/jest": "^29.5.12",
+    "@types/chai": "4.3.16",
     "@types/lodash": "^4.17.0",
     "@types/node": "^20.11.30",
     "@typescript-eslint/eslint-plugin": "^7.3.1",
