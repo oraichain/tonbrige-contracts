@@ -25,7 +25,8 @@
     "@cosmjs/crypto": "0.31.3",
     "@cosmjs/proto-signing": "0.31.3",
     "@cosmjs/stargate": "0.31.3",
-    "@cosmjs/tendermint-rpc": "0.31.3"
+    "@cosmjs/tendermint-rpc": "0.31.3",
+    "buffer": "^6.0.3"
   },
   "devDependencies": {
     "@babel/traverse": "7.24.1",
@@ -33,8 +34,8 @@
     "@oraichain/cw-simulate": "^2.8.68",
     "@swc/core": "^1.4.11",
     "@swc/jest": "^0.2.36",
-    "@types/jest": "^29.5.12",
     "@types/chai": "4.3.16",
+    "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.0",
     "@types/node": "^20.11.30",
     "@typescript-eslint/eslint-plugin": "^7.3.1",
