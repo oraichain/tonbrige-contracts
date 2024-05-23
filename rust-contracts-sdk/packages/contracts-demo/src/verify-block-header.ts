@@ -1,3 +1,5 @@
+import { Cell } from "@ton/core";
+import { assert } from "console";
 import "dotenv/config";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
 
@@ -10,6 +12,7 @@ function intToIP(int: number) {
   return part4 + "." + part3 + "." + part2 + "." + part1;
 }
 
+// this logic is for proofing block header: https://docs.ton.org/develop/data-formats/proofs#block-header
 (async () => {
   const { liteservers } = await fetch("https://ton.org/global.config.json").then((data) => data.json());
   // Personal choice. Can choose a different index if needed
@@ -24,7 +27,15 @@ function intToIP(int: number) {
   );
   const engine: LiteEngine = new LiteRoundRobinEngine(engines);
   const client = new LiteClient({ engine });
-  console.log("get master info");
   const master = await client.getMasterchainInfo();
-  console.log("master", master);
+
+  const initKeyBlockSeqno = master.last.seqno;
+  const fullBlock = await client.getFullBlock(initKeyBlockSeqno);
+  const initialKeyBlockInformation = fullBlock.shards.find((blockRes) => blockRes.seqno === initKeyBlockSeqno);
+  const header = await client.getBlockHeader(initialKeyBlockInformation);
+  const cell = Cell.fromBoc(header.headerProof)[0];
+  console.log(cell.refs[0].hash(0).toString("hex"));
+  console.log(initialKeyBlockInformation.rootHash.toString("hex"));
+  assert(cell.refs[0].hash(0).toString("hex") === initialKeyBlockInformation.rootHash.toString("hex"));
+  engine.close();
 })();
