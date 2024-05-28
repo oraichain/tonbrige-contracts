@@ -4,7 +4,7 @@ module.exports = {
     "^.+\\.ts?$": ["@swc/jest"]
   },
   testEnvironment: "node",
-  modulePathIgnorePatterns: ["<rootDir>/dist/", "<rootDir>/packages/ibc-routing"],
+  modulePathIgnorePatterns: ["<rootDir>/dist/", "<rootDir>/packages/contracts-demo/src/ton-rocks-js"],
   collectCoverage: true,
   coverageReporters: ["cobertura", "html"],
   coveragePathIgnorePatterns: [
