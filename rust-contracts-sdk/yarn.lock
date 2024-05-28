@@ -9461,6 +9461,11 @@ ton-tl@^1.0.1:
     crc-32 "^1.2.2"
     pegjs "^0.10.0"
 
+tonapi-sdk-js@^1.0.10:
+  version "1.0.10"
+  resolved "https://registry.yarnpkg.com/tonapi-sdk-js/-/tonapi-sdk-js-1.0.10.tgz#dd2e8c1cb1b3205527185664b422c190578e5012"
+  integrity sha512-fwVRzQyq1igox3NiP/uYgFwH9dVC+ky01VTG64MiGL57q8vBlM/iJZpcmm4/0CmKyGf0Z/y4ox0sykJEaNlP2A==
+
 tonweb@^0.0.66:
   version "0.0.66"
   resolved "https://registry.yarnpkg.com/tonweb/-/tonweb-0.0.66.tgz#e9aa1f81ac2c2a9b0ff692294d58b1dfea516fb4"

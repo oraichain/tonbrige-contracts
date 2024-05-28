@@ -54,6 +54,7 @@ pub fn execute(
         ExecuteMsg::SetVerifiedBlock { root_hash, seq_no } => {
             set_verified_block(deps, &info.sender, root_hash, seq_no)
         }
+        ExecuteMsg::ParsePartValidators { boc } => parse_part_validators(deps, boc),
     }
 }
 
@@ -164,6 +165,12 @@ pub fn set_verified_block(
     let validator = VALIDATOR.load(deps.storage)?;
     validator.set_verified_block(deps, caller, to_bytes32(&root_hash)?, seq_no)?;
     Ok(Response::new().add_attributes(vec![("action", "set_verified_block")]))
+}
+
+pub fn parse_part_validators(deps: DepsMut, boc: HexBinary) -> Result<Response, ContractError> {
+    let mut validator = VALIDATOR.load(deps.storage)?;
+    validator.parse_part_validators(boc.as_slice())?;
+    Ok(Response::new().add_attributes(vec![("action", "parse_part_validators")]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

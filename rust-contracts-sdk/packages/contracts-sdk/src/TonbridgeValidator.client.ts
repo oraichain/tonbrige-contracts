@@ -127,6 +127,11 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
     rootHash: HexBinary;
     seqNo: number;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
+  parsePartValidators: ({
+    boc
+  }: {
+    boc: HexBinary;
+  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
 }
 export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient implements TonbridgeValidatorInterface {
   client: SigningCosmWasmClient;
@@ -145,6 +150,7 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     this.readStateProof = this.readStateProof.bind(this);
     this.parseShardProofPath = this.parseShardProofPath.bind(this);
     this.setVerifiedBlock = this.setVerifiedBlock.bind(this);
+    this.parsePartValidators = this.parsePartValidators.bind(this);
   }
 
   parseCandidatesRootBlock = async ({
@@ -233,6 +239,17 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
       set_verified_block: {
         root_hash: rootHash,
         seq_no: seqNo
+      }
+    }, _fee, _memo, _funds);
+  };
+  parsePartValidators = async ({
+    boc
+  }: {
+    boc: HexBinary;
+  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
+    return await this.client.execute(this.sender, this.contractAddress, {
+      parse_part_validators: {
+        boc
       }
     }, _fee, _memo, _funds);
   };

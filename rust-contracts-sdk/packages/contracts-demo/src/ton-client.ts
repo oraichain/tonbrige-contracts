@@ -4,7 +4,7 @@ import { TonClient, WalletContractV4, internal } from "@ton/ton";
 import "dotenv/config";
 
 (async () => {
-  const endpoint = await getHttpEndpoint({ network: "testnet" });
+  const endpoint = await getHttpEndpoint({ network: "mainnet" });
   // Create Client
   const client = new TonClient({
     endpoint

@@ -1,20 +1,13 @@
-import { Cell } from "@ton/core";
+import { Cell, parseValidatorSet } from "@ton/ton";
 import "dotenv/config";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
-
-function intToIP(int: number) {
-  var part1 = int & 255;
-  var part2 = (int >> 8) & 255;
-  var part3 = (int >> 16) & 255;
-  var part4 = (int >> 24) & 255;
-
-  return part4 + "." + part3 + "." + part2 + "." + part1;
-}
+import { Functions } from "ton-lite-client/dist/schema";
+import { intToIP } from "./common";
 
 (async () => {
   const { liteservers } = await fetch("https://ton.org/global.config.json").then((data) => data.json());
   // Personal choice. Can choose a different index if needed
-  const server = liteservers[1];
+  const server = liteservers[0];
 
   const engines: LiteEngine[] = [];
   engines.push(
@@ -35,8 +28,25 @@ function intToIP(int: number) {
   const fullBlock = await client.getFullBlock(initKeyBlockSeqno);
   const initialKeyBlockInformation = fullBlock.shards.find((blockRes) => blockRes.seqno === initKeyBlockSeqno);
   // console.log(initialKeyBlockInformation);
-  const blockConfig = await client.getConfig(initialKeyBlockInformation);
+  const blockConfig = await client.getConfig(initialKeyBlockInformation, {
+    awaitSeqno: initialKeyBlockInformation.seqno
+  });
   const validatorSetCell = blockConfig.config.get(34);
-  console.log(validatorSetCell.toBoc());
+
+  // TODO: need to proof that this validator set is valid
+  const validators = parseValidatorSet(validatorSetCell.beginParse());
+  console.dir(validators, { depth: null });
+
+  // get block
+  const configRaw = await engine.query(Functions.liteServer_getConfigAll, {
+    kind: "liteServer.getConfigAll",
+    id: {
+      kind: "tonNode.blockIdExt",
+      ...initialKeyBlockInformation
+    },
+    mode: 0
+  });
+  console.log("config raw: ", Cell.fromBoc(configRaw.configProof)[0].toBoc().toString("hex"));
+
   engine.close();
 })();
