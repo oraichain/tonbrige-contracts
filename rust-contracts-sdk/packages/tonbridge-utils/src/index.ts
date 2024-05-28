@@ -1,8 +1,7 @@
-
-  // export const utils = require('./utils');
-import iutils from './utils/index.js';
+// export const utils = require('./utils');
+import iutils from "./utils/index.js";
 // export const types = require('./types');
-import * as itypes from './types/index.js';
+import * as itypes from "./types/index.js";
 // import {
 //   Address,
 //   BitString,
@@ -14,16 +13,14 @@ import * as itypes from './types/index.js';
 // } from './types/index.js';
 // export types;
 
-
 // const {Address} = require("./Address");
 // const {BitString} = require("./BitString");
 // const {Cell} = require("./Cell");
 // const Hashmap = require("./Hashmap");
 
-
 // const providers = require("./providers");
 // export const configs = require('./configs');
-import * as iconfigs from './configs/index.js';
+// import * as iconfigs from "./configs/index";
 
 // const {Contract} = require('./contract/Contract');
 
@@ -35,54 +32,53 @@ import * as iconfigs from './configs/index.js';
 // const ClassicWallets = require("./contract/classic/wallet");
 
 // export const bc = require('./blockchain');
-import * as ibc from './blockchain/index.js';
+import * as ibc from "./blockchain/index";
 // export const Storages = require('./providers/Storage');
-import * as iStorages from './providers/Storage.js';
+import * as iStorages from "./providers/Storage";
+
+export * from "./block-utils";
+export * from "./types/Block.js";
 
 export namespace TonRocks {
+  export const version = "0.1.0";
 
-export const version = '0.1.0';
+  export const bc = ibc;
+  export const Storages = iStorages;
+  // export const types = itypes;
+  // export const configs = iconfigs;
 
-export const bc = ibc;
-export const Storages = iStorages;
-// export const types = itypes;
-export const configs = iconfigs;
+  export type bc = typeof ibc;
+  export type Storages = typeof iStorages;
+  // export type types = typeof itypes;
+  // export type configs = typeof iconfigs;
 
-export type bc = typeof ibc;
-export type Storages = typeof iStorages;
-// export type types = typeof itypes;
-export type configs = typeof iconfigs;
+  // export const utils = iutils;
+  // export type utils = typeof iutils;
+  export namespace utils {
+    export const BN = iutils.BN;
+    export type BN = typeof iutils.BN;
+    export const sha256 = iutils.sha256;
+    export type sha256 = typeof iutils.sha256;
+  }
 
+  export namespace types {
+    // export * from './types/index.js';
+    export const Address = itypes.Address;
+    export const BitString = itypes.BitString;
+    export const Cell = itypes.Cell;
+    export const Hashmap = itypes.Hashmap;
+    export const HashmapE = itypes.HashmapE;
+    export const HashmapAug = itypes.HashmapAug;
+    export const HashmapAugE = itypes.HashmapAugE;
 
-// export const utils = iutils;
-// export type utils = typeof iutils;
-export namespace utils {
-  export const BN = iutils.BN;
-  export type BN = typeof iutils.BN;
-  export const sha256 = iutils.sha256;
-  export type sha256 = typeof iutils.sha256;
-}
-
-export namespace types {
-  // export * from './types/index.js';
-
-  export const Address = itypes.Address;
-  export const BitString = itypes.BitString;
-  export const Cell = itypes.Cell;
-  export const Hashmap = itypes.Hashmap;
-  export const HashmapE = itypes.HashmapE;
-  export const HashmapAug = itypes.HashmapAug;
-  export const HashmapAugE = itypes.HashmapAugE;
-
-  export type Address = typeof itypes.Address;
-  export type BitString = typeof itypes.BitString;
-  export type Cell = any; // typeof itypes.Cell;
-  export type Hashmap = typeof itypes.Hashmap;
-  export type HashmapE = typeof itypes.HashmapE;
-  export type HashmapAug = typeof itypes.HashmapAug;
-  export type HashmapAugE = typeof itypes.HashmapAugE;
-
-}
+    export type Address = typeof itypes.Address;
+    export type BitString = typeof itypes.BitString;
+    export type Cell = any; // typeof itypes.Cell;
+    export type Hashmap = typeof itypes.Hashmap;
+    export type HashmapE = typeof itypes.HashmapE;
+    export type HashmapAug = typeof itypes.HashmapAug;
+    export type HashmapAugE = typeof itypes.HashmapAugE;
+  }
 }
 
 // namespace TonRocks {
@@ -160,7 +156,6 @@ export namespace types {
 // if (typeof window !== 'undefined') {
 //   window.TonRocks = TonRocks;
 // }
-
 
 export default TonRocks;
 // export default {

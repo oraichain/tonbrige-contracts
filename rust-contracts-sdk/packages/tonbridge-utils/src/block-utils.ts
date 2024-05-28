@@ -1,12 +1,9 @@
 // block-utils
 
 import _ from "lodash";
-
-import BN from "bn.js";
-import { loadHashmap } from "./ton-rocks-js/blockchain/BlockParser.js";
-import TonRocks from "./ton-rocks-js/index.js";
-
-type TBN = typeof TonRocks.utils.BN;
+import { loadHashmap } from "./blockchain/BlockParser.js";
+import { loadBit, loadRefIfExist, loadUint16 } from "./blockchain/BlockUtils.js";
+import TonRocks from "./index.js";
 
 export interface ISubTree {
   root: TonRocks.types.Cell;
@@ -292,7 +289,6 @@ export const printTreeList = (root: TonRocks.types.Cell, prefix: string = ""): v
     'bc24d063b6a5117c7262bd116448b7336b187327874dcef4376bf2c44ebe8937'
   ]
 */
-const { loadBit, loadUint16, loadRefIfExist } = TonRocks.bc;
 
 export const buildPathToConfig = (c: TonRocks.types.Cell): TonRocks.types.Cell[] | null => {
   const path: TonRocks.types.Cell[] = [];
@@ -377,7 +373,7 @@ export const buildPathToConfig = (c: TonRocks.types.Cell): TonRocks.types.Cell[]
     (
       c2: TonRocks.types.Cell,
       p2: { cs: number; ref: number },
-      n: BN
+      n: BigInt
       // ) =>
       //   console.log({c2,p2,n})
     ) =>
@@ -386,7 +382,7 @@ export const buildPathToConfig = (c: TonRocks.types.Cell): TonRocks.types.Cell[]
         p2,
         // (c3, p3) => loadConfigParam(c3, p3, n.toNumber()))));
         (c3: TonRocks.types.Cell, p3: { cs: number; ref: number }) => {
-          if (n.toNumber() == 34) {
+          if (Number(n) == 34) {
             hash34 = Buffer.from(c3.getHash()).toString("hex");
             // console.log(n.toString(16), n.toString(10), hash34);
           }
@@ -409,24 +405,29 @@ export const buildPathToConfig = (c: TonRocks.types.Cell): TonRocks.types.Cell[]
   return path.concat(p);
 };
 
-export const buildValidatorsData = async (root: TonRocks.types.Cell, fileHash: string) => {
+export async function buildValidatorsData(root: TonRocks.types.Cell): Promise<string[]> {
+  const proofParts: string[] = [];
+
   const p = buildPathToConfig(root);
   if (!p) {
-    console.log("ups!");
-    return;
+    throw new Error("Path not found");
   }
 
-  // printPath(p);
+  // console.log('path ====');
+  // console.log(p);
+  printPath(p);
 
   const proof = await buildProof(p, true);
   proof.refs[0] = await buildProof([root.refs[0]]);
   await proof.finalizeTree();
+  // console.log('before config refs:');
+  // console.log(proof.refs[3].refs[3].refs);
 
   const parts: ISubTree[] = [];
-  const { volume } = printTreeVolume(proof, parts);
-
-  console.log("volume:", volume);
-  // console.log('parts:', parts);
+  // TODO: make better
+  printTreeVolume(proof.refs[3].refs[3].refs[proof.refs[3].refs[3].refs.length - 1], parts);
+  // console.log('parts:');
+  // console.log(parts);
 
   const partsIndex = parts.reduce((m, p) => {
     const i = Buffer.from(p.root.getHash()).toString("hex");
@@ -434,73 +435,33 @@ export const buildValidatorsData = async (root: TonRocks.types.Cell, fileHash: s
     return m;
   }, <Record<string, TonRocks.types.Cell>>{});
   const keysPartsIndex = _.keys(partsIndex);
-  console.log("partsIndex:", keysPartsIndex);
-
-  // const buildBoc = async (root: TonRocks.types.Cell) => {
-  //   // const tree = await cloneTree(root);
-  //   const tree = root;
-  //   // await tree.finalize();
-  //   return tree.toBoc(false);
-  // };
-
   for (let i = 0; i < parts.length; i++) {
     const leafBoc = await makeBocLeaf(parts[i].root, i, keysPartsIndex);
-
-    // const leafRoot = await checkBoc(leafBoc.toString('hex'));
-    // // parse hashmap
-    // // data.list = loadHashmap(cell, t, 16, loadValidatorDescr);
-    // const t = { cs:0, ref:0 };
-
-    // const dimention = 5;
-
-    // const h = loadHashmap(leafRoot, t, dimention, loadValidatorDescr)
-    // for(const { weight, public_key } of h.map.values()) {
-    //   const pubKey = Buffer.from(public_key.pubkey);
-    //   console.log(pubKey.toString('hex'));
-    //   // const bufNodeIdShort = await compute_node_id_short(pubKey);
-    //   // res[bufNodeIdShort.toString('hex')] = { weight, pubKey };
-    // }
+    // console.log();
+    proofParts.push(leafBoc.toString("hex"));
   }
-  // await makeBocLeaf(parts[iLeaf].root, iLeaf); iLeaf++;
+
+  // console.log('proofParts len:', proofParts.length);
 
   const proofPruned = await buildProofExcept(proof, keysPartsIndex);
   await proofPruned.finalizeTree();
+
+  // console.log("CELLS SHOULDN'T be pruned", keysPartsIndex);
+  // console.log(
+  //   'proof before prune',
+  //   proof.refs.map((c) => Buffer.from(c.hashes[0]).toString('hex')),
+  //   Buffer.from(proof.hashes[0]).toString('hex'),
+  // );
+  // console.log(
+  //   'Prunned block root cell hash (extra):',
+  //   proofPruned.refs.map((c) => Buffer.from(c.getHash()).toString('hex')),
+  //   // proofPruned.refs[3],
+  //   Buffer.from(proofPruned.hashes[0]).toString('hex'),
+  // );
   const bocProofPruned = await proofPruned.toBoc(false);
 
-  // const bocConfigParams = await rootConfigParams.toBoc(false);
-  console.log("=== begin bocProofPruned ===");
-  // console.log('=== begin bocConfigParams ===');
-  console.log(Buffer.from(bocProofPruned).toString("hex"));
-  // console.log(Buffer.from(bocConfigParams).toString('hex'));
-  console.log("=== end bocProofPruned ===");
-  // console.log('=== end bocConfigParams ===');
+  const hexBoc = Buffer.from(bocProofPruned).toString("hex");
+  proofParts.unshift(hexBoc);
 
-  const cellsProofRoot = await checkBoc(bocProofPruned);
-  // const parsedBlock2 = TonRocks.bc.BlockParser.parseBlock(cellsProofRoot);
-  // console.log(parsedBlock2.extra.custom.config);
-
-  // // console.log('===', Buffer.from(cellsConfigParams[0].getHash()).toString('hex'), '===');
-  // console.log('===', Buffer.from(await cellsConfigParams[0].hash()).toString('hex'), '===');
-  console.log("=== file_hash:", fileHash, "===");
-
-  console.log("ROOT BLOCK PARSING:");
-  // const parsedBlock = TonRocks.bc.BlockParser.parseBlock(root);
-  const parsedBlock = TonRocks.bc.BlockParser.parseBlock(cellsProofRoot);
-  console.log("ROOT BLOCK PARSING END");
-
-  // for(const { weight, public_key } of map.values()) {
-  //   const pubKey = Buffer.from(public_key.pubkey);
-  //   const bufNodeIdShort = await compute_node_id_short(pubKey);
-  //   res[bufNodeIdShort.toString('hex')] = { weight, pubKey };
-  // }
-  const curValidators = parsedBlock.extra.custom.config.config.map.get("22");
-  if (!curValidators) {
-    throw new Error("xxx");
-  }
-  for (const { public_key } of curValidators.cur_validators.list.map.values()) {
-    const pubKey = Buffer.from(public_key.pubkey);
-    console.log(pubKey.toString("hex"));
-  }
-
-  return parsedBlock;
-};
+  return proofParts;
+}

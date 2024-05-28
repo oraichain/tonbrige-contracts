@@ -1,5 +1,5 @@
-const {Address, Cell} = require("../../../types");
-const {BN, bytesToHex, hexToBytes, nacl, stringToBytes, bytesToBase64} = require("../../../utils");
+const {Address, Cell} = require("../../../types/index.js");
+const {BN, bytesToHex, hexToBytes, nacl, stringToBytes, bytesToBase64} = require("../../../utils/index.js");
 const {ClassicContract} = require("../../ClassicContract.js");
 
 /**

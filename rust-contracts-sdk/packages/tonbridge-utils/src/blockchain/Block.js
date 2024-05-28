@@ -1,5 +1,5 @@
 // const {Cell, Address} = require("../types");
-import { Cell, Address } from "../types/index.ts";
+import { Cell, Address } from "../types/index.js";
 // const {BlockParser} = require("./BlockParser");
 import { BlockParser } from "./BlockParser.js";
 // const {BlockId} = require("./BlockId");
