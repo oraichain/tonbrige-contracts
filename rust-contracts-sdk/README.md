@@ -8,7 +8,7 @@ cwtools build ./rust-contracts/* -o rust-contracts-sdk/packages/contracts-build/
 # build schema
 cwtools build ./rust-contracts/* -s
 # gen code:
-cwtols gents ./rust-contracts/* -o rust-contracts-sdk/packages/contracts-sdk/srco
+cwtools gents ./rust-contracts/* -o rust-contracts-sdk/packages/contracts-sdk/src
 # gen doc:
 yarn docs
 

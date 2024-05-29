@@ -1,9 +1,9 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Api, StdError, StdResult, Storage};
+use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
-    block_parser::{compute_node_id, BlockParser, IBlockParser, ValidatorSet20, ValidatorSet32},
+    block_parser::{compute_node_id, BlockParser, IBlockParser, ValidatorSet, ValidatorSet32},
     tree_of_cells_parser::EMPTY_HASH,
-    types::{Bytes32, CachedCell, CellData, Vdata},
+    types::{Bytes32, CachedCell, CellData, ValidatorDescription, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
 
@@ -55,10 +55,10 @@ pub trait ISignatureValidator {
 #[cw_serde]
 #[derive(Default)]
 pub struct SignatureValidator {
-    pub validator_set: ValidatorSet20,
+    pub validator_set: ValidatorSet,
     total_weight: u64,
     pub pruned_cells: [CachedCell; 10],
-    pub candidates_for_validator_set: ValidatorSet20,
+    pub candidates_for_validator_set: ValidatorSet,
     candidates_total_weight: u64,
     root_hash: Bytes32,
     block_parser: BlockParser,
@@ -69,30 +69,33 @@ impl SignatureValidator {
         Self::default()
     }
     fn parse_validators(&mut self, validators: &mut ValidatorSet32) {
-        for i in 0..32 {
-            for j in 0..20 {
-                // is empty
-                if self.candidates_for_validator_set[j].weight == 0 {
-                    self.candidates_total_weight += validators[i].weight;
-                    self.candidates_for_validator_set[j] = validators[i];
-                    self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
-                    break;
-                }
+        let mut j = self.candidates_for_validator_set.len();
+        for i in 0..validators.len() {
+            // if the candidate is already in the list, we compare weight with the input
+            if let Some(candidate) = self.candidates_for_validator_set.iter_mut().find(|val| {
+                HexBinary::from(val.pubkey)
+                    .to_hex()
+                    .eq(&HexBinary::from(&validators[i].pubkey).to_string())
+            }) {
                 // old validator has less weight then new
-                if self.candidates_for_validator_set[j].weight < validators[i].weight {
+                if candidate.weight < validators[i].weight {
                     self.candidates_total_weight += validators[i].weight;
-                    self.candidates_total_weight -= self.candidates_for_validator_set[j].weight;
+                    self.candidates_total_weight -= candidate.weight;
 
-                    std::mem::swap(
-                        &mut self.candidates_for_validator_set[j],
-                        &mut validators[i],
-                    );
+                    std::mem::swap(candidate, &mut validators[i]);
 
-                    self.candidates_for_validator_set[j].node_id =
-                        compute_node_id(self.candidates_for_validator_set[j].pubkey);
+                    candidate.node_id = compute_node_id(candidate.pubkey);
                 }
             }
+            // not found, we push a new default validator and update its info
+            self.candidates_for_validator_set
+                .push(ValidatorDescription::default());
+            self.candidates_total_weight += validators[i].weight;
+            self.candidates_for_validator_set[j] = validators[i];
+            self.candidates_for_validator_set[j].node_id =
+                compute_node_id(self.candidates_for_validator_set[j].pubkey);
+            // increment size of validator set
+            j += 1;
         }
     }
 }
@@ -189,8 +192,8 @@ impl ISignatureValidator for SignatureValidator {
 
     fn init_validators(&mut self) -> StdResult<Bytes32> {
         // TODO: using Item storage
-        self.validator_set = self.candidates_for_validator_set;
-        self.candidates_for_validator_set = ValidatorSet20::default();
+        self.validator_set = self.candidates_for_validator_set.to_owned();
+        self.candidates_for_validator_set = ValidatorSet::default();
 
         self.total_weight = self.candidates_total_weight;
         self.candidates_total_weight = 0;
@@ -225,8 +228,8 @@ impl ISignatureValidator for SignatureValidator {
             return Err(StdError::generic_err("not enough votes"));
         }
 
-        self.validator_set = self.candidates_for_validator_set;
-        self.candidates_for_validator_set = ValidatorSet20::default();
+        self.validator_set = self.candidates_for_validator_set.to_owned();
+        self.candidates_for_validator_set = ValidatorSet::default();
 
         self.total_weight = self.candidates_total_weight;
         self.candidates_total_weight = 0;
@@ -242,7 +245,7 @@ impl ISignatureValidator for SignatureValidator {
         root_idx: usize,
         tree_of_cells: &mut [CellData],
     ) -> StdResult<()> {
-        self.candidates_for_validator_set = ValidatorSet20::default();
+        self.candidates_for_validator_set = ValidatorSet::default();
         self.candidates_total_weight = 0;
         self.pruned_cells = [CachedCell::default(); 10];
         self.root_hash = tree_of_cells[root_idx].hashes[0];

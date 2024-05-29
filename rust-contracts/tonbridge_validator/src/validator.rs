@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, DepsMut, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
-    block_parser::ValidatorSet20,
+    block_parser::ValidatorSet,
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser, EMPTY_HASH},
     types::{Bytes32, CachedCell, ValidatorDescription, Vdata, VerifiedBlockInfo},
 };
@@ -42,12 +42,14 @@ impl Validator {
         self.signature_validator.pruned_cells
     }
 
-    pub fn get_validators(&self) -> ValidatorSet20 {
-        self.signature_validator.validator_set
+    pub fn get_validators(&self) -> ValidatorSet {
+        self.signature_validator.validator_set.to_owned()
     }
 
-    pub fn get_candidates_for_validators(&self) -> ValidatorSet20 {
-        self.signature_validator.candidates_for_validator_set
+    pub fn get_candidates_for_validators(&self) -> ValidatorSet {
+        self.signature_validator
+            .candidates_for_validator_set
+            .to_owned()
     }
 
     pub fn parse_candidates_root_block(&mut self, boc: &[u8]) -> StdResult<()> {
@@ -255,11 +257,12 @@ impl Validator {
 
     pub fn parse_user_friendly_validators(
         &self,
-        validator_description: [ValidatorDescription; 20],
+        validator_set: ValidatorSet,
     ) -> Vec<UserFriendlyValidator> {
-        validator_description
+        validator_set
+            .into_iter()
             .map(|candidate| self.parse_user_friendly_validator(candidate))
-            .to_vec()
+            .collect()
     }
 }
 
@@ -327,10 +330,17 @@ mod tests {
             .into_iter()
             .filter(|c| c.c_type != 0)
             .collect();
-        println!(
-            "val pubkey: {:?}",
-            HexBinary::from(validators[0].pubkey).to_hex()
+
+        // choose two random indexes for testing
+        assert_eq!(
+            HexBinary::from(validators[0].pubkey).to_hex(),
+            "89462f768d318759a230f72ef92bdbcd02a09c791d40e6a01a53f42409e248a1".to_string()
         );
+        assert_eq!(
+            HexBinary::from(validators[5].pubkey).to_hex(),
+            "76627b87a5717e9caab3a8044a8f75fd8da98b512c057e56defea91529f9b573".to_string()
+        );
+        assert_eq!(validators.len(), 14usize);
     }
 
     #[test]

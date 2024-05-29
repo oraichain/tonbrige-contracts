@@ -17,6 +17,7 @@ pub const BLOCK_INFO_CELL: u32 = 0x9bc7a987;
 pub const BLOCK_EXTRA_CELL: u16 = 0xcca5;
 pub type ValidatorSet20 = [ValidatorDescription; 20];
 pub type ValidatorSet32 = [ValidatorDescription; 32];
+pub type ValidatorSet = Vec<ValidatorDescription>;
 
 pub trait IBlockParser {
     fn parse_candidates_root_block(
@@ -60,17 +61,13 @@ impl IBlockParser for BlockParser {
 
         // extra
         let mut cell_idx = tree_of_cells[root_idx].refs[3];
-        println!("cell idx: {:?}", cell_idx);
         let test = read_u32(boc, tree_of_cells, cell_idx, 32)?;
-        println!("test: {:?}", test);
         if test != 0x4a33f6fd {
             return Err(StdError::generic_err("not a BlockExtra"));
         }
 
         // McBlockExtra
         cell_idx = tree_of_cells[cell_idx].refs[3];
-        println!("new cell idx: {:?}", cell_idx);
-        println!("tree of cells ref: {:?}", tree_of_cells[cell_idx].refs[3]);
         if tree_of_cells[cell_idx].refs[3] == 255 {
             return Err(StdError::generic_err("No McBlockExtra"));
         }
