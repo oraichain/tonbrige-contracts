@@ -1,4 +1,3 @@
-import TonRocks, { buildValidatorsData } from "@oraichain/tonbridge-utils";
 import "dotenv/config";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
 import { Functions } from "ton-lite-client/dist/schema";
@@ -42,10 +41,12 @@ import { intToIP, parseBlock } from "./common";
       initBlockSeqno = parsedBlock.info.prev_key_block_seqno;
       continue;
     }
-    const [rootCell] = await TonRocks.types.Cell.fromBoc(block.data.toString("hex"));
-    const parsedBlockData: string[] = await buildValidatorsData(rootCell);
-    console.dir(parsedBlockData[0]);
-    console.log(parsedBlock.extra.custom.config.config.map.get("22")); // 34 in decimals. 34 is the index of validator set
+    console.log("boc: ", block.data.toString("hex"));
+    console.log("parsed block: ", parsedBlock);
+    // const [rootCell] = await TonRocks.types.Cell.fromBoc(block.data.toString("hex"));
+    // const parsedBlockData: string[] = await buildValidatorsData(rootCell);
+    // console.dir(parsedBlockData[0]);
+    // console.log(parsedBlock.extra.custom.config.config.map.get("22")); // 34 in decimals. 34 is the index of validator set
     break;
   }
 

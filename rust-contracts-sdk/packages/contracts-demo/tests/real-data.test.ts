@@ -109,6 +109,7 @@ describe("Real Ton data tests", () => {
         initBlockSeqno = parsedBlock.info.prev_key_block_seqno;
         continue;
       }
+      console.log("block: ", block.data.toString("hex"));
       const [rootCell] = await TonRocks.types.Cell.fromBoc(block.data.toString("hex"));
       const parsedBlockData: string[] = await buildValidatorsData(rootCell);
       boc = parsedBlockData[0];

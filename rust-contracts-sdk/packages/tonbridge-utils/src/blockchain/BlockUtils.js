@@ -246,8 +246,8 @@ export function loadGrams(cell, t) {
  */
 export function loadRefIfExist(cell, t, f) {
     const r = cell.refs[t.ref++];
-    console.log("t ref: ", t.ref);
-    console.log("r type: ", r.type)
+    // console.log("t ref: ", t.ref);
+    // console.log("r type: ", r.type)
     // do not load prunned cell
     if (r.type !== Cell.PrunnedBranchCell && f) {
         return f(r, {cs:0, ref: 0});

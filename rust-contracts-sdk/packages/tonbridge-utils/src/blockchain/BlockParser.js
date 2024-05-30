@@ -1347,6 +1347,8 @@ export function loadExtBlkRef(cell, t) {
   data.seq_no = loadUint32(cell, t);
   data.root_hash = loadBits(cell, t, 256);
   data.file_hash = loadBits(cell, t, 256);
+  console.log("root hash in ext blk ref: ", data.root_hash)
+  console.log("file hash in ext blk ref: ", data.file_hash)
   return data;
 }
 
@@ -2826,7 +2828,9 @@ export function loadBlockExtra(cell, t) {
   let data = { _: "BlockExtra" };
   data.in_msg_descr = loadRefIfExist(cell, t, loadInMsgDescr);
   data.out_msg_descr = loadRefIfExist(cell, t, loadOutMsgDescr);
+  console.log("t before ", t);
   data.account_blocks = loadRefIfExist(cell, t, loadShardAccountBlocks);
+  console.log("t after: ", t);
   data.rand_seed = loadBits(cell, t, 256);
   data.created_by = loadBits(cell, t, 256);
   data.custom = loadMaybeRef(cell, t, loadMcBlockExtra);
@@ -2854,7 +2858,9 @@ export function loadBlockExtra(cell, t) {
  * @returns {Object}
  */
 export function loadValueFlow(cell, t) {
-  if (loadUint32(cell, t) !== 0xb8e48dfb) {
+  const prefix = loadUint32(cell, t);
+  console.log("prefix load value flow: ", prefix);
+  if (prefix !== 0xb8e48dfb) {
   }
   // throw Error("not a ValueFlow");
   // console.warn("not a ValueFlow");
@@ -2881,6 +2887,8 @@ export function loadMERKLE_UPDATE(cell, t) {
   let data = { _: "MERKLE_UPDATE" };
   data.old_hash = loadBits(cell, t, 256);
   data.new_hash = loadBits(cell, t, 256);
+  console.log("old hash in merkle update: ", data.old_hash)
+  console.log("new hash in merkle update: ", data.new_hash)
   data.old = cell.refs[t.ref++]; // TODO
   data.new = cell.refs[t.ref++];
   return data;

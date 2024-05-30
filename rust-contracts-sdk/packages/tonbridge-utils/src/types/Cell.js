@@ -2,14 +2,14 @@
 import { BitString } from "./BitString.js";
 // const {
 import {
-  bytesToBase64,
-  compareBytes,
-  concatBytes,
-  crc32c,
-  hexToBytes,
-  bytesToHex,
-  readNBytesUIntFromArray,
-  sha256,
+    bytesToBase64,
+    bytesToHex,
+    compareBytes,
+    concatBytes,
+    crc32c,
+    hexToBytes,
+    readNBytesUIntFromArray,
+    sha256,
 } from "../utils/index.js";
 // } = require("../utils");
 
@@ -898,6 +898,7 @@ function parseBocHeader(serializedBoc) {
     serializedBoc = serializedBoc.slice(offset_bytes);
     if (serializedBoc.length < roots_num * size_bytes)
         throw Error("Not enough bytes for encoding root cells hashes");
+    console.log(has_idx, hash_crc32, has_cache_bits, size_bytes, offset_bytes, cells_num, roots_num, absent_num, tot_cells_size);
     let root_list = [];
     for (let c = 0; c < roots_num; c++) {
         root_list.push(readNBytesUIntFromArray(size_bytes, serializedBoc));
@@ -916,6 +917,7 @@ function parseBocHeader(serializedBoc) {
 
     // if (serializedBoc.length < tot_cells_size)
     //     throw Error("Not enough bytes for cells data");
+    console.log("serialized boc length: ", serializedBoc.length)
     if (serializedBoc.length < tot_cells_size) { // ???
       console.log({
         'serializedBoc.length': serializedBoc.length,
@@ -996,6 +998,9 @@ function deserializeCellData(cellData, referenceIndexSize) {
     if (cellData.length < hashesSize + depthSize + dataByteSize + referenceIndexSize * refNum)
         throw Error("Not enough bytes to encode cell data");
 
+    // console.log("cell hash count: ", cell.getHashesCount())
+    // console.log(cell.levelMask, cell.isExotic, refNum, dataByteSize, fullfilledBytes, cell.hasHashes, hashesSize, depthSize)
+
     // skip hashes & depth
     cellData = cellData.slice(hashesSize);
     cellData = cellData.slice(depthSize);
@@ -1024,6 +1029,7 @@ async function deserializeBoc(serializedBoc) {
     if (typeof (serializedBoc) == 'string') {
         serializedBoc = hexToBytes(serializedBoc);
     }
+    console.log("serialized boc: ", serializedBoc.length)
     const header = parseBocHeader(serializedBoc);
     // console.log(header);
     let cells_data = header.cells_data;
