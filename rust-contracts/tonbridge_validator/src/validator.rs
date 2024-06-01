@@ -9,6 +9,7 @@ use tonbridge_validator::{
     msg::UserFriendlyValidator,
     shard_validator::{IShardValidator, ShardValidator},
 };
+use tonlib::cell::{BagOfCells, Cell};
 
 use crate::{
     signature_validator::{ISignatureValidator, SignatureValidator},
@@ -55,12 +56,12 @@ impl Validator {
     pub fn parse_candidates_root_block(&mut self, boc: &[u8]) -> StdResult<()> {
         let mut header = self.toc_parser.parse_serialized_header(boc)?;
         let mut tree_of_cells = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
+
         self.signature_validator.parse_candidates_root_block(
             boc,
             header.root_idx,
             &mut tree_of_cells,
         )?;
-
         Ok(())
     }
 

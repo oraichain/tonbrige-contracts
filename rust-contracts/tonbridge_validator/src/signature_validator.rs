@@ -6,8 +6,9 @@ use tonbridge_parser::{
     types::{Bytes32, CachedCell, CellData, ValidatorDescription, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
+use tonlib::cell::{BagOfCells, Cell};
 
-use crate::state::SIGNED_BLOCKS;
+use crate::{state::SIGNED_BLOCKS, validator};
 
 pub trait ISignatureValidator {
     fn add_current_block_to_verified_set(
@@ -49,6 +50,8 @@ pub trait ISignatureValidator {
     fn set_validator_set(&mut self, storage: &dyn Storage) -> StdResult<Bytes32>;
 
     fn init_validators(&mut self) -> StdResult<Bytes32>;
+
+    fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> StdResult<ValidatorSet>;
 }
 
 // need to deserialize from storage and better access directly from storage
@@ -68,7 +71,7 @@ impl SignatureValidator {
     pub fn new() -> Self {
         Self::default()
     }
-    fn parse_validators(&mut self, validators: &mut ValidatorSet32) {
+    fn parse_validators(&mut self, validators: &mut ValidatorSet) {
         let mut j = self.candidates_for_validator_set.len();
         for i in 0..validators.len() {
             // if the candidate is already in the list, we compare weight with the input
@@ -250,13 +253,58 @@ impl ISignatureValidator for SignatureValidator {
         self.pruned_cells = [CachedCell::default(); 10];
         self.root_hash = tree_of_cells[root_idx].hashes[0];
 
-        let mut validators =
-            self.block_parser
-                .parse_candidates_root_block(boc, root_idx, tree_of_cells)?;
+        // let mut validators =
+        //     self.block_parser
+        //         .parse_candidates_root_block(boc, root_idx, tree_of_cells)?;
 
-        self.parse_validators(&mut validators);
+        let validators = self.get_validators_set_from_boc(boc)?;
+
+        self.parse_validators(&mut validators.to_vec());
 
         Ok(())
+    }
+
+    fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> StdResult<ValidatorSet> {
+        let ref_index = &mut 3;
+        let cells = BagOfCells::parse(boc).unwrap();
+        let first_root = cells.single_root().unwrap();
+        let mut parser = first_root.parser();
+
+        // magic number
+        parser.load_u32(32).unwrap();
+        // global id
+        parser.load_i32(32).unwrap();
+
+        let block_extra = first_root
+            .load_ref_if_exist(ref_index, Some(Cell::load_block_extra))
+            .unwrap()
+            .0
+            .unwrap();
+        let validator_infos = block_extra
+            .custom
+            .config
+            .config
+            .get("22")
+            .unwrap()
+            .clone()
+            .unwrap()
+            .cur_validators;
+
+        let mut validators: Vec<ValidatorDescription> =
+            vec![ValidatorDescription::default(); validator_infos.list.len()];
+
+        for (key, validator) in validator_infos.list.iter() {
+            let index = usize::from_str_radix(key, 16).unwrap();
+            validators[index] = ValidatorDescription {
+                c_type: 0x73,
+                weight: validator.weight,
+                adnl_addr: validator.adnl_addr.as_slice().try_into().unwrap(),
+                pubkey: validator.public_key.as_slice().try_into().unwrap(),
+                node_id: Bytes32::default(),
+            };
+        }
+
+        Ok(validators)
     }
 
     fn parse_part_validators(
@@ -283,7 +331,7 @@ impl ISignatureValidator for SignatureValidator {
             self.block_parser
                 .parse_part_validators(data, cell_idx, cells, prefix_length)?;
 
-        self.parse_validators(&mut validators);
+        self.parse_validators(&mut validators.to_vec());
 
         Ok(())
     }
