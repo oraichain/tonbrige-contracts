@@ -9,12 +9,13 @@ use tonbridge_validator::{
     msg::UserFriendlyValidator,
     shard_validator::{IShardValidator, ShardValidator},
 };
-use tonlib::cell::{BagOfCells, Cell};
 
 use crate::{
     error::ContractError,
     signature_validator::{ISignatureValidator, SignatureValidator},
-    state::{OWNER, VERIFIED_BLOCKS},
+    state::{
+        get_signature_candidate_validators, get_signature_validator_set, OWNER, VERIFIED_BLOCKS,
+    },
 };
 
 pub trait IValidator {
@@ -40,21 +41,28 @@ impl Validator {
             .is_signed_by_validator(storage, node_id, root_h)
     }
 
-    pub fn get_validators(&self) -> ValidatorSet {
-        self.signature_validator.validator_set.to_owned()
+    pub fn get_validators(&self, storage: &dyn Storage) -> ValidatorSet {
+        //  self.signature_validator.validator_set.to_owned()
+        get_signature_validator_set(storage)
     }
 
-    pub fn get_candidates_for_validators(&self) -> ValidatorSet {
-        self.signature_validator
-            .candidates_for_validator_set
-            .to_owned()
+    pub fn get_candidates_for_validators(&self, storage: &dyn Storage) -> ValidatorSet {
+        // self.signature_validator
+        //     .candidates_for_validator_set
+        //     .to_owned()
+        get_signature_candidate_validators(storage)
     }
 
-    pub fn parse_candidates_root_block(&mut self, boc: &[u8]) -> Result<(), ContractError> {
+    pub fn parse_candidates_root_block(
+        &mut self,
+        storage: &mut dyn Storage,
+        boc: &[u8],
+    ) -> Result<(), ContractError> {
         let mut header = self.toc_parser.parse_serialized_header(boc)?;
         let mut tree_of_cells = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
 
         self.signature_validator.parse_candidates_root_block(
+            storage,
             boc,
             header.root_idx,
             &mut tree_of_cells,
@@ -63,7 +71,7 @@ impl Validator {
     }
 
     pub fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
-        let key_block_root_hash = self.signature_validator.init_validators()?;
+        let key_block_root_hash = self.signature_validator.init_validators(storage)?;
         let verified_block_info = VerifiedBlockInfo {
             verified: true,
             ..Default::default()
@@ -98,9 +106,12 @@ impl Validator {
         storage: &mut dyn Storage,
         root_h: Bytes32,
     ) -> StdResult<()> {
-        let rh = self
-            .signature_validator
-            .add_current_block_to_verified_set(storage, root_h)?;
+        let validator_set = get_signature_validator_set(storage);
+        let rh = self.signature_validator.add_current_block_to_verified_set(
+            storage,
+            root_h,
+            validator_set,
+        )?;
         let verified_block_info = VerifiedBlockInfo {
             verified: true,
             ..Default::default()
@@ -307,15 +318,18 @@ mod tests {
 
     #[test]
     fn test_candidate_root_block() {
+        let mut deps = mock_dependencies();
         let boc = HexBinary::from_hex(BOCS).unwrap().to_vec();
 
         let mut validator = Validator::default();
-        validator.parse_candidates_root_block(&boc).unwrap();
+        validator
+            .parse_candidates_root_block(deps.as_mut().storage, &boc)
+            .unwrap();
         let root_hash = HexBinary::from(validator.signature_validator.root_hash);
         println!("root hash: {:?}", root_hash);
 
         let validators: Vec<_> = validator
-            .get_candidates_for_validators()
+            .get_candidates_for_validators(deps.as_ref().storage)
             .into_iter()
             .filter(|c| c.c_type != 0)
             .collect();
@@ -334,13 +348,16 @@ mod tests {
 
     #[test]
     fn test_candidate_root_block_large() {
+        let mut deps = mock_dependencies();
         let boc = HexBinary::from_hex(BOCS_LARGE).unwrap().to_vec();
 
         let mut validator = Validator::default();
-        validator.parse_candidates_root_block(&boc).unwrap();
+        validator
+            .parse_candidates_root_block(deps.as_mut().storage, &boc)
+            .unwrap();
 
         let validators: Vec<_> = validator
-            .get_candidates_for_validators()
+            .get_candidates_for_validators(deps.as_ref().storage)
             .into_iter()
             .filter(|c| c.c_type != 0)
             .collect();

@@ -1,5 +1,3 @@
-use std::array::TryFromSliceError;
-
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
@@ -10,13 +8,21 @@ use tonbridge_parser::{
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
 use tonlib::cell::{BagOfCells, Cell};
 
-use crate::{error::ContractError, state::SIGNED_BLOCKS};
+use crate::{
+    error::ContractError,
+    state::{
+        get_signature_candidate_validators, get_signature_validator_set,
+        reset_signature_candidate_validators, SIGNATURE_CANDIDATE_VALIDATOR,
+        SIGNATURE_VALIDATOR_SET, SIGNED_BLOCKS,
+    },
+};
 
 pub trait ISignatureValidator {
     fn add_current_block_to_verified_set(
         &self,
         storage: &dyn Storage,
         root_h: Bytes32,
+        validator_set: ValidatorSet,
     ) -> StdResult<Bytes32>;
 
     fn verify_validators(
@@ -30,6 +36,7 @@ pub trait ISignatureValidator {
 
     fn parse_candidates_root_block(
         &mut self,
+        storage: &mut dyn Storage,
         boc: &[u8],
         root_idx: usize,
         tree_of_cells: &mut [CellData],
@@ -42,9 +49,9 @@ pub trait ISignatureValidator {
         root_h: Bytes32,
     ) -> bool;
 
-    fn set_validator_set(&mut self, storage: &dyn Storage) -> StdResult<Bytes32>;
+    fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32>;
 
-    fn init_validators(&mut self) -> StdResult<Bytes32>;
+    fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32>;
 
     fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> Result<ValidatorSet, ContractError>;
 }
@@ -53,9 +60,9 @@ pub trait ISignatureValidator {
 #[cw_serde]
 #[derive(Default)]
 pub struct SignatureValidator {
-    pub validator_set: ValidatorSet,
+    // pub validator_set: ValidatorSet,
     total_weight: u64,
-    pub candidates_for_validator_set: ValidatorSet,
+    // pub candidates_for_validator_set: ValidatorSet,
     candidates_total_weight: u64,
     pub root_hash: Bytes32,
     block_parser: BlockParser,
@@ -65,11 +72,18 @@ impl SignatureValidator {
     pub fn new() -> Self {
         Self::default()
     }
-    fn parse_validators(&mut self, validators: &mut ValidatorSet) {
-        let mut j = self.candidates_for_validator_set.len();
+    fn parse_validators(
+        &mut self,
+        storage: &mut dyn Storage,
+        validators: &mut ValidatorSet,
+    ) -> StdResult<()> {
+        let mut candidates_for_validator_set = get_signature_candidate_validators(storage);
+        // let mut j = self.candidates_for_validator_set.len();
+        let mut j = candidates_for_validator_set.len();
+
         for i in 0..validators.len() {
             // if the candidate is already in the list, we compare weight with the input
-            if let Some(candidate) = self.candidates_for_validator_set.iter_mut().find(|val| {
+            if let Some(candidate) = candidates_for_validator_set.iter_mut().find(|val| {
                 HexBinary::from(val.pubkey)
                     .to_hex()
                     .eq(&HexBinary::from(&validators[i].pubkey).to_string())
@@ -85,15 +99,23 @@ impl SignatureValidator {
                 }
             }
             // not found, we push a new default validator and update its info
-            self.candidates_for_validator_set
-                .push(ValidatorDescription::default());
+            candidates_for_validator_set.push(ValidatorDescription::default());
+
             self.candidates_total_weight += validators[i].weight;
-            self.candidates_for_validator_set[j] = validators[i];
-            self.candidates_for_validator_set[j].node_id =
-                compute_node_id(self.candidates_for_validator_set[j].pubkey);
+            candidates_for_validator_set[j] = validators[i];
+            candidates_for_validator_set[j].node_id =
+                compute_node_id(candidates_for_validator_set[j].pubkey);
+
             // increment size of validator set
             j += 1;
         }
+
+        // store candidate validator
+        for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
+            SIGNATURE_CANDIDATE_VALIDATOR.save(storage, i as u64, candidate)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -113,11 +135,12 @@ impl ISignatureValidator for SignatureValidator {
         &self,
         storage: &dyn Storage,
         root_h: Bytes32,
+        validator_set: ValidatorSet,
     ) -> StdResult<Bytes32> {
         let mut current_weight = 0;
-        for j in 0..self.validator_set.len() {
-            if self.is_signed_by_validator(storage, self.validator_set[j].node_id, root_h) {
-                current_weight += self.validator_set[j].weight;
+        for j in 0..validator_set.len() {
+            if self.is_signed_by_validator(storage, validator_set[j].node_id, root_h) {
+                current_weight += validator_set[j].weight;
             }
         }
 
@@ -145,20 +168,22 @@ impl ISignatureValidator for SignatureValidator {
             return Err(StdError::generic_err("wrong root_hash or file_hash"));
         }
 
-        let mut validator_idx = self.validator_set.len();
+        let validator_set = get_signature_validator_set(storage);
+
+        let mut validator_idx = validator_set.len();
         for vdata_item in vdata {
             // 1. found validator
-            for j in 0..self.validator_set.len() {
-                if self.validator_set[j].node_id == vdata_item.node_id {
+            for j in 0..validator_set.len() {
+                if validator_set[j].node_id == vdata_item.node_id {
                     validator_idx = j;
                     break;
                 }
             }
             // skip others node_ids and already checked node_ids
-            if validator_idx == self.validator_set.len()
+            if validator_idx == validator_set.len()
                 || self.is_signed_by_validator(
                     storage,
-                    self.validator_set[validator_idx].node_id,
+                    validator_set[validator_idx].node_id,
                     test_root_hash,
                 )
             {
@@ -173,12 +198,12 @@ impl ISignatureValidator for SignatureValidator {
             if api.ed25519_verify(
                 &message,
                 &[vdata_item.r, vdata_item.s].concat(),
-                &self.validator_set[validator_idx].pubkey,
+                &validator_set[validator_idx].pubkey,
             )? {
                 // update as verified
                 SIGNED_BLOCKS.save(
                     storage,
-                    &[self.validator_set[validator_idx].node_id, test_root_hash].concat(),
+                    &[validator_set[validator_idx].node_id, test_root_hash].concat(),
                     &true,
                 )?;
             }
@@ -187,10 +212,17 @@ impl ISignatureValidator for SignatureValidator {
         Ok(())
     }
 
-    fn init_validators(&mut self) -> StdResult<Bytes32> {
+    fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32> {
+        let candidates_for_validator_set = get_signature_candidate_validators(storage);
         // TODO: using Item storage
-        self.validator_set = self.candidates_for_validator_set.to_owned();
-        self.candidates_for_validator_set = ValidatorSet::default();
+        // self.validator_set = self.candidates_for_validator_set.to_owned();
+        for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
+            SIGNATURE_VALIDATOR_SET.save(storage, i as u64, candidate)?;
+        }
+
+        // reset candidate for validator set
+        reset_signature_candidate_validators(storage);
+        // self.candidates_for_validator_set = ValidatorSet::default();
 
         self.total_weight = self.candidates_total_weight;
         self.candidates_total_weight = 0;
@@ -200,15 +232,17 @@ impl ISignatureValidator for SignatureValidator {
         Ok(rh)
     }
 
-    fn set_validator_set(&mut self, storage: &dyn Storage) -> StdResult<Bytes32> {
+    fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32> {
+        let validator_set = get_signature_validator_set(storage);
+        let candidates_for_validator_set = get_signature_candidate_validators(storage);
         // if current validator_set is empty, check caller
         // else check votes
-        if self.validator_set[0].weight == 0 {
+        if validator_set[0].weight == 0 {
             return Err(StdError::generic_err("current validator_set is empty"));
         }
 
         let mut current_weight = 0;
-        for validator in &self.validator_set {
+        for validator in &validator_set {
             if self.is_signed_by_validator(storage, validator.node_id, self.root_hash) {
                 current_weight += validator.weight;
             }
@@ -218,8 +252,12 @@ impl ISignatureValidator for SignatureValidator {
             return Err(StdError::generic_err("not enough votes"));
         }
 
-        self.validator_set = self.candidates_for_validator_set.to_owned();
-        self.candidates_for_validator_set = ValidatorSet::default();
+        // self.validator_set = self.candidates_for_validator_set.to_owned();
+        for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
+            SIGNATURE_VALIDATOR_SET.save(storage, i as u64, candidate)?;
+        }
+        // self.candidates_for_validator_set = ValidatorSet::default();
+        reset_signature_candidate_validators(storage);
 
         self.total_weight = self.candidates_total_weight;
         self.candidates_total_weight = 0;
@@ -231,16 +269,17 @@ impl ISignatureValidator for SignatureValidator {
 
     fn parse_candidates_root_block(
         &mut self,
+        storage: &mut dyn Storage,
         boc: &[u8],
         root_idx: usize,
         tree_of_cells: &mut [CellData],
     ) -> Result<(), ContractError> {
-        self.candidates_for_validator_set = ValidatorSet::default();
+        // self.candidates_for_validator_set = ValidatorSet::default();
         self.candidates_total_weight = 0;
         self.root_hash = tree_of_cells[root_idx].hashes[0];
 
         let validators = self.get_validators_set_from_boc(boc)?;
-        self.parse_validators(&mut validators.to_vec());
+        self.parse_validators(storage, &mut validators.to_vec())?;
 
         Ok(())
     }
@@ -250,7 +289,7 @@ impl ISignatureValidator for SignatureValidator {
         let ref_index = &mut 3;
         let cells = BagOfCells::parse(boc)?;
         let first_root = cells.single_root()?;
-        // TODO: calculate 
+        // TODO: calculate
         let mut parser = first_root.parser();
 
         // magic number

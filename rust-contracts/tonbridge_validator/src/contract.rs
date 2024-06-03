@@ -21,7 +21,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     let mut validator = Validator::default();
     if let Some(boc) = msg.boc {
-        validator.parse_candidates_root_block(boc.as_slice())?;
+        validator.parse_candidates_root_block(deps.storage, boc.as_slice())?;
         validator.init_validators(deps.storage)?;
     }
     VALIDATOR.save(deps.storage, &validator)?;
@@ -62,7 +62,7 @@ pub fn parse_candidates_root_block(
     boc: HexBinary,
 ) -> Result<Response, ContractError> {
     let mut validator = VALIDATOR.load(deps.storage)?;
-    validator.parse_candidates_root_block(boc.as_slice())?;
+    validator.parse_candidates_root_block(deps.storage, boc.as_slice())?;
     VALIDATOR.save(deps.storage, &validator)?;
     Ok(Response::new().add_attributes(vec![("action", "parse_candidates_root_block")]))
 }
@@ -79,7 +79,7 @@ pub fn reset_validator_set(
     let mut validator = VALIDATOR.load(storage)?;
 
     // update new candidates given the new block data
-    validator.parse_candidates_root_block(boc.as_slice())?;
+    validator.parse_candidates_root_block(storage, boc.as_slice())?;
 
     // skip verification and assume the new validator set is valid (only admin can call this)
     validator.init_validators(storage)?;
@@ -187,13 +187,13 @@ pub fn get_config(deps: Deps) -> StdResult<ConfigResponse> {
 
 pub fn get_candidates_for_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
     let validator = VALIDATOR.load(deps.storage)?;
-    let result = validator.get_candidates_for_validators();
+    let result = validator.get_candidates_for_validators(deps.storage);
     Ok(validator.parse_user_friendly_validators(result))
 }
 
 pub fn get_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
     let validator = VALIDATOR.load(deps.storage)?;
-    let result = validator.get_validators();
+    let result = validator.get_validators(deps.storage);
     Ok(validator.parse_user_friendly_validators(result))
 }
 
