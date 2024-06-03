@@ -38,9 +38,6 @@ pub enum ExecuteMsg {
         root_hash: HexBinary,
         seq_no: u32,
     },
-    ParsePartValidators {
-        boc: HexBinary
-    }
 }
 
 /// We currently take no arguments for migrations

@@ -17,6 +17,7 @@ import {
 import { deployContract } from "../../contracts-build/src";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "../../contracts-sdk/src";
 import { Amount } from "../../contracts-sdk/src/TonbridgeBridge.types";
+import { Cell } from "@ton/core";
 
 describe("Tree of Cells parser tests 1", () => {
   const client = new SimulateCosmWasmClient({
@@ -37,6 +38,9 @@ describe("Tree of Cells parser tests 1", () => {
       "bridge-validator",
       "cw-tonbridge-validator"
     );
+    const cells = Cell.fromBoc(findBoc("set-validators"));
+    const firstCell = cells[0].hash(0).toString('hex');
+    console.log("first cell hash: ", firstCell);
     const bridgeDeployResult = await deployContract(client, sender, {}, "bridge-bridge", "cw-tonbridge-bridge");
     const dummyTokenDeployResult = await deployContract(
       client,

@@ -3,7 +3,7 @@ use cosmwasm_std::{Addr, Api, DepsMut, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
     block_parser::ValidatorSet,
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser, EMPTY_HASH},
-    types::{Bytes32, CachedCell, ValidatorDescription, Vdata, VerifiedBlockInfo},
+    types::{Bytes32, ValidatorDescription, Vdata, VerifiedBlockInfo},
 };
 use tonbridge_validator::{
     msg::UserFriendlyValidator,
@@ -12,6 +12,7 @@ use tonbridge_validator::{
 use tonlib::cell::{BagOfCells, Cell};
 
 use crate::{
+    error::ContractError,
     signature_validator::{ISignatureValidator, SignatureValidator},
     state::{OWNER, VERIFIED_BLOCKS},
 };
@@ -39,10 +40,6 @@ impl Validator {
             .is_signed_by_validator(storage, node_id, root_h)
     }
 
-    pub fn get_pruned_cells(&self) -> [CachedCell; 10] {
-        self.signature_validator.pruned_cells
-    }
-
     pub fn get_validators(&self) -> ValidatorSet {
         self.signature_validator.validator_set.to_owned()
     }
@@ -53,7 +50,7 @@ impl Validator {
             .to_owned()
     }
 
-    pub fn parse_candidates_root_block(&mut self, boc: &[u8]) -> StdResult<()> {
+    pub fn parse_candidates_root_block(&mut self, boc: &[u8]) -> Result<(), ContractError> {
         let mut header = self.toc_parser.parse_serialized_header(boc)?;
         let mut tree_of_cells = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
 
@@ -62,15 +59,6 @@ impl Validator {
             header.root_idx,
             &mut tree_of_cells,
         )?;
-        Ok(())
-    }
-
-    pub fn parse_part_validators(&mut self, boc: &[u8]) -> StdResult<()> {
-        let mut header = self.toc_parser.parse_serialized_header(boc)?;
-        let mut tree_of_cells = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
-        self.signature_validator
-            .parse_part_validators(boc, header.root_idx, &mut tree_of_cells)?;
-
         Ok(())
     }
 
@@ -104,10 +92,6 @@ impl Validator {
         self.signature_validator
             .verify_validators(storage, api, root_h, file_hash, vdata)
     }
-
-    //     // fn setroot_hashForValidating(bytes32 rh) public {
-    //     //     signature_validator.setroot_hashForValidating(rh);
-    //     // }
 
     pub fn add_current_block_to_verified_set(
         &self,
@@ -325,6 +309,8 @@ mod tests {
 
         let mut validator = Validator::default();
         validator.parse_candidates_root_block(&boc).unwrap();
+        let root_hash = HexBinary::from(validator.signature_validator.root_hash);
+        println!("root hash: {:?}", root_hash);
 
         let validators: Vec<_> = validator
             .get_candidates_for_validators()

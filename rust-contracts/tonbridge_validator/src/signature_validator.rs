@@ -1,14 +1,16 @@
+use std::array::TryFromSliceError;
+
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
-    block_parser::{compute_node_id, BlockParser, IBlockParser, ValidatorSet, ValidatorSet32},
+    block_parser::{compute_node_id, BlockParser, ValidatorSet},
     tree_of_cells_parser::EMPTY_HASH,
-    types::{Bytes32, CachedCell, CellData, ValidatorDescription, Vdata},
+    types::{Bytes32, CellData, ValidatorDescription, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
 use tonlib::cell::{BagOfCells, Cell};
 
-use crate::{state::SIGNED_BLOCKS, validator};
+use crate::{error::ContractError, state::SIGNED_BLOCKS};
 
 pub trait ISignatureValidator {
     fn add_current_block_to_verified_set(
@@ -31,14 +33,7 @@ pub trait ISignatureValidator {
         boc: &[u8],
         root_idx: usize,
         tree_of_cells: &mut [CellData],
-    ) -> StdResult<()>;
-
-    fn parse_part_validators(
-        &mut self,
-        data: &[u8],
-        cell_idx: usize,
-        cells: &mut [CellData],
-    ) -> StdResult<()>;
+    ) -> Result<(), ContractError>;
 
     fn is_signed_by_validator(
         &self,
@@ -51,7 +46,7 @@ pub trait ISignatureValidator {
 
     fn init_validators(&mut self) -> StdResult<Bytes32>;
 
-    fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> StdResult<ValidatorSet>;
+    fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> Result<ValidatorSet, ContractError>;
 }
 
 // need to deserialize from storage and better access directly from storage
@@ -60,10 +55,9 @@ pub trait ISignatureValidator {
 pub struct SignatureValidator {
     pub validator_set: ValidatorSet,
     total_weight: u64,
-    pub pruned_cells: [CachedCell; 10],
     pub candidates_for_validator_set: ValidatorSet,
     candidates_total_weight: u64,
-    root_hash: Bytes32,
+    pub root_hash: Bytes32,
     block_parser: BlockParser,
 }
 
@@ -213,13 +207,6 @@ impl ISignatureValidator for SignatureValidator {
             return Err(StdError::generic_err("current validator_set is empty"));
         }
 
-        // check all pruned cells are empty
-        for pruned_cell in &self.pruned_cells {
-            if pruned_cell.hash != EMPTY_HASH {
-                return Err(StdError::generic_err("need read all validators"));
-            }
-        }
-
         let mut current_weight = 0;
         for validator in &self.validator_set {
             if self.is_signed_by_validator(storage, validator.node_id, self.root_hash) {
@@ -247,37 +234,32 @@ impl ISignatureValidator for SignatureValidator {
         boc: &[u8],
         root_idx: usize,
         tree_of_cells: &mut [CellData],
-    ) -> StdResult<()> {
+    ) -> Result<(), ContractError> {
         self.candidates_for_validator_set = ValidatorSet::default();
         self.candidates_total_weight = 0;
-        self.pruned_cells = [CachedCell::default(); 10];
         self.root_hash = tree_of_cells[root_idx].hashes[0];
 
-        // let mut validators =
-        //     self.block_parser
-        //         .parse_candidates_root_block(boc, root_idx, tree_of_cells)?;
-
         let validators = self.get_validators_set_from_boc(boc)?;
-
         self.parse_validators(&mut validators.to_vec());
 
         Ok(())
     }
 
-    fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> StdResult<ValidatorSet> {
+    fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> Result<ValidatorSet, ContractError> {
+        // ref index = 3 because we skip load_block_info, load_value_flow, and load_merkle_update refs (dont care)
         let ref_index = &mut 3;
-        let cells = BagOfCells::parse(boc).unwrap();
-        let first_root = cells.single_root().unwrap();
+        let cells = BagOfCells::parse(boc)?;
+        let first_root = cells.single_root()?;
+        // TODO: calculate 
         let mut parser = first_root.parser();
 
         // magic number
-        parser.load_u32(32).unwrap();
+        parser.load_u32(32)?;
         // global id
-        parser.load_i32(32).unwrap();
+        parser.load_i32(32)?;
 
         let block_extra = first_root
-            .load_ref_if_exist(ref_index, Some(Cell::load_block_extra))
-            .unwrap()
+            .load_ref_if_exist(ref_index, Some(Cell::load_block_extra))?
             .0
             .unwrap();
         let validator_infos = block_extra
@@ -294,46 +276,17 @@ impl ISignatureValidator for SignatureValidator {
             vec![ValidatorDescription::default(); validator_infos.list.len()];
 
         for (key, validator) in validator_infos.list.iter() {
-            let index = usize::from_str_radix(key, 16).unwrap();
+            let index = usize::from_str_radix(key, 16)?;
             validators[index] = ValidatorDescription {
                 c_type: 0x73,
                 weight: validator.weight,
-                adnl_addr: validator.adnl_addr.as_slice().try_into().unwrap(),
-                pubkey: validator.public_key.as_slice().try_into().unwrap(),
+                adnl_addr: validator.adnl_addr.as_slice().try_into()?,
+                pubkey: validator.public_key.as_slice().try_into()?,
                 node_id: Bytes32::default(),
             };
         }
 
         Ok(validators)
-    }
-
-    fn parse_part_validators(
-        &mut self,
-        data: &[u8],
-        cell_idx: usize,
-        cells: &mut [CellData],
-    ) -> StdResult<()> {
-        let mut valid = false;
-        let mut prefix_length = 0;
-        for i in 0..self.pruned_cells.len() {
-            if self.pruned_cells[i].hash == cells[cell_idx].hashes[0] {
-                valid = true;
-                prefix_length = self.pruned_cells[i].prefix_length;
-                self.pruned_cells[i] = CachedCell::default();
-                break;
-            }
-        }
-        if !valid {
-            return Err(StdError::generic_err("Wrong boc for validators"));
-        }
-
-        let mut validators =
-            self.block_parser
-                .parse_part_validators(data, cell_idx, cells, prefix_length)?;
-
-        self.parse_validators(&mut validators.to_vec());
-
-        Ok(())
     }
 }
 
