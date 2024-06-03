@@ -38,6 +38,7 @@ import * as iStorages from "./providers/Storage";
 
 export * from "./block-utils";
 export * from "./types/Block.js";
+export * from "./types/Validator.js";
 
 export namespace TonRocks {
   export const version = "0.1.0";

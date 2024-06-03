@@ -11,5 +11,6 @@ import { Cell, ParsedBlock } from "./types";
   console.log("cell root hash: ", cellHash);
   console.log("root hash is: ", Buffer.from(rootCell.getHash(0)).toString("hex"));
   const parsedFixedBlock: ParsedBlock = BlockParser.parseBlock(rootCell);
+  console.log("seqno: ", parsedFixedBlock.info.seq_no);
   console.log(parsedFixedBlock.extra.custom.config.config.map.get("22").cur_validators.total);
 })();

@@ -12,8 +12,8 @@ use crate::{
     error::ContractError,
     state::{
         get_signature_candidate_validators, get_signature_validator_set,
-        reset_signature_candidate_validators, SIGNATURE_CANDIDATE_VALIDATOR,
-        SIGNATURE_VALIDATOR_SET, SIGNED_BLOCKS,
+        reset_signature_candidate_validators, reset_signature_validator_set,
+        SIGNATURE_CANDIDATE_VALIDATOR, SIGNATURE_VALIDATOR_SET, SIGNED_BLOCKS,
     },
 };
 
@@ -231,6 +231,8 @@ impl ISignatureValidator for SignatureValidator {
 
     fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32> {
         let validator_set = get_signature_validator_set(storage);
+        // remove old validators from the list to prevent unexpected errors
+        reset_signature_validator_set(storage);
         let candidates_for_validator_set = get_signature_candidate_validators(storage);
         // if current validator_set is empty, check caller
         // else check votes
@@ -249,11 +251,9 @@ impl ISignatureValidator for SignatureValidator {
             return Err(StdError::generic_err("not enough votes"));
         }
 
-        // self.validator_set = self.candidates_for_validator_set.to_owned();
         for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
             SIGNATURE_VALIDATOR_SET.save(storage, i as u64, candidate)?;
         }
-        // self.candidates_for_validator_set = ValidatorSet::default();
         reset_signature_candidate_validators(storage);
 
         self.total_weight = self.candidates_total_weight;

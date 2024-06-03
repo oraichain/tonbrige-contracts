@@ -8,5 +8,6 @@ export { BitString } from "./BitString.js";
 export * from "./Block.js";
 export { Cell } from "./Cell.js";
 export * from "./Hashmap.js";
+export * from "./Validator.js";
 
 // module.exports = {Address, BitString, Cell, ...Hashmap};

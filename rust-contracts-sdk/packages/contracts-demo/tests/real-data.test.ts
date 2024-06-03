@@ -5,14 +5,14 @@ import {
   InstantiateMsg as Cw20InstantiateMsg,
   MinterResponse
 } from "@oraichain/oraidex-contracts-sdk/build/OraiswapToken.types";
+import { deployContract } from "@oraichain/tonbridge-contracts-build";
+import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
+import { ValidatorSignature } from "@oraichain/tonbridge-utils";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
-import { Functions, liteServer_masterchainInfoExt } from "ton-lite-client/dist/schema";
-// import { initialValidatorsBlockRootHash, initialValidatorsList } from "../../../../test/data/transaction-1";
-import { ParsedBlock } from "@oraichain/tonbridge-utils";
-import { deployContract } from "../../contracts-build/src";
-import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "../../contracts-sdk/src";
-import { intToIP, parseBlock } from "../src/common";
-import { queryAllValidatorCandidates, queryAllValidators } from "./common";
+import { liteServer_masterchainInfoExt } from "ton-lite-client/dist/schema";
+import TonWeb from "tonweb";
+import { intToIP } from "../src/common";
+import { queryAllValidatorCandidates, queryAllValidators, queryKeyBlock } from "./common";
 
 describe("Real Ton data tests", () => {
   const client = new SimulateCosmWasmClient({
@@ -46,30 +46,11 @@ describe("Real Ton data tests", () => {
     liteEngine = new LiteRoundRobinEngine(engines);
     liteClient = new LiteClient({ engine: liteEngine });
 
-    masterchainInfo = await liteClient.getMasterchainInfoExt();
-    let initBlockSeqno = masterchainInfo.last.seqno;
-    while (true) {
-      const fullBlock = await liteClient.getFullBlock(initBlockSeqno);
-      const initialBlockInformation = fullBlock.shards.find((blockRes) => blockRes.seqno === initBlockSeqno);
-      // get block
-      const block = await liteEngine.query(Functions.liteServer_getBlock, {
-        kind: "liteServer.getBlock",
-        id: {
-          kind: "tonNode.blockIdExt",
-          ...initialBlockInformation
-        }
-      });
-
-      const parsedBlock: ParsedBlock = await parseBlock(block);
-      if (!parsedBlock.info.key_block) {
-        initBlockSeqno = parsedBlock.info.prev_key_block_seqno;
-        continue;
-      }
-      initialKeyBlockBoc = block.data.toString("hex");
-      initialVerifiedRootHash = block.id.rootHash.toString("hex");
-      console.log("initial verified root hash: ", initialVerifiedRootHash);
-      break;
-    }
+    // masterchainInfo = await liteClient.getMasterchainInfoExt();
+    let initBlockSeqno = 38125645; // the seqno of the boc hardcoded in @oraichain/tonbridge-utils/blockParserLarge.ts
+    const { rawBlockData } = await queryKeyBlock(liteClient, liteEngine, initBlockSeqno);
+    initialKeyBlockBoc = rawBlockData.data.toString("hex");
+    initialVerifiedRootHash = rawBlockData.id.rootHash.toString("hex");
 
     // deploy contracts
     const validatorDeployResult = await deployContract(
@@ -120,60 +101,76 @@ describe("Real Ton data tests", () => {
       .filter((validator) => validator.c_type !== 0)
       .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
-    expect(validators.length).toBeGreaterThan(100);
+    expect(validators.length).toEqual(343);
     validators = (await queryAllValidatorCandidates(validator)).filter((validator) => validator.c_type !== 0);
     expect(validators.length).toEqual(0);
   });
 
-  // it("Verify updated validator signatures in new block", async () => {
-  //   const boc = findBoc("proof-validators");
-  //   await validator.parseCandidatesRootBlock({ boc: boc.toString("hex") });
+  it("Verify updated validator signatures in new block", async () => {
+    masterchainInfo = await liteClient.getMasterchainInfoExt();
+    const { parsedBlock, rawBlockData } = await queryKeyBlock(liteClient, liteEngine, masterchainInfo.last.seqno);
+    const boc = rawBlockData.data.toString("hex");
 
-  //   let validators = (await validator.getCandidatesForValidators())
-  //     .filter((validator) => validator.c_type !== 0)
-  //     .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
+    await validator.parseCandidatesRootBlock({ boc });
 
-  //   expect(validators.length).toEqual(14);
+    let validators = (await queryAllValidatorCandidates(validator))
+      .filter((validator) => validator.c_type !== 0)
+      .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
-  //   validators.forEach((validator) => {
-  //     const item = updateValidators.find((v) => v.node_id === validator.node_id);
-  //     expect(item).not.toBeUndefined();
-  //     expect(validator.pubkey).toEqual(item?.pubkey);
-  //   });
+    expect(validators.length).toBeGreaterThan(100);
+    const tonweb = new TonWeb();
+    const valSignatures = (await tonweb.provider.send("getMasterchainBlockSignatures", {
+      seqno: rawBlockData.id.seqno
+    })) as any;
+    const signatures = valSignatures.signatures as ValidatorSignature[];
+    console.log("validator signatures: ", signatures);
 
-  //   const signatures = data.find((el) => el.type === "proof-validators")!.signatures!;
+    // TODO: query validator signatures
 
-  //   await validator.verifyValidators({
-  //     rootHash: "0000000000000000000000000000000000000000000000000000000000000000",
-  //     fileHash: data.find((el) => el.type === "proof-validators")!.id!.fileHash,
-  //     vdata: signatures
-  //   });
+    // const signatures = data.find((el) => el.type === "proof-validators")!.signatures!;
+    console.log("total signature length: ", Buffer.from(signatures[0].signature, "base64").length);
+    const vdata = signatures.map((sig) => {
+      const signatureBuffer = Buffer.from(sig.signature, "base64");
+      const r = signatureBuffer.subarray(0, 32);
+      const s = signatureBuffer.subarray(32);
+      return {
+        node_id: Buffer.from(sig.node_id_short, "base64").toString("hex"),
+        r: r.toString("hex"),
+        s: s.toString("hex")
+      };
+    });
 
-  //   for (let i = 0; i < signatures.length; i++) {
-  //     expect(
-  //       await validator.isSignedByValidator({
-  //         validatorNodeId: signatures[i].node_id,
-  //         rootHash: updateValidatorsRootHash
-  //       })
-  //     ).toEqual(true);
-  //   }
-  //   expect(await validator.isVerifiedBlock({ rootHash: updateValidatorsRootHash })).toEqual(true);
+    await validator.verifyValidators({
+      rootHash: "0000000000000000000000000000000000000000000000000000000000000000",
+      fileHash: rawBlockData.id.fileHash.toString("hex"),
+      vdata
+    });
 
-  //   validators = (await validator.getValidators())
-  //     .filter((validator) => validator.c_type !== 0)
-  //     .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
+    for (let i = 0; i < signatures.length; i++) {
+      expect(
+        await validator.isSignedByValidator({
+          validatorNodeId: vdata[i].node_id,
+          rootHash: rawBlockData.id.rootHash.toString("hex")
+        })
+      ).toEqual(true);
+    }
+    expect(await validator.isVerifiedBlock({ rootHash: rawBlockData.id.rootHash.toString("hex") })).toEqual(true);
 
-  //   validators.forEach((validator) => {
-  //     const item = updateValidators.find((v) => v.node_id === validator.node_id);
-  //     expect(item).not.toBeUndefined();
-  //     expect(validator.pubkey).toEqual(item?.pubkey);
-  //   });
+    // validators = (await validator.getValidators())
+    //   .filter((validator) => validator.c_type !== 0)
+    //   .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
-  //   // candidates now should be empty because we the list has been verified
-  //   validators = (await validator.getCandidatesForValidators()).filter((validator) => validator.c_type !== 0);
+    // validators.forEach((validator) => {
+    //   const item = updateValidators.find((v) => v.node_id === validator.node_id);
+    //   expect(item).not.toBeUndefined();
+    //   expect(validator.pubkey).toEqual(item?.pubkey);
+    // });
 
-  //   expect(validators.length).toEqual(0);
-  // });
+    // // candidates now should be empty because we the list has been verified
+    // validators = (await validator.getCandidatesForValidators()).filter((validator) => validator.c_type !== 0);
+
+    // expect(validators.length).toEqual(0);
+  }, 15000);
 
   // it("keyblock test", async () => {
   //   // fixture. Setting up a new verified block
