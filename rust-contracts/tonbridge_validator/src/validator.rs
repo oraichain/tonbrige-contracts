@@ -58,15 +58,8 @@ impl Validator {
         storage: &mut dyn Storage,
         boc: &[u8],
     ) -> Result<(), ContractError> {
-        let mut header = self.toc_parser.parse_serialized_header(boc)?;
-        let mut tree_of_cells = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
-
-        self.signature_validator.parse_candidates_root_block(
-            storage,
-            boc,
-            header.root_idx,
-            &mut tree_of_cells,
-        )?;
+        self.signature_validator
+            .parse_candidates_root_block(storage, boc)?;
         Ok(())
     }
 

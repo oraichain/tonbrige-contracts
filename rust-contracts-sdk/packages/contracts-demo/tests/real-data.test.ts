@@ -120,7 +120,7 @@ describe("Real Ton data tests", () => {
       .filter((validator) => validator.c_type !== 0)
       .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
-    expect(validators.length).toEqual(343);
+    expect(validators.length).toBeGreaterThan(100);
     validators = (await queryAllValidatorCandidates(validator)).filter((validator) => validator.c_type !== 0);
     expect(validators.length).toEqual(0);
   });

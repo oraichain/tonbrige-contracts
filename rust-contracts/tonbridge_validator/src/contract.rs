@@ -27,10 +27,6 @@ pub fn instantiate(
     let mut validator = Validator::default();
     if let Some(boc) = msg.boc {
         validator.parse_candidates_root_block(deps.storage, boc.as_slice())?;
-        deps.api.debug(&format!(
-            "root hash in instantiate: {:?}",
-            HexBinary::from(validator.signature_validator.root_hash).to_hex()
-        ));
         validator.init_validators(deps.storage)?;
     }
     VALIDATOR.save(deps.storage, &validator)?;

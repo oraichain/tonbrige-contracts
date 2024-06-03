@@ -44,7 +44,7 @@ tonbridge-validator = { path = "./packages/validator" }
 tonbridge-adapter = { path = "./packages/adapter" }
 tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./rust-contracts/tonbridge_validator" }
-tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "61f34ad5a1e94dcf3a821d423f2c41166d001918" }
+tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "71affee7935626910e139eed5268c00996a11c42" }
 
 [profile.release]
 opt-level = 3

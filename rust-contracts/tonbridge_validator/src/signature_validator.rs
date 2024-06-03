@@ -3,7 +3,7 @@ use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
     block_parser::{compute_node_id, BlockParser, ValidatorSet},
     tree_of_cells_parser::EMPTY_HASH,
-    types::{Bytes32, CellData, ValidatorDescription, Vdata},
+    types::{Bytes32, ValidatorDescription, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
 use tonlib::cell::{BagOfCells, Cell, TonCellError};
@@ -38,8 +38,6 @@ pub trait ISignatureValidator {
         &mut self,
         storage: &mut dyn Storage,
         boc: &[u8],
-        root_idx: usize,
-        tree_of_cells: &mut [CellData],
     ) -> Result<(), ContractError>;
 
     fn is_signed_by_validator(
@@ -270,12 +268,9 @@ impl ISignatureValidator for SignatureValidator {
         &mut self,
         storage: &mut dyn Storage,
         boc: &[u8],
-        root_idx: usize,
-        tree_of_cells: &mut [CellData],
     ) -> Result<(), ContractError> {
         // self.candidates_for_validator_set = ValidatorSet::default();
         self.candidates_total_weight = 0;
-        self.root_hash = tree_of_cells[root_idx].hashes[0];
         println!(
             "root hash in parse candidates: {:?}",
             HexBinary::from(self.root_hash).to_hex()
@@ -292,7 +287,8 @@ impl ISignatureValidator for SignatureValidator {
         let ref_index = &mut 3;
         let cells = BagOfCells::parse(boc)?;
         let first_root = cells.single_root()?;
-        // TODO: calculate
+        // set root hash as the hash of the first root
+        self.root_hash = first_root.hashes[0].as_slice().try_into()?;
         let mut parser = first_root.parser();
 
         // magic number
