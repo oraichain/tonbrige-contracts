@@ -11,8 +11,24 @@ import {InstantiateMsg, ExecuteMsg, VdataHex, QueryMsg, MigrateMsg, ConfigRespon
 export interface TonbridgeValidatorReadOnlyInterface {
   contractAddress: string;
   config: () => Promise<ConfigResponse>;
-  getCandidatesForValidators: () => Promise<ArrayOfUserFriendlyValidator>;
-  getValidators: () => Promise<ArrayOfUserFriendlyValidator>;
+  getCandidatesForValidators: ({
+    limit,
+    order,
+    startAfter
+  }: {
+    limit?: number;
+    order?: number;
+    startAfter?: number;
+  }) => Promise<ArrayOfUserFriendlyValidator>;
+  getValidators: ({
+    limit,
+    order,
+    startAfter
+  }: {
+    limit?: number;
+    order?: number;
+    startAfter?: number;
+  }) => Promise<ArrayOfUserFriendlyValidator>;
   isVerifiedBlock: ({
     rootHash
   }: {
@@ -45,14 +61,38 @@ export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnly
       config: {}
     });
   };
-  getCandidatesForValidators = async (): Promise<ArrayOfUserFriendlyValidator> => {
+  getCandidatesForValidators = async ({
+    limit,
+    order,
+    startAfter
+  }: {
+    limit?: number;
+    order?: number;
+    startAfter?: number;
+  }): Promise<ArrayOfUserFriendlyValidator> => {
     return this.client.queryContractSmart(this.contractAddress, {
-      get_candidates_for_validators: {}
+      get_candidates_for_validators: {
+        limit,
+        order,
+        start_after: startAfter
+      }
     });
   };
-  getValidators = async (): Promise<ArrayOfUserFriendlyValidator> => {
+  getValidators = async ({
+    limit,
+    order,
+    startAfter
+  }: {
+    limit?: number;
+    order?: number;
+    startAfter?: number;
+  }): Promise<ArrayOfUserFriendlyValidator> => {
     return this.client.queryContractSmart(this.contractAddress, {
-      get_validators: {}
+      get_validators: {
+        limit,
+        order,
+        start_after: startAfter
+      }
     });
   };
   isVerifiedBlock = async ({

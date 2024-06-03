@@ -50,9 +50,17 @@ pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
     #[returns(Vec<UserFriendlyValidator>)]
-    GetCandidatesForValidators {},
+    GetCandidatesForValidators {
+        start_after: Option<u64>,
+        limit: Option<u32>,
+        order: Option<u8>,
+    },
     #[returns(Vec<UserFriendlyValidator>)]
-    GetValidators {},
+    GetValidators {
+        start_after: Option<u64>,
+        limit: Option<u32>,
+        order: Option<u8>,
+    },
     #[returns(bool)]
     IsVerifiedBlock { root_hash: HexBinary }, // in hex form
     #[returns(bool)]

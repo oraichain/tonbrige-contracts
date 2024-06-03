@@ -6,7 +6,7 @@ use tonbridge_parser::{
     types::{Bytes32, CellData, ValidatorDescription, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
-use tonlib::cell::{BagOfCells, Cell};
+use tonlib::cell::{BagOfCells, Cell, TonCellError};
 
 use crate::{
     error::ContractError,
@@ -214,7 +214,6 @@ impl ISignatureValidator for SignatureValidator {
 
     fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32> {
         let candidates_for_validator_set = get_signature_candidate_validators(storage);
-        // TODO: using Item storage
         // self.validator_set = self.candidates_for_validator_set.to_owned();
         for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
             SIGNATURE_VALIDATOR_SET.save(storage, i as u64, candidate)?;
@@ -277,6 +276,10 @@ impl ISignatureValidator for SignatureValidator {
         // self.candidates_for_validator_set = ValidatorSet::default();
         self.candidates_total_weight = 0;
         self.root_hash = tree_of_cells[root_idx].hashes[0];
+        println!(
+            "root hash in parse candidates: {:?}",
+            HexBinary::from(self.root_hash).to_hex()
+        );
 
         let validators = self.get_validators_set_from_boc(boc)?;
         self.parse_validators(storage, &mut validators.to_vec())?;
@@ -296,21 +299,39 @@ impl ISignatureValidator for SignatureValidator {
         parser.load_u32(32)?;
         // global id
         parser.load_i32(32)?;
-
         let block_extra = first_root
             .load_ref_if_exist(ref_index, Some(Cell::load_block_extra))?
-            .0
-            .unwrap();
-        let validator_infos = block_extra
-            .custom
-            .config
-            .config
-            .get("22")
-            .unwrap()
-            .clone()
-            .unwrap()
-            .cur_validators;
-
+            .0;
+        if block_extra.is_none() {
+            return Err(ContractError::TonCellError(
+                TonCellError::cell_parser_error("Wrong boc for keyblock parsing"),
+            ));
+        }
+        let block_extra = block_extra.unwrap();
+        let validator_infos = block_extra.custom.config.config.get("22");
+        if validator_infos.is_none() {
+            return Err(ContractError::TonCellError(
+                TonCellError::cell_parser_error("Validation infos not found"),
+            ));
+        }
+        let validator_infos = validator_infos.unwrap();
+        if validator_infos.is_none() {
+            return Err(ContractError::TonCellError(
+                TonCellError::cell_parser_error("Validation infos not found"),
+            ));
+        }
+        let validator_infos = validator_infos.clone().unwrap().cur_validators;
+        let mut validators = vec![ValidatorDescription::default(); validator_infos.list.len()];
+        for (key, validator) in validator_infos.list.iter() {
+            let index = usize::from_str_radix(key, 16)?;
+            validators[index] = ValidatorDescription {
+                c_type: 0x73,
+                weight: validator.weight,
+                adnl_addr: validator.adnl_addr.as_slice().try_into()?,
+                pubkey: validator.public_key.as_slice().try_into()?,
+                node_id: Bytes32::default(),
+            };
+        }
         let mut validators: Vec<ValidatorDescription> =
             vec![ValidatorDescription::default(); validator_infos.list.len()];
 

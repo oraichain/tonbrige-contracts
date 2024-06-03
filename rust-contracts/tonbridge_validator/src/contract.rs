@@ -1,7 +1,8 @@
 use std::array::TryFromSliceError;
 
-use cosmwasm_std::{entry_point, to_binary, Addr, HexBinary, StdError};
+use cosmwasm_std::{entry_point, to_binary, Addr, HexBinary, Order, StdError};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cw_storage_plus::Bound;
 use tonbridge_parser::bit_reader::to_bytes32;
 use tonbridge_parser::types::{Vdata, VdataHex};
 use tonbridge_validator::msg::{
@@ -9,8 +10,12 @@ use tonbridge_validator::msg::{
 };
 
 use crate::error::ContractError;
-use crate::state::{OWNER, VALIDATOR};
+use crate::state::{OWNER, SIGNATURE_CANDIDATE_VALIDATOR, SIGNATURE_VALIDATOR_SET, VALIDATOR};
 use crate::validator::{IValidator, Validator};
+
+// settings for pagination
+const MAX_LIMIT: u32 = 30;
+const DEFAULT_LIMIT: u32 = 10;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -22,6 +27,10 @@ pub fn instantiate(
     let mut validator = Validator::default();
     if let Some(boc) = msg.boc {
         validator.parse_candidates_root_block(deps.storage, boc.as_slice())?;
+        deps.api.debug(&format!(
+            "root hash in instantiate: {:?}",
+            HexBinary::from(validator.signature_validator.root_hash).to_hex()
+        ));
         validator.init_validators(deps.storage)?;
     }
     VALIDATOR.save(deps.storage, &validator)?;
@@ -170,8 +179,21 @@ pub fn set_verified_block(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&get_config(deps)?),
-        QueryMsg::GetCandidatesForValidators {} => to_binary(&get_candidates_for_validators(deps)?),
-        QueryMsg::GetValidators {} => to_binary(&get_validators(deps)?),
+        QueryMsg::GetCandidatesForValidators {
+            start_after,
+            limit,
+            order,
+        } => to_binary(&get_candidates_for_validators(
+            deps,
+            start_after,
+            limit,
+            order,
+        )?),
+        QueryMsg::GetValidators {
+            start_after,
+            limit,
+            order,
+        } => to_binary(&get_validators(deps, start_after, limit, order)?),
         QueryMsg::IsVerifiedBlock { root_hash } => to_binary(&is_verified_block(deps, root_hash)?),
         QueryMsg::IsSignedByValidator {
             validator_node_id,
@@ -185,16 +207,46 @@ pub fn get_config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(ConfigResponse { owner: owner.admin })
 }
 
-pub fn get_candidates_for_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
+pub fn get_candidates_for_validators(
+    deps: Deps,
+    start_after: Option<u64>,
+    limit: Option<u32>,
+    order: Option<u8>,
+) -> StdResult<Vec<UserFriendlyValidator>> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let mut allow_range =
+        SIGNATURE_CANDIDATE_VALIDATOR.range(deps.storage, None, None, map_order(order));
+    if let Some(start_after) = start_after {
+        let start = Some(Bound::exclusive::<u64>(start_after));
+        allow_range =
+            SIGNATURE_CANDIDATE_VALIDATOR.range(deps.storage, start, None, map_order(order));
+    }
     let validator = VALIDATOR.load(deps.storage)?;
-    let result = validator.get_candidates_for_validators(deps.storage);
-    Ok(validator.parse_user_friendly_validators(result))
+    let candidates = allow_range
+        .take(limit)
+        .map(|item| item.map(|(_, mapping)| validator.parse_user_friendly_validator(mapping)))
+        .collect::<StdResult<Vec<UserFriendlyValidator>>>()?;
+    Ok(candidates)
 }
 
-pub fn get_validators(deps: Deps) -> StdResult<Vec<UserFriendlyValidator>> {
+pub fn get_validators(
+    deps: Deps,
+    start_after: Option<u64>,
+    limit: Option<u32>,
+    order: Option<u8>,
+) -> StdResult<Vec<UserFriendlyValidator>> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let mut allow_range = SIGNATURE_VALIDATOR_SET.range(deps.storage, None, None, map_order(order));
+    if let Some(start_after) = start_after {
+        let start = Some(Bound::exclusive::<u64>(start_after));
+        allow_range = SIGNATURE_VALIDATOR_SET.range(deps.storage, start, None, map_order(order));
+    }
     let validator = VALIDATOR.load(deps.storage)?;
-    let result = validator.get_validators(deps.storage);
-    Ok(validator.parse_user_friendly_validators(result))
+    let validators = allow_range
+        .take(limit)
+        .map(|item| item.map(|(_, mapping)| validator.parse_user_friendly_validator(mapping)))
+        .collect::<StdResult<Vec<UserFriendlyValidator>>>()?;
+    Ok(validators)
 }
 
 pub fn is_verified_block(deps: Deps, root_hash: HexBinary) -> StdResult<bool> {
@@ -224,4 +276,17 @@ pub fn is_signed_by_validator(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     Ok(Response::default())
+}
+
+fn map_order(order: Option<u8>) -> Order {
+    match order {
+        Some(order) => {
+            if order == 1 {
+                Order::Ascending
+            } else {
+                Order::Descending
+            }
+        }
+        None => Order::Ascending,
+    }
 }

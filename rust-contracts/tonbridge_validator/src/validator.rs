@@ -25,7 +25,7 @@ pub trait IValidator {
 #[cw_serde]
 #[derive(Default)]
 pub struct Validator {
-    signature_validator: SignatureValidator,
+    pub signature_validator: SignatureValidator,
     toc_parser: TreeOfCellsParser,
     shard_validator: ShardValidator,
 }

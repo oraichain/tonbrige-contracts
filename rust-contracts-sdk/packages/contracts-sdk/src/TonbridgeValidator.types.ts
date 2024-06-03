@@ -43,9 +43,17 @@ export interface VdataHex {
 export type QueryMsg = {
   config: {};
 } | {
-  get_candidates_for_validators: {};
+  get_candidates_for_validators: {
+    limit?: number | null;
+    order?: number | null;
+    start_after?: number | null;
+  };
 } | {
-  get_validators: {};
+  get_validators: {
+    limit?: number | null;
+    order?: number | null;
+    start_after?: number | null;
+  };
 } | {
   is_verified_block: {
     root_hash: HexBinary;

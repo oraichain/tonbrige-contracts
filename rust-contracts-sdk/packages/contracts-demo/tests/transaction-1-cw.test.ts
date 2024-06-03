@@ -5,6 +5,9 @@ import {
   InstantiateMsg as Cw20InstantiateMsg,
   MinterResponse
 } from "@oraichain/oraidex-contracts-sdk/build/OraiswapToken.types";
+import { deployContract } from "@oraichain/tonbridge-contracts-build";
+import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
+import { Cell } from "@ton/core";
 import {
   data,
   findBoc,
@@ -14,10 +17,8 @@ import {
   updateValidators,
   updateValidatorsRootHash
 } from "../../../../test/data/transaction-1";
-import { deployContract } from "../../contracts-build/src";
-import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "../../contracts-sdk/src";
 import { Amount } from "../../contracts-sdk/src/TonbridgeBridge.types";
-import { Cell } from "@ton/core";
+import { queryAllValidatorCandidates, queryAllValidators } from "./common";
 
 describe("Tree of Cells parser tests 1", () => {
   const client = new SimulateCosmWasmClient({
@@ -84,7 +85,7 @@ describe("Tree of Cells parser tests 1", () => {
 
   it("after init contract the initital block should be verified", async () => {
     expect(await validator.isVerifiedBlock({ rootHash: initialValidatorsBlockRootHash })).toEqual(true);
-    let validators = (await validator.getValidators())
+    let validators = (await queryAllValidators(validator))
       .filter((validator) => validator.c_type !== 0)
       .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
@@ -94,7 +95,7 @@ describe("Tree of Cells parser tests 1", () => {
       expect(validator.pubkey).toEqual(item?.pubkey);
     });
 
-    validators = (await validator.getCandidatesForValidators()).filter((validator) => validator.c_type !== 0);
+    validators = (await queryAllValidatorCandidates(validator)).filter((validator) => validator.c_type !== 0);
     expect(validators.length).toEqual(0);
   });
 
@@ -102,7 +103,7 @@ describe("Tree of Cells parser tests 1", () => {
     const boc = findBoc("proof-validators");
     await validator.parseCandidatesRootBlock({ boc: boc.toString("hex") });
 
-    let validators = (await validator.getCandidatesForValidators())
+    let validators = (await queryAllValidatorCandidates(validator))
       .filter((validator) => validator.c_type !== 0)
       .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
@@ -132,7 +133,7 @@ describe("Tree of Cells parser tests 1", () => {
     }
     expect(await validator.isVerifiedBlock({ rootHash: updateValidatorsRootHash })).toEqual(true);
 
-    validators = (await validator.getValidators())
+    validators = (await queryAllValidators(validator))
       .filter((validator) => validator.c_type !== 0)
       .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
@@ -143,7 +144,7 @@ describe("Tree of Cells parser tests 1", () => {
     });
 
     // candidates now should be empty because we the list has been verified
-    validators = (await validator.getCandidatesForValidators()).filter((validator) => validator.c_type !== 0);
+    validators = (await queryAllValidatorCandidates(validator)).filter((validator) => validator.c_type !== 0);
 
     expect(validators.length).toEqual(0);
   });
