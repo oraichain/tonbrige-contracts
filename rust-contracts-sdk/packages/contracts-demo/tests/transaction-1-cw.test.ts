@@ -39,7 +39,7 @@ describe("Tree of Cells parser tests 1", () => {
       "cw-tonbridge-validator"
     );
     const cells = Cell.fromBoc(findBoc("set-validators"));
-    const firstCell = cells[0].hash(0).toString('hex');
+    const firstCell = Uint8Array.from(cells[0].hash(0));
     console.log("first cell hash: ", firstCell);
     const bridgeDeployResult = await deployContract(client, sender, {}, "bridge-bridge", "cw-tonbridge-bridge");
     const dummyTokenDeployResult = await deployContract(

@@ -34,10 +34,6 @@ export type ExecuteMsg = {
     root_hash: HexBinary;
     seq_no: number;
   };
-} | {
-  parse_part_validators: {
-    boc: HexBinary;
-  };
 };
 export interface VdataHex {
   node_id: HexBinary;
