@@ -1,7 +1,7 @@
-import { TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
+import { TonbridgeValidatorInterface } from "@oraichain/tonbridge-contracts-sdk";
 import { UserFriendlyValidator } from "@oraichain/tonbridge-contracts-sdk/build/TonbridgeValidator.types";
 
-export const queryAllValidators = async (tonValidator: TonbridgeValidatorClient) => {
+export const queryAllValidators = async (tonValidator: TonbridgeValidatorInterface) => {
   let validators: UserFriendlyValidator[] = [];
   let startAfter = 0;
 
@@ -16,7 +16,7 @@ export const queryAllValidators = async (tonValidator: TonbridgeValidatorClient)
   return validators;
 };
 
-export const queryAllValidatorCandidates = async (tonValidator: TonbridgeValidatorClient) => {
+export const queryAllValidatorCandidates = async (tonValidator: TonbridgeValidatorInterface) => {
   let candidates: UserFriendlyValidator[] = [];
   let startAfter = 0;
 
