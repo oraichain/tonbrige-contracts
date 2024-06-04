@@ -267,6 +267,7 @@ pub fn get_validators(
         .take(limit)
         .map(|item| item.map(|(_, mapping)| Validator::parse_user_friendly_validator(mapping)))
         .collect::<StdResult<Vec<UserFriendlyValidator>>>()?;
+
     Ok(validators)
 }
 
