@@ -2427,8 +2427,8 @@ export function loadShardStateUnsplit(cell) {
   let cell_r1 = cell.refs[t.ref++];
   let tr1 = { cs: 0, ref: 0 };
   if (cell_r1.type === Cell.OrdinaryCell) {
-    data.overload_history = loadUint64(cell_r1, tr1.cs);
-    data.underload_history = loadUint64(cell_r1, tr1.cs);
+    data.overload_history = loadUint64(cell_r1, tr1);
+    data.underload_history = loadUint64(cell_r1, tr1);
     data.total_balance = loadCurrencyCollection(cell_r1, tr1);
     data.total_validator_fees = loadCurrencyCollection(cell_r1, tr1);
     // eslint-disable-next-line no-unused-vars

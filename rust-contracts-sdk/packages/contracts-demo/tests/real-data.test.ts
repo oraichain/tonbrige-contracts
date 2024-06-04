@@ -8,12 +8,14 @@ import {
 import { deployContract } from "@oraichain/tonbridge-contracts-build";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
 import { ValidatorSignature } from "@oraichain/tonbridge-utils";
-import { Cell } from "@ton/core";
+import { Address, Cell, loadTransaction } from "@ton/core";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
 import { Functions, liteServer_masterchainInfoExt } from "ton-lite-client/dist/schema";
 import TonWeb from "tonweb";
-import { intToIP } from "../src/common";
+import { intToIP, parseBlock } from "../src/common";
 import { queryAllValidatorCandidates, queryAllValidators, queryKeyBlock } from "./common";
+import { TonRocks } from "@oraichain/tonbridge-utils";
+import { BlockParser, loadShardStateUnsplit } from "@oraichain/tonbridge-utils/build/blockchain/BlockParser";
 
 describe("Real Ton data tests", () => {
   const client = new SimulateCosmWasmClient({
@@ -182,7 +184,7 @@ describe("Real Ton data tests", () => {
     // expect(validators.length).toEqual(0);
   }, 15000);
 
-  it("shard state test real data", async () => {
+  it("shard block test real data", async () => {
     // fixture. Setting up a new verified block
     // Normally, this should be verified using validator signatures.
 
@@ -199,28 +201,36 @@ describe("Real Ton data tests", () => {
 
     const tonWeb = new TonWeb();
     const blockShards = await tonWeb.provider.getBlockShards(masterchainInfo.last.seqno);
-    const shardInfo = await liteEngine.query(Functions.liteServer_getShardInfo, {
-      kind: "liteServer.getShardInfo",
-      id: {
-        kind: "tonNode.blockIdExt",
-        ...initialKeyBlockInformation
-      },
-      workchain: 0,
-      shard: blockShards.shards[0].shard,
-      exact: true
-    });
-    // const stateHashBoc = findBoc("state-hash").toString("hex");
-    // Store state hash of the block so that we can use it to validate older blocks
-    await validator.readMasterProof({ boc: shardInfo.shardProof.toString("hex") });
+    console.log("block shards: ", blockShards);
+    for (const shard of blockShards.shards) {
+      const shardInfo = await liteEngine.query(Functions.liteServer_getShardInfo, {
+        kind: "liteServer.getShardInfo",
+        id: {
+          kind: "tonNode.blockIdExt",
+          ...initialKeyBlockInformation
+        },
+        workchain: 0,
+        shard: shard.shard,
+        exact: true
+      });
+      // const stateHashBoc = findBoc("state-hash").toString("hex");
+      // Store state hash of the block so that we can use it to validate older blocks
+      await validator.readMasterProof({ boc: shardInfo.shardProof.toString("hex") });
 
-    const shardCells = Cell.fromBoc(shardInfo.shardProof);
-    // 2nd cell of shard proof
-    const shardStateRaw = shardCells[1].refs[0].toBoc();
-    await validator.readStateProof({
-      boc: shardStateRaw.toString("hex"),
-      rootHash: initialKeyBlockInformation.rootHash.toString("hex")
-    });
-  });
+      const shardCells = Cell.fromBoc(shardInfo.shardProof);
+      // 2nd cell of shard proof
+      const shardStateRaw = shardCells[1].refs[0].toBoc();
+      await validator.readStateProof({
+        boc: shardStateRaw.toString("hex"),
+        rootHash: initialKeyBlockInformation.rootHash.toString("hex")
+      });
+      const shardStateCell = await TonRocks.types.Cell.fromBoc(shardInfo.shardProof);
+      const shardState = BlockParser.parseShardState(shardStateCell[1].refs[0]);
+
+      // const shardState = loadShardStateUnsplit(shardStateCell[0]);
+      // console.log("shard state: ", shardState.custom.shard_hashes.map.get('0'));
+    }
+  }, 20000);
 
   // it("shard block test", async () => {
   //   // Prerequisite: need the new masterchain's block to be verified first
@@ -241,47 +251,43 @@ describe("Real Ton data tests", () => {
   //   ).toEqual(true);
   // });
 
-  it("bridge contract reads data from transaction", async () => {
-    // const knownSeqNo = 38194946;
-    // const fullBlock = await liteClient.getFullBlock(knownSeqNo);
-    // const initialBlockInformation = fullBlock.shards.find((blockRes) => blockRes.seqno === knownSeqNo);
-    // const targetSeqNo = 38194676;
-    // const targetedFullBlock = await liteClient.getFullBlock(38194676);
-    // const targetBlockInfo = targetedFullBlock.shards.find((blockRes) => blockRes.seqno === targetSeqNo);
-    // const blockProof = await liteEngine.query(Functions.liteServer_getBlockProof, {
-    //   kind: "liteServer.getBlockProof",
-    //   mode: 0,
-    //   knownBlock: {
-    //     kind: "tonNode.blockIdExt",
-    //     ...initialBlockInformation
-    //   },
-    //   targetBlock: {
-    //     kind: "tonNode.blockIdExt",
-    //     ...targetBlockInfo
-    //   }
-    // });
-    // console.log("block proof: ", blockProof);
-    // const blockBoc = findBoc("tx-proof").toString("hex");
-    // const txBoc = findBoc("tx-proof", true).toString("hex");
-    // await bridge.readTransaction({
-    //   txBoc,
-    //   blockBoc,
-    //   validatorContractAddr: validator.contractAddress,
-    //   opcode: "0000000000000000000000000000000000000000000000000000000000000001"
-    // });
-    // // FIXME: this address is converted from 20 bytes of the address in the tx boc.
-    // const balanceOf = await dummyToken.balance({ address: "orai1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqskuxw" });
-    // // FIXME: balance = 1 because we hard-coded it in the contract for testing. Should not be 1 in real tests
-    // expect(balanceOf.balance).toEqual("1");
-    // const channelBalance = await bridge.channelStateData({ channelId: "" });
-    // expect(channelBalance.balances.length).toEqual(1);
-    // expect(channelBalance.balances[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
-    // expect(channelBalance.total_sent.length).toEqual(1);
-    // expect(channelBalance.total_sent[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
-    // const txHash = findTxHash();
-    // const isTxProcessed = await bridge.isTxProcessed({
-    //   txHash
-    // });
-    // expect(isTxProcessed).toEqual(true);
+  it("bridge contract reads real data from transaction", async () => {
+    // block info: https://tonscan.org/block/-1:8000000000000000:38194676
+    // tx info: https://tonscan.org/tx/QC+27DN1uufqTOlphZ7tuZwVrSUcBrUJ1rP+pb5BRcY=
+    let initBlockSeqno = 38194676;
+    const fullBlock = await liteClient.getFullBlock(initBlockSeqno);
+    const initialKeyBlockInformation = fullBlock.shards.find((blockRes) => blockRes.seqno === initBlockSeqno);
+    // console.log("initial: ", initialKeyBlockInformation)
+    // const minimalBlockShards = await client.getAllShardsInfo({ ...initialKeyBlockInformation });
+    const blockInfo = await liteEngine.query(Functions.liteServer_getBlock, {
+      kind: "liteServer.getBlock",
+      id: {
+        kind: "tonNode.blockIdExt",
+        ...initialKeyBlockInformation
+      }
+    });
+    // FIXME: need to verify this block organically via validator signature and master proof, not hard code
+    await validator.setVerifiedBlock({ rootHash: blockInfo.id.rootHash.toString("hex"), seqNo: blockInfo.id.seqno });
+    const parsedBlock = await parseBlock(blockInfo);
+    for (let i = Number(parsedBlock.info.start_lt); i <= Number(parsedBlock.info.end_lt); i++) {
+      try {
+        const transaction = await liteClient.getAccountTransaction(
+          Address.parse("Ef9EEo2b2-xd5mHH4LgDk8uuK5qr20-Cz-zRs0CCOI3JeOmm"),
+          i.toString(),
+          initialKeyBlockInformation
+        );
+        const cell = Cell.fromBoc(transaction.transaction)[0].beginParse();
+        const transactionDetails = loadTransaction(cell);
+        if (Number(transactionDetails.lt) === i) {
+          // console.log("transaction: ", transactionDetails);
+          await bridge.readTransaction({
+            txBoc: transaction.transaction.toString("hex"),
+            blockBoc: blockInfo.data.toString("hex"),
+            validatorContractAddr: validator.contractAddress,
+            opcode: "0000000000000000000000000000000000000000000000000000000000000001"
+          });
+        }
+      } catch (error) {}
+    }
   });
 });

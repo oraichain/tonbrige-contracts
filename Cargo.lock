@@ -341,6 +341,7 @@ dependencies = [
  "tonbridge-bridge",
  "tonbridge-parser",
  "tonbridge-validator",
+ "tonlib",
 ]
 
 [[package]]

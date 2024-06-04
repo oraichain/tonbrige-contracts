@@ -303,11 +303,6 @@ impl ISignatureValidator for SignatureValidator {
     ) -> Result<(), ContractError> {
         // self.candidates_for_validator_set = ValidatorSet::default();
         self.candidates_total_weight = 0;
-        println!(
-            "root hash in parse candidates: {:?}",
-            HexBinary::from(self.root_hash).to_hex()
-        );
-
         let validators = self.get_validators_set_from_boc(boc)?;
         self.parse_validators(storage, &mut validators.to_vec())?;
 
