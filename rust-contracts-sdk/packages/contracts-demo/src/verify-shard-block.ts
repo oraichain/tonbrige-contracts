@@ -18,7 +18,7 @@ function intToIP(int: number) {
 (async () => {
   const { liteservers } = await fetch("https://ton.org/global.config.json").then((data) => data.json());
   // Personal choice. Can choose a different index if needed
-  const server = liteservers[1];
+  const server = liteservers[2];
 
   const engines: LiteEngine[] = [];
   engines.push(
@@ -33,7 +33,7 @@ function intToIP(int: number) {
 
   // Create Client
   const initKeyBlockSeqno = 38101265;
-  const fullBlock = await client.getFullBlock(initKeyBlockSeqno);
+  let fullBlock = await client.getFullBlock(initKeyBlockSeqno);
   const initialKeyBlockInformation = fullBlock.shards.find((blockRes) => blockRes.seqno === initKeyBlockSeqno);
   const minimalBlockShards = await client.getAllShardsInfo({ ...initialKeyBlockInformation });
   const tonWeb = new TonWeb();
@@ -58,7 +58,7 @@ function intToIP(int: number) {
   // parse merkle update based on: https://docs.ton.org/develop/data-formats/exotic-cells#merkle-update
   // shardCell[0].refs[0].refs[2] with refs[2] because the shardCell[0] contains block info: https://github.com/ton-blockchain/ton/blob/24dc184a2ea67f9c47042b4104bbb4d82289fac1/crypto/block/block.tlb#L442
   // the block has 4 indexes, first one is global id, next is block info, and the 3rd one (2nd index count from 0) is state_update, which is merkle_update
-  const merkleUpdateOfShardState = shardCell[0].refs[0].refs[2];
+  const merkleUpdateOfShardState = masterchainBlockMerkleProof.refs[0].refs[2];
   const slice = merkleUpdateOfShardState.beginParse(true);
   const cellType = slice.loadBuffer(1);
   const oldStateHash = slice.loadBuffer(32);

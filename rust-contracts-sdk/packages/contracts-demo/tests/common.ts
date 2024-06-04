@@ -54,6 +54,6 @@ export const queryKeyBlock = async (client: LiteClient, engine: LiteEngine, mast
       initBlockSeqno = parsedBlock.info.prev_key_block_seqno;
       continue;
     }
-    return { parsedBlock, rawBlockData: block };
+    return { parsedBlock, rawBlockData: block, initialKeyBlockInformation: initialBlockInformation };
   }
 };

@@ -9,7 +9,7 @@ import { deployContract } from "@oraichain/tonbridge-contracts-build";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
 import { ValidatorSignature } from "@oraichain/tonbridge-utils";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
-import { liteServer_masterchainInfoExt } from "ton-lite-client/dist/schema";
+import { Functions, liteServer_masterchainInfoExt } from "ton-lite-client/dist/schema";
 import TonWeb from "tonweb";
 import { intToIP } from "../src/common";
 import { queryAllValidatorCandidates, queryAllValidators, queryKeyBlock } from "./common";
@@ -181,38 +181,37 @@ describe("Real Ton data tests", () => {
     // expect(validators.length).toEqual(0);
   }, 15000);
 
-  // it("keyblock test", async () => {
-  //   // fixture. Setting up a new verified block
-  //   // Normally, this should be verified using validator signatures.
-  //   const masterBlockRootHash = "456ae983e2af89959179ed8b0e47ab702f06addef7022cb6c365aac4b0e5a0b9";
-  //   const stateHashBoc = findBoc("state-hash").toString("hex");
-  //   await validator.setVerifiedBlock({
-  //     rootHash: masterBlockRootHash,
-  //     seqNo: 0
-  //   });
-  //   expect(
-  //     await validator.isVerifiedBlock({
-  //       rootHash: masterBlockRootHash
-  //     })
-  //   ).toEqual(true);
+  it("shard state test real data", async () => {
+    // fixture. Setting up a new verified block
+    // Normally, this should be verified using validator signatures.
 
-  //   // Store state hash of the block so that we can use it to validate older blocks
-  //   await validator.readMasterProof({ boc: stateHashBoc });
+    const { parsedBlock, rawBlockData, initialKeyBlockInformation } = await queryKeyBlock(
+      liteClient,
+      liteEngine,
+      masterchainInfo.last.seqno
+    );
 
-  //   // testing. Validate an older block on the masterchain
-  //   const shardStateBoc = findBoc("shard-state").toString("hex");
-  //   await validator.readStateProof({
-  //     boc: shardStateBoc,
-  //     rootHash: masterBlockRootHash
-  //   });
+    await validator.setVerifiedBlock({
+      rootHash: initialKeyBlockInformation.rootHash.toString("hex"),
+      seqNo: 0
+    });
 
-  //   expect(
-  //     await validator.isVerifiedBlock({
-  //       // root block hash of the older block compared to the master block
-  //       rootHash: "ef2b87352875737c44346b7588cb799b6ca7c10e47015515026f035fe8b6a5c7"
-  //     })
-  //   ).toEqual(true);
-  // });
+    const tonWeb = new TonWeb();
+    const blockShards = await tonWeb.provider.getBlockShards(masterchainInfo.last.seqno);
+    const shardInfo = await liteEngine.query(Functions.liteServer_getShardInfo, {
+      kind: "liteServer.getShardInfo",
+      id: {
+        kind: "tonNode.blockIdExt",
+        ...initialKeyBlockInformation
+      },
+      workchain: 0,
+      shard: blockShards.shards[0].shard,
+      exact: true
+    });
+    // const stateHashBoc = findBoc("state-hash").toString("hex");
+    // Store state hash of the block so that we can use it to validate older blocks
+    await validator.readMasterProof({ boc: shardInfo.shardProof.toString("hex") });
+  });
 
   // it("shard block test", async () => {
   //   // Prerequisite: need the new masterchain's block to be verified first
@@ -233,32 +232,47 @@ describe("Real Ton data tests", () => {
   //   ).toEqual(true);
   // });
 
-  // it("bridge contract reads data from transaction", async () => {
-  //   const blockBoc = findBoc("tx-proof").toString("hex");
-  //   const txBoc = findBoc("tx-proof", true).toString("hex");
-
-  //   await bridge.readTransaction({
-  //     txBoc,
-  //     blockBoc,
-  //     validatorContractAddr: validator.contractAddress,
-  //     opcode: "0000000000000000000000000000000000000000000000000000000000000001"
-  //   });
-
-  //   // FIXME: this address is converted from 20 bytes of the address in the tx boc.
-  //   const balanceOf = await dummyToken.balance({ address: "orai1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqskuxw" });
-  //   // FIXME: balance = 1 because we hard-coded it in the contract for testing. Should not be 1 in real tests
-  //   expect(balanceOf.balance).toEqual("1");
-
-  //   const channelBalance = await bridge.channelStateData({ channelId: "" });
-  //   expect(channelBalance.balances.length).toEqual(1);
-  //   expect(channelBalance.balances[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
-  //   expect(channelBalance.total_sent.length).toEqual(1);
-  //   expect(channelBalance.total_sent[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
-
-  //   const txHash = findTxHash();
-  //   const isTxProcessed = await bridge.isTxProcessed({
-  //     txHash
-  //   });
-  //   expect(isTxProcessed).toEqual(true);
-  // });
+  it("bridge contract reads data from transaction", async () => {
+    // const knownSeqNo = 38194946;
+    // const fullBlock = await liteClient.getFullBlock(knownSeqNo);
+    // const initialBlockInformation = fullBlock.shards.find((blockRes) => blockRes.seqno === knownSeqNo);
+    // const targetSeqNo = 38194676;
+    // const targetedFullBlock = await liteClient.getFullBlock(38194676);
+    // const targetBlockInfo = targetedFullBlock.shards.find((blockRes) => blockRes.seqno === targetSeqNo);
+    // const blockProof = await liteEngine.query(Functions.liteServer_getBlockProof, {
+    //   kind: "liteServer.getBlockProof",
+    //   mode: 0,
+    //   knownBlock: {
+    //     kind: "tonNode.blockIdExt",
+    //     ...initialBlockInformation
+    //   },
+    //   targetBlock: {
+    //     kind: "tonNode.blockIdExt",
+    //     ...targetBlockInfo
+    //   }
+    // });
+    // console.log("block proof: ", blockProof);
+    // const blockBoc = findBoc("tx-proof").toString("hex");
+    // const txBoc = findBoc("tx-proof", true).toString("hex");
+    // await bridge.readTransaction({
+    //   txBoc,
+    //   blockBoc,
+    //   validatorContractAddr: validator.contractAddress,
+    //   opcode: "0000000000000000000000000000000000000000000000000000000000000001"
+    // });
+    // // FIXME: this address is converted from 20 bytes of the address in the tx boc.
+    // const balanceOf = await dummyToken.balance({ address: "orai1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqskuxw" });
+    // // FIXME: balance = 1 because we hard-coded it in the contract for testing. Should not be 1 in real tests
+    // expect(balanceOf.balance).toEqual("1");
+    // const channelBalance = await bridge.channelStateData({ channelId: "" });
+    // expect(channelBalance.balances.length).toEqual(1);
+    // expect(channelBalance.balances[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
+    // expect(channelBalance.total_sent.length).toEqual(1);
+    // expect(channelBalance.total_sent[0]).toEqual({ native: { amount: "1", denom: "" } } as Amount);
+    // const txHash = findTxHash();
+    // const isTxProcessed = await bridge.isTxProcessed({
+    //   txHash
+    // });
+    // expect(isTxProcessed).toEqual(true);
+  });
 });
