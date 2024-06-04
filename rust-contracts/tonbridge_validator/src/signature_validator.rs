@@ -353,20 +353,7 @@ impl ISignatureValidator for SignatureValidator {
         for (key, validator) in validator_infos.list.iter() {
             let index = usize::from_str_radix(key, 16)?;
             validators[index] = ValidatorDescription {
-                c_type: 0x73,
-                weight: validator.weight,
-                adnl_addr: validator.adnl_addr.as_slice().try_into()?,
-                pubkey: validator.public_key.as_slice().try_into()?,
-                node_id: Bytes32::default(),
-            };
-        }
-        let mut validators: Vec<ValidatorDescription> =
-            vec![ValidatorDescription::default(); validator_infos.list.len()];
-
-        for (key, validator) in validator_infos.list.iter() {
-            let index = usize::from_str_radix(key, 16)?;
-            validators[index] = ValidatorDescription {
-                c_type: 0x73,
+                c_type: validator._type,
                 weight: validator.weight,
                 adnl_addr: validator.adnl_addr.as_slice().try_into()?,
                 pubkey: validator.public_key.as_slice().try_into()?,
