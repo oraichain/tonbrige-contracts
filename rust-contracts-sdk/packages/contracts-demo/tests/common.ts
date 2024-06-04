@@ -10,13 +10,21 @@ export const queryAllValidators = async (tonValidator: TonbridgeValidatorInterfa
   let startAfter;
 
   while (true) {
-    const validatorsTemp = await tonValidator.getValidators({ limit: 30, startAfter, order: 0 });
+    const validatorsTemp = await tonValidator.getValidators({ limit: 30, startAfter });
     if (validatorsTemp.length === 0) {
       break;
     }
     validators = validators.concat(validatorsTemp);
     startAfter = validators.length;
   }
+
+  // for (let i = 0; i < validators.length; ++i) {
+  //   for (let j = i + 1; j < -validators.length; ++j) {
+  //     if (validators[i].node_id == validators[j].node_id) {
+  //       console.log(i, j);
+  //     }
+  //   }
+  // }
   return validators;
 };
 
