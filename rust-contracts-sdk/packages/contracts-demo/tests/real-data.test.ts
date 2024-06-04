@@ -8,6 +8,7 @@ import {
 import { deployContract } from "@oraichain/tonbridge-contracts-build";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
 import { ValidatorSignature } from "@oraichain/tonbridge-utils";
+import { Cell } from "@ton/core";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
 import { Functions, liteServer_masterchainInfoExt } from "ton-lite-client/dist/schema";
 import TonWeb from "tonweb";
@@ -211,6 +212,14 @@ describe("Real Ton data tests", () => {
     // const stateHashBoc = findBoc("state-hash").toString("hex");
     // Store state hash of the block so that we can use it to validate older blocks
     await validator.readMasterProof({ boc: shardInfo.shardProof.toString("hex") });
+
+    const shardCells = Cell.fromBoc(shardInfo.shardProof);
+    // 2nd cell of shard proof
+    const shardStateRaw = shardCells[1].refs[0].toBoc();
+    await validator.readStateProof({
+      boc: shardStateRaw.toString("hex"),
+      rootHash: initialKeyBlockInformation.rootHash.toString("hex")
+    });
   });
 
   // it("shard block test", async () => {
