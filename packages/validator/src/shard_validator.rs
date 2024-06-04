@@ -213,11 +213,6 @@ impl IShardValidator for ShardValidator {
         root_idx: usize,
         toc: &mut [CellData],
     ) -> StdResult<Bytes32> {
-        // require(
-        //     isVerifiedBlock(toc[root_idx]._hash[0]),
-        //     "Block is not verified"
-        // );
-
         // extra
         let cell_idx = toc[root_idx].refs[2];
         read_u8(boc, toc, cell_idx, 8)?;

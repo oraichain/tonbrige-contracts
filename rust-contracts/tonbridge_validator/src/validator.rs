@@ -9,6 +9,7 @@ use tonbridge_validator::{
     msg::UserFriendlyValidator,
     shard_validator::{IShardValidator, ShardValidator},
 };
+use tonlib::cell::BagOfCells;
 
 use crate::{
     error::ContractError,
@@ -158,23 +159,47 @@ impl Validator {
         Ok(())
     }
 
-    pub fn read_master_proof(&self, storage: &mut dyn Storage, boc: &[u8]) -> StdResult<()> {
-        let mut header = self.toc_parser.parse_serialized_header(boc)?;
-        let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
+    pub fn read_master_proof(
+        &self,
+        storage: &mut dyn Storage,
+        boc: &[u8],
+    ) -> Result<(), ContractError> {
+        let cells = BagOfCells::parse(boc)?;
 
-        if !self.is_verified_block(storage, toc[header.root_idx].hashes[0])? {
-            return Err(StdError::generic_err("Not verified"));
+        // reference: https://docs.ton.org/develop/data-formats/proofs#shard-block
+        let masterchain_block_merkle_proof = cells.root(0)?;
+        let root_hash = masterchain_block_merkle_proof.reference(0)?.hashes[0]
+            .clone()
+            .as_slice()
+            .try_into()?;
+
+        if !self.is_verified_block(storage, root_hash)? {
+            return Err(ContractError::Std(StdError::generic_err("Not verified")));
         }
 
-        let new_hash = self
-            .shard_validator
-            .read_master_proof(boc, header.root_idx, &mut toc)?;
+        let merkle_update_of_shard_state =
+            masterchain_block_merkle_proof.reference(0)?.reference(2)?;
 
-        let block_key = &toc[header.root_idx].hashes[0];
-        let mut block = VERIFIED_BLOCKS.load(storage, block_key)?;
-        block.new_hash = new_hash;
+        let mut parser = merkle_update_of_shard_state.parser();
+        let _cell_type = parser.load_byte()?;
+        let _old_state_hash = parser.load_bits(256)?;
+        let new_state_hash = parser.load_bits(256)?;
 
-        VERIFIED_BLOCKS.save(storage, block_key, &block)
+        let shard_state_raw = cells.root(1)?.reference(0)?;
+        let merkle_shard_state_hash = shard_state_raw.hashes[0].clone();
+        if HexBinary::from(new_state_hash.clone())
+            .ne(&HexBinary::from(merkle_shard_state_hash.clone()))
+        {
+            return Err(ContractError::Std(StdError::generic_err(
+                &format!("New state hash does not match with the merkle shard state hash. Not trusted. New state hash: {:?}; merkle shard state hash: {:?}", HexBinary::from(new_state_hash).to_hex(), HexBinary::from(merkle_shard_state_hash).to_hex()),
+            )));
+        }
+
+        let mut block = VERIFIED_BLOCKS.load(storage, &root_hash)?;
+        block.new_hash = new_state_hash.as_slice().try_into()?;
+
+        VERIFIED_BLOCKS.save(storage, &root_hash, &block)?;
+        Ok(())
     }
 
     pub fn read_state_proof(
