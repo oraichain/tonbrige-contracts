@@ -20,6 +20,12 @@ pub enum ExecuteMsg {
         file_hash: HexBinary, // in hex form
         vdata: Vec<VdataHex>,
     },
+    VerifyBlockByValidatorSignatures {
+        boc: HexBinary, // in hex form
+        block_header_proof: HexBinary,
+        file_hash: HexBinary,
+        vdata: Vec<VdataHex>,
+    },
     // commented out because dont use yet
     // AddCurrentBlockToVerifiedSet {
     //     root_hash: String,
@@ -57,7 +63,7 @@ pub enum QueryMsg {
     },
     #[returns(Vec<UserFriendlyValidator>)]
     GetValidators {
-        start_after: Option<u64>,
+        start_after: Option<String>,
         limit: Option<u32>,
         order: Option<u8>,
     },

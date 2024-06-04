@@ -50,9 +50,14 @@ pub fn execute(
             file_hash,
             vdata,
         } => verify_validators(deps, root_hash, file_hash, vdata),
-        // ExecuteMsg::AddCurrentBlockToVerifiedSet { root_hash } => {
-        //     add_current_block_to_verified_set(deps, root_hash)
-        // }
+        ExecuteMsg::VerifyBlockByValidatorSignatures {
+            boc,
+            block_header_proof,
+            file_hash,
+            vdata,
+        } => {
+            verify_block_with_validator_signatures(deps, boc, block_header_proof, file_hash, vdata)
+        }
         ExecuteMsg::ReadMasterProof { boc } => read_master_proof(deps, boc),
         ExecuteMsg::ReadStateProof { boc, root_hash } => read_state_proof(deps, boc, root_hash),
         ExecuteMsg::ParseShardProofPath { boc } => parse_shard_proof_path(deps, boc),
@@ -125,16 +130,36 @@ pub fn verify_validators(
     Ok(Response::new().add_attributes(vec![("action", "verify_validators")]))
 }
 
-// this function is probably rarely used
-// since it simply adds a new block into the set of verified blocks given that the validators have validated it.
-// pub fn add_current_block_to_verified_set(
-//     deps: DepsMut,
-//     root_hash: String,
-// ) -> Result<Response, ContractError> {
-//     let validator = VALIDATOR.load(deps.storage)?;
-//     validator.add_current_block_to_verified_set(deps.storage, to_bytes32(&root_hash)?)?;
-//     Ok(Response::new().add_attributes(vec![("action", "add_current_block_to_verified_set")]))
-// }
+// should be called by relayers
+pub fn verify_block_with_validator_signatures(
+    deps: DepsMut,
+    boc: HexBinary,
+    block_header_proof: HexBinary,
+    file_hash: HexBinary,
+    vdata: Vec<VdataHex>,
+) -> Result<Response, ContractError> {
+    let validator = VALIDATOR.load(deps.storage)?;
+    let vdata_bytes = vdata
+        .iter()
+        .map(|data| {
+            let node_id = to_bytes32(&data.node_id).unwrap();
+            let r = to_bytes32(&data.r).unwrap();
+            let s = to_bytes32(&data.s).unwrap();
+
+            // transform from hex string to bytes32
+            Vdata { node_id, r, s }
+        })
+        .collect::<Vec<Vdata>>();
+    validator.verify_block_with_validator_signatures(
+        deps.storage,
+        deps.api,
+        boc,
+        block_header_proof,
+        to_bytes32(&file_hash)?,
+        &vdata_bytes,
+    )?;
+    Ok(Response::new().add_attributes(vec![("action", "verify_block_with_validator_signatures")]))
+}
 
 pub fn read_master_proof(deps: DepsMut, boc: HexBinary) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
@@ -217,30 +242,30 @@ pub fn get_candidates_for_validators(
         allow_range =
             SIGNATURE_CANDIDATE_VALIDATOR.range(deps.storage, start, None, map_order(order));
     }
-    let validator = VALIDATOR.load(deps.storage)?;
     let candidates = allow_range
         .take(limit)
-        .map(|item| item.map(|(_, mapping)| validator.parse_user_friendly_validator(mapping)))
+        .map(|item| item.map(|(_, mapping)| Validator::parse_user_friendly_validator(mapping)))
         .collect::<StdResult<Vec<UserFriendlyValidator>>>()?;
     Ok(candidates)
 }
 
 pub fn get_validators(
     deps: Deps,
-    start_after: Option<u64>,
+    start_after: Option<String>,
     limit: Option<u32>,
     order: Option<u8>,
 ) -> StdResult<Vec<UserFriendlyValidator>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let mut allow_range = validator_set().range(deps.storage, None, None, map_order(order));
-    if let Some(start_after) = start_after {
-        let start = Some(Bound::exclusive::<u64>(start_after));
-        allow_range = validator_set().range(deps.storage, start, None, map_order(order));
-    }
-    let validator = VALIDATOR.load(deps.storage)?;
+    let start: Option<Bound<&str>> = start_after.as_deref().map(|start| {
+        let mut range_start = start.as_bytes().to_vec();
+        // push 1 so that it does not include the previous value
+        range_start.push(1);
+        Bound::ExclusiveRaw(range_start)
+    });
+    let allow_range = validator_set().range(deps.storage, start, None, map_order(order));
     let validators = allow_range
         .take(limit)
-        .map(|item| item.map(|(_, mapping)| validator.parse_user_friendly_validator(mapping)))
+        .map(|item| item.map(|(_, mapping)| Validator::parse_user_friendly_validator(mapping)))
         .collect::<StdResult<Vec<UserFriendlyValidator>>>()?;
     Ok(validators)
 }

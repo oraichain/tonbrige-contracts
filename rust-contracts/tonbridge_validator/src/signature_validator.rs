@@ -1,12 +1,15 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Api, HexBinary, Order, StdError, StdResult, Storage};
+use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
     block_parser::{compute_node_id, BlockParser, ValidatorSet},
     tree_of_cells_parser::EMPTY_HASH,
     types::{Bytes32, ValidatorDescription, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
-use tonlib::cell::{BagOfCells, Cell, TonCellError};
+use tonlib::{
+    cell::{BagOfCells, Cell, TonCellError},
+    responses::{ConfigParam, ConfigParams, ConfigParamsValidatorSet},
+};
 
 use crate::{
     error::ContractError,
@@ -25,6 +28,15 @@ pub trait ISignatureValidator {
         validator_set: ValidatorSet,
     ) -> StdResult<Bytes32>;
 
+    fn load_validator_from_config_param(
+        config_params: &ConfigParams,
+        param_number: u8,
+    ) -> Result<ValidatorSet, ContractError>;
+
+    fn load_validator_set(
+        validator_infos: ConfigParamsValidatorSet,
+    ) -> Result<ValidatorSet, ContractError>;
+
     fn verify_validators(
         &self,
         storage: &mut dyn Storage,
@@ -32,7 +44,7 @@ pub trait ISignatureValidator {
         root_h: Bytes32,
         file_hash: Bytes32,
         vdata: &[Vdata],
-    ) -> StdResult<()>;
+    ) -> StdResult<u64>;
 
     fn parse_candidates_root_block(
         &mut self,
@@ -59,10 +71,13 @@ pub trait ISignatureValidator {
 #[cw_serde]
 #[derive(Default)]
 pub struct SignatureValidator {
-    // pub validator_set: ValidatorSet,
-    total_weight: u64,
-    // pub candidates_for_validator_set: ValidatorSet,
+    // used for validating key blocks?
+    pub total_weight: u64,
+    // sum of 100 largest weights of the validators for validating normal blocks, not key blocks
+    pub sum_largest_total_weights: u64,
     candidates_total_weight: u64,
+    // sum of 100 largest weights of the candidates
+    sum_largest_candidates_total_weights: u64,
     pub root_hash: Bytes32,
     block_parser: BlockParser,
 }
@@ -79,6 +94,7 @@ impl SignatureValidator {
         let mut candidates_for_validator_set = get_signature_candidate_validators(storage);
         // let mut j = self.candidates_for_validator_set.len();
         let mut j = candidates_for_validator_set.len();
+        let mut total_weight: Vec<u64> = Vec::with_capacity(j);
 
         for i in 0..validators.len() {
             // if the candidate is already in the list, we compare weight with the input
@@ -101,6 +117,7 @@ impl SignatureValidator {
             candidates_for_validator_set.push(ValidatorDescription::default());
 
             self.candidates_total_weight += validators[i].weight;
+            total_weight.push(validators[i].weight);
             candidates_for_validator_set[j] = validators[i];
             candidates_for_validator_set[j].node_id =
                 compute_node_id(candidates_for_validator_set[j].pubkey);
@@ -108,6 +125,11 @@ impl SignatureValidator {
             // increment size of validator set
             j += 1;
         }
+        // sort desc
+        total_weight.sort_by(|a, b| b.cmp(a));
+        // FIXME: remove hardcode 100 largest. This is because Ton's config param limits 100 validators per block
+        let sum_100_largest_weights: u64 = total_weight[..100].to_vec().iter().sum();
+        self.sum_largest_candidates_total_weights = sum_100_largest_weights;
 
         // store candidate validator
         for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
@@ -156,54 +178,28 @@ impl ISignatureValidator for SignatureValidator {
         root_h: Bytes32,
         file_hash: Bytes32,
         vdata: &[Vdata],
-    ) -> StdResult<()> {
-        let test_root_hash = if self.root_hash == EMPTY_HASH {
-            root_h
-        } else {
-            self.root_hash
-        };
-
-        if test_root_hash == EMPTY_HASH || file_hash == EMPTY_HASH {
+    ) -> StdResult<u64> {
+        if root_h == EMPTY_HASH || file_hash == EMPTY_HASH {
             return Err(StdError::generic_err("wrong root_hash or file_hash"));
         }
 
+        let mut current_weight = 0u64;
+
         for vdata_item in vdata {
             // 1. found validator
-            api.debug(&format!(
-                "node id: {:?}",
-                HexBinary::from(vdata_item.node_id).to_hex()
-            ));
-            let validators: Vec<(String, ValidatorDescription)> = validator_set()
-                .idx
-                .node_id
-                .prefix(HexBinary::from(vdata_item.node_id).to_hex())
-                .range(storage, None, None, Order::Ascending)
-                .collect::<StdResult<_>>()?;
-
-            api.debug(&format!(
-                "total validator set node idx indexes: {:?}",
-                validators.len()
-            ));
-
-            if validators.len() == 0 {
-                api.debug(&format!("Node id not found"));
+            let validator =
+                validator_set().may_load(storage, &HexBinary::from(vdata_item.node_id).to_hex())?;
+            if validator.is_none() {
                 continue;
             }
-
-            if validators.len() > 1 {
-                return Err(StdError::generic_err(
-                    "Validator list has more than one identical node id",
-                ));
-            }
-            let validator = validators[0].1;
-
-            if self.is_signed_by_validator(storage, validator.node_id, test_root_hash) {
+            let validator = validator.unwrap();
+            if self.is_signed_by_validator(storage, validator.node_id, root_h) {
                 continue;
             }
 
             // require(validator_idx != validator_set.length, "wrong node_id");
             let mut message = MESSAGE_PREFIX.to_vec();
-            message.extend_from_slice(&test_root_hash);
+            message.extend_from_slice(&root_h);
             message.extend_from_slice(&file_hash);
 
             // signature = r + s
@@ -213,34 +209,32 @@ impl ISignatureValidator for SignatureValidator {
                 &validator.pubkey,
             )? {
                 // update as verified
-                SIGNED_BLOCKS.save(
-                    storage,
-                    &[validator.node_id, test_root_hash].concat(),
-                    &true,
-                )?;
-            } else {
-                api.debug(&format!(
-                    "validator with node id: {:?} failed to verify signature",
-                    HexBinary::from(vdata_item.node_id).to_hex()
-                ));
+                SIGNED_BLOCKS.save(storage, &[validator.node_id, root_h].concat(), &true)?;
+                current_weight += validator.weight;
             }
         }
 
-        Ok(())
+        Ok(current_weight)
     }
 
     fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32> {
         let candidates_for_validator_set = get_signature_candidate_validators(storage);
         // self.validator_set = self.candidates_for_validator_set.to_owned();
-        for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
-            validator_set().save(storage, i as u64, candidate)?;
+        for (_, candidate) in candidates_for_validator_set.iter().enumerate() {
+            validator_set().save(
+                storage,
+                &HexBinary::from(candidate.node_id).to_hex(),
+                candidate,
+            )?;
         }
 
         // reset candidate for validator set
         reset_signature_candidate_validators(storage);
 
         self.total_weight = self.candidates_total_weight;
+        self.sum_largest_total_weights = self.sum_largest_candidates_total_weights;
         self.candidates_total_weight = 0;
+        self.sum_largest_candidates_total_weights = 0;
         let rh = self.root_hash;
         self.root_hash = Bytes32::default();
 
@@ -278,18 +272,24 @@ impl ISignatureValidator for SignatureValidator {
         if current_weight * 3 <= self.total_weight * 2 {
             return Err(StdError::generic_err(&format!(
                 "not enough votes. Wanted {:?}; has {:?}",
-                current_weight * 3,
-                self.total_weight * 2
+                self.total_weight * 2,
+                current_weight * 3
             )));
         }
 
-        for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
-            validator_set().save(storage, i as u64, candidate)?;
+        for (_, candidate) in candidates_for_validator_set.iter().enumerate() {
+            validator_set().save(
+                storage,
+                &HexBinary::from(candidate.node_id).to_hex(),
+                candidate,
+            )?;
         }
         reset_signature_candidate_validators(storage);
 
         self.total_weight = self.candidates_total_weight;
+        self.sum_largest_total_weights = self.sum_largest_candidates_total_weights;
         self.candidates_total_weight = 0;
+        self.sum_largest_candidates_total_weights = 0;
         let rh = self.root_hash;
         self.root_hash = EMPTY_HASH;
 
@@ -331,32 +331,68 @@ impl ISignatureValidator for SignatureValidator {
             ));
         }
         let block_extra = block_extra.unwrap();
-        let validator_infos = block_extra.custom.config.config.get("22");
-        if validator_infos.is_none() {
-            return Err(ContractError::TonCellError(
-                TonCellError::cell_parser_error("Validation infos not found"),
-            ));
+        let mut validators =
+            SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 34)?;
+        validators.extend(SignatureValidator::load_validator_from_config_param(
+            &block_extra.custom.config,
+            32,
+        )?);
+        let next_validators =
+            SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 36)
+                .ok();
+        if let Some(next_validators) = next_validators {
+            validators.extend(next_validators)
         }
-        let validator_infos = validator_infos.unwrap();
-        if validator_infos.is_none() {
-            return Err(ContractError::TonCellError(
-                TonCellError::cell_parser_error("Validation infos not found"),
-            ));
-        }
-        let validator_infos = validator_infos.clone().unwrap().cur_validators;
-        let mut validators = vec![ValidatorDescription::default(); validator_infos.list.len()];
-        for (key, validator) in validator_infos.list.iter() {
-            let index = usize::from_str_radix(key, 16)?;
-            validators[index] = ValidatorDescription {
-                c_type: validator._type,
-                weight: validator.weight,
-                adnl_addr: validator.adnl_addr.as_slice().try_into()?,
-                pubkey: validator.public_key.as_slice().try_into()?,
-                node_id: Bytes32::default(),
-            };
-        }
-
         Ok(validators)
+    }
+
+    fn load_validator_from_config_param(
+        config_params: &ConfigParams,
+        param_number: u8,
+    ) -> Result<ValidatorSet, ContractError> {
+        let config_param = config_params.config.get(&format!("{:02x}", param_number));
+        if config_param.is_none() {
+            return Err(ContractError::TonCellError(
+                TonCellError::cell_parser_error("Validation infos not found"),
+            ));
+        }
+        let config_param = config_param.unwrap();
+        if config_param.is_none() {
+            return Err(ContractError::TonCellError(
+                TonCellError::cell_parser_error("Validation infos not found"),
+            ));
+        }
+        let config_param = config_param.clone().unwrap();
+        match config_param {
+            ConfigParam::ConfigParams34(validator_infos) => {
+                SignatureValidator::load_validator_set(validator_infos)
+            }
+            ConfigParam::ConfigParams36(validator_infos) => {
+                SignatureValidator::load_validator_set(validator_infos)
+            }
+            ConfigParam::ConfigParams32(validator_infos) => {
+                SignatureValidator::load_validator_set(validator_infos)
+            }
+        }
+    }
+
+    fn load_validator_set(
+        validator_infos: ConfigParamsValidatorSet,
+    ) -> Result<ValidatorSet, ContractError> {
+        validator_infos
+            .validators
+            .list
+            .iter()
+            .map(|validator| {
+                Ok(ValidatorDescription {
+                    c_type: validator.1._type,
+                    weight: validator.1.weight,
+                    adnl_addr: validator.1.adnl_addr.as_slice().try_into()?,
+                    pubkey: validator.1.public_key.as_slice().try_into()?,
+                    node_id: Bytes32::default(),
+                })
+            })
+            .collect::<Result<Vec<ValidatorDescription>, ContractError>>()
     }
 }
 

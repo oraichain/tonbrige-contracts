@@ -4,20 +4,35 @@ import { ParsedBlock } from "@oraichain/tonbridge-utils";
 import { LiteClient, LiteEngine } from "ton-lite-client";
 import { Functions } from "ton-lite-client/dist/schema";
 import { parseBlock } from "../build/common";
+const data = [
+  {
+    a: "1"
+  },
+  { b: "2" },
+  { a: "1" }
+];
 
 export const queryAllValidators = async (tonValidator: TonbridgeValidatorInterface) => {
   let validators: UserFriendlyValidator[] = [];
-  let startAfter = 0;
+  let startAfter = undefined;
+  let valCheck = new Set();
 
   while (true) {
-    const validatorsTemp = await tonValidator.getValidators({ limit: 30, startAfter, order: 0 });
+    const validatorsTemp = await tonValidator.getValidators({ limit: 30, startAfter });
     if (validatorsTemp.length === 0) {
       break;
     }
     validators = validators.concat(validatorsTemp);
-    startAfter = validators.length;
+    startAfter = validatorsTemp[validatorsTemp.length - 1].node_id;
   }
-  return validators;
+
+  return validators.filter((val) => {
+    if (valCheck.has(val.node_id)) {
+      return false;
+    }
+    valCheck.add(val.node_id);
+    return true;
+  });
 };
 
 export const queryAllValidatorCandidates = async (tonValidator: TonbridgeValidatorInterface) => {

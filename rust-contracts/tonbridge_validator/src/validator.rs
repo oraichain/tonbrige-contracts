@@ -9,7 +9,7 @@ use tonbridge_validator::{
     msg::UserFriendlyValidator,
     shard_validator::{IShardValidator, ShardValidator},
 };
-use tonlib::cell::BagOfCells;
+use tonlib::cell::{BagOfCells, TonCellError};
 
 use crate::{
     error::ContractError,
@@ -91,8 +91,66 @@ impl Validator {
         file_hash: Bytes32,
         vdata: &[Vdata],
     ) -> StdResult<()> {
-        self.signature_validator
-            .verify_validators(storage, api, root_h, file_hash, vdata)
+        let test_root_hash = if self.signature_validator.root_hash == EMPTY_HASH {
+            root_h
+        } else {
+            self.signature_validator.root_hash
+        };
+        self.signature_validator.verify_validators(
+            storage,
+            api,
+            test_root_hash,
+            file_hash,
+            vdata,
+        )?;
+        Ok(())
+    }
+
+    pub fn verify_block_with_validator_signatures(
+        &self,
+        storage: &mut dyn Storage,
+        api: &dyn Api,
+        boc: HexBinary,
+        block_header_proof: HexBinary,
+        file_hash: Bytes32,
+        vdata: &[Vdata],
+    ) -> Result<(), ContractError> {
+        let block = BagOfCells::parse(boc.as_slice())?;
+        let root = block.single_root()?;
+        let block_header_proof = BagOfCells::parse(block_header_proof.as_slice())?;
+        let root_hash_from_block_header =
+            block_header_proof.root(0)?.reference(0)?.hashes[0].clone();
+        let root_hash_from_block = root.hashes[0].clone();
+        if root_hash_from_block.ne(&root_hash_from_block_header) {
+            return Err(ContractError::TonCellError(
+                TonCellError::cell_parser_error(
+                    "Block header root hash from header proof does not match the root hash.",
+                ),
+            ));
+        }
+
+        let current_weight = self.signature_validator.verify_validators(
+            storage,
+            api,
+            root_hash_from_block.as_slice().try_into()?,
+            file_hash,
+            vdata,
+        )?;
+
+        if current_weight * 3 <= self.signature_validator.sum_largest_total_weights * 2 {
+            return Err(ContractError::Std(StdError::generic_err(&format!(
+                "not enough votes to verify block. Wanted {:?}; has {:?}",
+                self.signature_validator.sum_largest_total_weights * 2,
+                current_weight * 3,
+            ))));
+        }
+
+        let verified_block_info = VerifiedBlockInfo {
+            verified: true,
+            ..Default::default()
+        };
+        VERIFIED_BLOCKS.save(storage, root_hash_from_block.as_slice().try_into()?, &verified_block_info)?;
+        Ok(())
     }
 
     pub fn add_current_block_to_verified_set(
@@ -257,7 +315,6 @@ impl Validator {
     }
 
     pub fn parse_user_friendly_validator(
-        &self,
         validator_description: ValidatorDescription,
     ) -> UserFriendlyValidator {
         UserFriendlyValidator {
@@ -270,12 +327,11 @@ impl Validator {
     }
 
     pub fn parse_user_friendly_validators(
-        &self,
         validator_set: ValidatorSet,
     ) -> Vec<UserFriendlyValidator> {
         validator_set
             .into_iter()
-            .map(|candidate| self.parse_user_friendly_validator(candidate))
+            .map(|candidate| Validator::parse_user_friendly_validator(candidate))
             .collect()
     }
 }

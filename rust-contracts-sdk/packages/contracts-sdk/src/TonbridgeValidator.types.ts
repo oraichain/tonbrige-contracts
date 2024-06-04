@@ -17,6 +17,13 @@ export type ExecuteMsg = {
     vdata: VdataHex[];
   };
 } | {
+  verify_block_by_validator_signatures: {
+    block_header_proof: HexBinary;
+    boc: HexBinary;
+    file_hash: HexBinary;
+    vdata: VdataHex[];
+  };
+} | {
   read_master_proof: {
     boc: HexBinary;
   };
@@ -52,7 +59,7 @@ export type QueryMsg = {
   get_validators: {
     limit?: number | null;
     order?: number | null;
-    start_after?: number | null;
+    start_after?: string | null;
   };
 } | {
   is_verified_block: {

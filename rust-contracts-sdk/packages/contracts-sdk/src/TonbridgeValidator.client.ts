@@ -27,7 +27,7 @@ export interface TonbridgeValidatorReadOnlyInterface {
   }: {
     limit?: number;
     order?: number;
-    startAfter?: number;
+    startAfter?: string;
   }) => Promise<ArrayOfUserFriendlyValidator>;
   isVerifiedBlock: ({
     rootHash
@@ -85,7 +85,7 @@ export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnly
   }: {
     limit?: number;
     order?: number;
-    startAfter?: number;
+    startAfter?: string;
   }): Promise<ArrayOfUserFriendlyValidator> => {
     return this.client.queryContractSmart(this.contractAddress, {
       get_validators: {
@@ -143,6 +143,17 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
     rootHash: HexBinary;
     vdata: VdataHex[];
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
+  verifyBlockByValidatorSignatures: ({
+    blockHeaderProof,
+    boc,
+    fileHash,
+    vdata
+  }: {
+    blockHeaderProof: HexBinary;
+    boc: HexBinary;
+    fileHash: HexBinary;
+    vdata: VdataHex[];
+  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   readMasterProof: ({
     boc
   }: {
@@ -181,6 +192,7 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     this.parseCandidatesRootBlock = this.parseCandidatesRootBlock.bind(this);
     this.resetValidatorSet = this.resetValidatorSet.bind(this);
     this.verifyValidators = this.verifyValidators.bind(this);
+    this.verifyBlockByValidatorSignatures = this.verifyBlockByValidatorSignatures.bind(this);
     this.readMasterProof = this.readMasterProof.bind(this);
     this.readStateProof = this.readStateProof.bind(this);
     this.parseShardProofPath = this.parseShardProofPath.bind(this);
@@ -222,6 +234,26 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
       verify_validators: {
         file_hash: fileHash,
         root_hash: rootHash,
+        vdata
+      }
+    }, _fee, _memo, _funds);
+  };
+  verifyBlockByValidatorSignatures = async ({
+    blockHeaderProof,
+    boc,
+    fileHash,
+    vdata
+  }: {
+    blockHeaderProof: HexBinary;
+    boc: HexBinary;
+    fileHash: HexBinary;
+    vdata: VdataHex[];
+  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
+    return await this.client.execute(this.sender, this.contractAddress, {
+      verify_block_by_validator_signatures: {
+        block_header_proof: blockHeaderProof,
+        boc,
+        file_hash: fileHash,
         vdata
       }
     }, _fee, _memo, _funds);
