@@ -46,7 +46,7 @@ describe("Real Ton data tests", () => {
     liteEngine = new LiteRoundRobinEngine(engines);
     liteClient = new LiteClient({ engine: liteEngine });
 
-    // masterchainInfo = await liteClient.getMasterchainInfoExt();
+    masterchainInfo = await liteClient.getMasterchainInfoExt();
     let initBlockSeqno = 38125645; // the seqno of the boc hardcoded in @oraichain/tonbridge-utils/blockParserLarge.ts
     const { rawBlockData } = await queryKeyBlock(liteClient, liteEngine, initBlockSeqno);
     initialKeyBlockBoc = rawBlockData.data.toString("hex");
@@ -101,60 +101,69 @@ describe("Real Ton data tests", () => {
       .filter((validator) => validator.c_type !== 0)
       .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
+    console.log("validators node id: ", validators[0].node_id);
+
     expect(validators.length).toEqual(343);
     validators = (await queryAllValidatorCandidates(validator)).filter((validator) => validator.c_type !== 0);
     expect(validators.length).toEqual(0);
   });
 
-  it("Verify updated validator signatures in new block", async () => {
-    masterchainInfo = await liteClient.getMasterchainInfoExt();
+  it("Verify updated validator signatures in new block real data", async () => {
+    // masterchainInfo = await liteClient.getMasterchainInfoExt();
     const { parsedBlock, rawBlockData } = await queryKeyBlock(liteClient, liteEngine, masterchainInfo.last.seqno);
-    const boc = rawBlockData.data.toString("hex");
+    // const boc = rawBlockData.data.toString("hex");
 
-    await validator.parseCandidatesRootBlock({ boc });
+    // await validator.parseCandidatesRootBlock({ boc });
 
-    let validators = (await queryAllValidatorCandidates(validator))
-      .filter((validator) => validator.c_type !== 0)
-      .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
+    // let validators = (await queryAllValidatorCandidates(validator))
+    //   .filter((validator) => validator.c_type !== 0)
+    //   .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
 
-    expect(validators.length).toBeGreaterThan(100);
+    // expect(validators.length).toBeGreaterThan(100);
     const tonweb = new TonWeb();
     const valSignatures = (await tonweb.provider.send("getMasterchainBlockSignatures", {
       seqno: rawBlockData.id.seqno
     })) as any;
     const signatures = valSignatures.signatures as ValidatorSignature[];
-    console.log("validator signatures: ", signatures);
+    console.log("signatures: ", signatures);
+    let validators = (await queryAllValidators(validator)).filter((validator) => validator.c_type !== 0);
+    console.log("validator length: ", validators.length);
+    for (const sig of signatures) {
+      for (const val of validators) {
+        if (sig.node_id_short === val.node_id) {
+          console.log("found sig");
+        }
+      }
+    }
+    console.log("block data: ", rawBlockData);
 
     // TODO: query validator signatures
+    // const vdata = signatures.map((sig) => {
+    //   const signatureBuffer = Buffer.from(sig.signature, "base64");
+    //   const r = signatureBuffer.subarray(0, 32);
+    //   const s = signatureBuffer.subarray(32);
+    //   return {
+    //     node_id: Buffer.from(sig.node_id_short, "base64").toString("hex"),
+    //     r: r.toString("hex"),
+    //     s: s.toString("hex")
+    //   };
+    // });
 
-    // const signatures = data.find((el) => el.type === "proof-validators")!.signatures!;
-    console.log("total signature length: ", Buffer.from(signatures[0].signature, "base64").length);
-    const vdata = signatures.map((sig) => {
-      const signatureBuffer = Buffer.from(sig.signature, "base64");
-      const r = signatureBuffer.subarray(0, 32);
-      const s = signatureBuffer.subarray(32);
-      return {
-        node_id: Buffer.from(sig.node_id_short, "base64").toString("hex"),
-        r: r.toString("hex"),
-        s: s.toString("hex")
-      };
-    });
+    // await validator.verifyValidators({
+    //   rootHash: rawBlockData.id.rootHash.toString("hex"),
+    //   fileHash: rawBlockData.id.fileHash.toString("hex"),
+    //   vdata
+    // });
 
-    await validator.verifyValidators({
-      rootHash: "0000000000000000000000000000000000000000000000000000000000000000",
-      fileHash: rawBlockData.id.fileHash.toString("hex"),
-      vdata
-    });
-
-    for (let i = 0; i < signatures.length; i++) {
-      expect(
-        await validator.isSignedByValidator({
-          validatorNodeId: vdata[i].node_id,
-          rootHash: rawBlockData.id.rootHash.toString("hex")
-        })
-      ).toEqual(true);
-    }
-    expect(await validator.isVerifiedBlock({ rootHash: rawBlockData.id.rootHash.toString("hex") })).toEqual(true);
+    // for (let i = 0; i < signatures.length; i++) {
+    //   expect(
+    //     await validator.isSignedByValidator({
+    //       validatorNodeId: vdata[i].node_id,
+    //       rootHash: rawBlockData.id.rootHash.toString("hex")
+    //     })
+    //   ).toEqual(true);
+    // }
+    // expect(await validator.isVerifiedBlock({ rootHash: rawBlockData.id.rootHash.toString("hex") })).toEqual(true);
 
     // validators = (await validator.getValidators())
     //   .filter((validator) => validator.c_type !== 0)

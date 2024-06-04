@@ -73,8 +73,8 @@ impl Validator {
         VERIFIED_BLOCKS.save(storage, &key_block_root_hash, &verified_block_info)
     }
 
-    pub fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<()> {
-        let key_block_root_hash = self.signature_validator.set_validator_set(storage)?;
+    pub fn set_validator_set(&mut self, storage: &mut dyn Storage, api: &dyn Api) -> StdResult<()> {
+        let key_block_root_hash = self.signature_validator.set_validator_set(storage, api)?;
         let verified_block_info = VerifiedBlockInfo {
             verified: true,
             ..Default::default()

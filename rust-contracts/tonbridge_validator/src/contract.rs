@@ -10,7 +10,7 @@ use tonbridge_validator::msg::{
 };
 
 use crate::error::ContractError;
-use crate::state::{OWNER, SIGNATURE_CANDIDATE_VALIDATOR, SIGNATURE_VALIDATOR_SET, VALIDATOR};
+use crate::state::{validator_set, OWNER, SIGNATURE_CANDIDATE_VALIDATOR, VALIDATOR};
 use crate::validator::{IValidator, Validator};
 
 // settings for pagination
@@ -120,7 +120,7 @@ pub fn verify_validators(
         to_bytes32(&file_hash)?,
         &vdata_bytes,
     )?;
-    validator.set_validator_set(deps.storage)?;
+    validator.set_validator_set(deps.storage, deps.api)?;
     VALIDATOR.save(deps.storage, &validator)?;
     Ok(Response::new().add_attributes(vec![("action", "verify_validators")]))
 }
@@ -232,10 +232,10 @@ pub fn get_validators(
     order: Option<u8>,
 ) -> StdResult<Vec<UserFriendlyValidator>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let mut allow_range = SIGNATURE_VALIDATOR_SET.range(deps.storage, None, None, map_order(order));
+    let mut allow_range = validator_set().range(deps.storage, None, None, map_order(order));
     if let Some(start_after) = start_after {
         let start = Some(Bound::exclusive::<u64>(start_after));
-        allow_range = SIGNATURE_VALIDATOR_SET.range(deps.storage, start, None, map_order(order));
+        allow_range = validator_set().range(deps.storage, start, None, map_order(order));
     }
     let validator = VALIDATOR.load(deps.storage)?;
     let validators = allow_range

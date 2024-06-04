@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
+use cosmwasm_std::{Api, HexBinary, Order, StdError, StdResult, Storage};
 use tonbridge_parser::{
     block_parser::{compute_node_id, BlockParser, ValidatorSet},
     tree_of_cells_parser::EMPTY_HASH,
@@ -12,8 +12,8 @@ use crate::{
     error::ContractError,
     state::{
         get_signature_candidate_validators, get_signature_validator_set,
-        reset_signature_candidate_validators, reset_signature_validator_set,
-        SIGNATURE_CANDIDATE_VALIDATOR, SIGNATURE_VALIDATOR_SET, SIGNED_BLOCKS,
+        reset_signature_candidate_validators, reset_signature_validator_set, validator_set,
+        SIGNATURE_CANDIDATE_VALIDATOR, SIGNED_BLOCKS,
     },
 };
 
@@ -47,7 +47,8 @@ pub trait ISignatureValidator {
         root_h: Bytes32,
     ) -> bool;
 
-    fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32>;
+    fn set_validator_set(&mut self, storage: &mut dyn Storage, api: &dyn Api)
+        -> StdResult<Bytes32>;
 
     fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32>;
 
@@ -166,27 +167,40 @@ impl ISignatureValidator for SignatureValidator {
             return Err(StdError::generic_err("wrong root_hash or file_hash"));
         }
 
-        let validator_set = get_signature_validator_set(storage);
-
-        let mut validator_idx = validator_set.len();
         for vdata_item in vdata {
             // 1. found validator
-            for j in 0..validator_set.len() {
-                if validator_set[j].node_id == vdata_item.node_id {
-                    validator_idx = j;
-                    break;
-                }
-            }
-            // skip others node_ids and already checked node_ids
-            if validator_idx == validator_set.len()
-                || self.is_signed_by_validator(
-                    storage,
-                    validator_set[validator_idx].node_id,
-                    test_root_hash,
-                )
-            {
+            api.debug(&format!(
+                "node id: {:?}",
+                HexBinary::from(vdata_item.node_id).to_hex()
+            ));
+            let validators: Vec<(String, ValidatorDescription)> = validator_set()
+                .idx
+                .node_id
+                .prefix(HexBinary::from(vdata_item.node_id).to_hex())
+                .range(storage, None, None, Order::Ascending)
+                .collect::<StdResult<_>>()?;
+
+            api.debug(&format!(
+                "total validator set node idx indexes: {:?}",
+                validators.len()
+            ));
+
+            if validators.len() == 0 {
+                api.debug(&format!("Node id not found"));
                 continue;
             }
+
+            if validators.len() > 1 {
+                return Err(StdError::generic_err(
+                    "Validator list has more than one identical node id",
+                ));
+            }
+            let validator = validators[0].1;
+
+            if self.is_signed_by_validator(storage, validator.node_id, test_root_hash) {
+                continue;
+            }
+
             // require(validator_idx != validator_set.length, "wrong node_id");
             let mut message = MESSAGE_PREFIX.to_vec();
             message.extend_from_slice(&test_root_hash);
@@ -196,14 +210,19 @@ impl ISignatureValidator for SignatureValidator {
             if api.ed25519_verify(
                 &message,
                 &[vdata_item.r, vdata_item.s].concat(),
-                &validator_set[validator_idx].pubkey,
+                &validator.pubkey,
             )? {
                 // update as verified
                 SIGNED_BLOCKS.save(
                     storage,
-                    &[validator_set[validator_idx].node_id, test_root_hash].concat(),
+                    &[validator.node_id, test_root_hash].concat(),
                     &true,
                 )?;
+            } else {
+                api.debug(&format!(
+                    "validator with node id: {:?} failed to verify signature",
+                    HexBinary::from(vdata_item.node_id).to_hex()
+                ));
             }
         }
 
@@ -214,12 +233,11 @@ impl ISignatureValidator for SignatureValidator {
         let candidates_for_validator_set = get_signature_candidate_validators(storage);
         // self.validator_set = self.candidates_for_validator_set.to_owned();
         for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
-            SIGNATURE_VALIDATOR_SET.save(storage, i as u64, candidate)?;
+            validator_set().save(storage, i as u64, candidate)?;
         }
 
         // reset candidate for validator set
         reset_signature_candidate_validators(storage);
-        // self.candidates_for_validator_set = ValidatorSet::default();
 
         self.total_weight = self.candidates_total_weight;
         self.candidates_total_weight = 0;
@@ -229,30 +247,44 @@ impl ISignatureValidator for SignatureValidator {
         Ok(rh)
     }
 
-    fn set_validator_set(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32> {
-        let validator_set = get_signature_validator_set(storage);
+    fn set_validator_set(
+        &mut self,
+        storage: &mut dyn Storage,
+        api: &dyn Api,
+    ) -> StdResult<Bytes32> {
+        let val_set = get_signature_validator_set(storage);
         // remove old validators from the list to prevent unexpected errors
         reset_signature_validator_set(storage);
         let candidates_for_validator_set = get_signature_candidate_validators(storage);
         // if current validator_set is empty, check caller
         // else check votes
-        if validator_set[0].weight == 0 {
+        if val_set[0].weight == 0 {
             return Err(StdError::generic_err("current validator_set is empty"));
         }
 
         let mut current_weight = 0;
-        for validator in &validator_set {
+        for validator in &val_set {
             if self.is_signed_by_validator(storage, validator.node_id, self.root_hash) {
                 current_weight += validator.weight;
             }
         }
 
+        api.debug(&format!(
+            "current weight: {:?}, total weight: {:?}",
+            current_weight * 3,
+            self.total_weight * 2
+        ));
+
         if current_weight * 3 <= self.total_weight * 2 {
-            return Err(StdError::generic_err("not enough votes"));
+            return Err(StdError::generic_err(&format!(
+                "not enough votes. Wanted {:?}; has {:?}",
+                current_weight * 3,
+                self.total_weight * 2
+            )));
         }
 
         for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
-            SIGNATURE_VALIDATOR_SET.save(storage, i as u64, candidate)?;
+            validator_set().save(storage, i as u64, candidate)?;
         }
         reset_signature_candidate_validators(storage);
 
