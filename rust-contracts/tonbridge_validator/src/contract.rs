@@ -217,10 +217,10 @@ pub fn get_candidates_for_validators(
         allow_range =
             SIGNATURE_CANDIDATE_VALIDATOR.range(deps.storage, start, None, map_order(order));
     }
-    let validator = VALIDATOR.load(deps.storage)?;
+
     let candidates = allow_range
         .take(limit)
-        .map(|item| item.map(|(_, mapping)| validator.parse_user_friendly_validator(mapping)))
+        .map(|item| item.map(|(_, mapping)| Validator::parse_user_friendly_validator(mapping)))
         .collect::<StdResult<Vec<UserFriendlyValidator>>>()?;
     Ok(candidates)
 }
@@ -232,16 +232,19 @@ pub fn get_validators(
     order: Option<u8>,
 ) -> StdResult<Vec<UserFriendlyValidator>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+
     let mut allow_range = validator_set().range(deps.storage, None, None, map_order(order));
+
     if let Some(start_after) = start_after {
         let start = Some(Bound::exclusive::<u64>(start_after));
         allow_range = validator_set().range(deps.storage, start, None, map_order(order));
     }
-    let validator = VALIDATOR.load(deps.storage)?;
+
     let validators = allow_range
         .take(limit)
-        .map(|item| item.map(|(_, mapping)| validator.parse_user_friendly_validator(mapping)))
+        .map(|item| item.map(|(_, mapping)| Validator::parse_user_friendly_validator(mapping)))
         .collect::<StdResult<Vec<UserFriendlyValidator>>>()?;
+
     Ok(validators)
 }
 

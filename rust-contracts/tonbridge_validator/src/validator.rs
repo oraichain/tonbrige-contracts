@@ -257,7 +257,6 @@ impl Validator {
     }
 
     pub fn parse_user_friendly_validator(
-        &self,
         validator_description: ValidatorDescription,
     ) -> UserFriendlyValidator {
         UserFriendlyValidator {
@@ -275,7 +274,7 @@ impl Validator {
     ) -> Vec<UserFriendlyValidator> {
         validator_set
             .into_iter()
-            .map(|candidate| self.parse_user_friendly_validator(candidate))
+            .map(|candidate| Validator::parse_user_friendly_validator(candidate))
             .collect()
     }
 }
@@ -291,11 +290,18 @@ impl IValidator for Validator {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::{testing::mock_dependencies, HexBinary};
+    use cosmwasm_std::{
+        from_binary,
+        testing::{mock_dependencies, mock_env, mock_info},
+        HexBinary,
+    };
     use tonbridge_parser::{
         tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser},
         types::{Bytes32, Vdata, VerifiedBlockInfo},
     };
+    use tonbridge_validator::msg::{InstantiateMsg, QueryMsg, UserFriendlyValidator};
+
+    use crate::contract::{get_validators, instantiate, query};
 
     use super::Validator;
 
@@ -379,6 +385,7 @@ mod tests {
             .into_iter()
             .filter(|c| c.c_type != 0)
             .collect();
+        validator.init_validators(deps.as_mut().storage).unwrap();
 
         // choose two random indexes for testing
         assert_eq!(validators.len(), 343usize);

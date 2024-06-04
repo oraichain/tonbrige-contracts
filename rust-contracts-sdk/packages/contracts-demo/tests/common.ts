@@ -7,7 +7,7 @@ import { parseBlock } from "../build/common";
 
 export const queryAllValidators = async (tonValidator: TonbridgeValidatorInterface) => {
   let validators: UserFriendlyValidator[] = [];
-  let startAfter = 0;
+  let startAfter;
 
   while (true) {
     const validatorsTemp = await tonValidator.getValidators({ limit: 30, startAfter, order: 0 });
