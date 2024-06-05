@@ -4,7 +4,7 @@ export interface InstantiateMsg {
 }
 export type ExecuteMsg = {
   parse_candidates_root_block: {
-    boc: HexBinary;
+    keyblock_boc: HexBinary;
   };
 } | {
   reset_validator_set: {
@@ -17,26 +17,21 @@ export type ExecuteMsg = {
     vdata: VdataHex[];
   };
 } | {
-  read_master_proof: {
-    boc: HexBinary;
+  verify_block_by_validator_signatures: {
+    block_boc: HexBinary;
+    block_header_proof: HexBinary;
+    file_hash: HexBinary;
+    vdata: VdataHex[];
   };
 } | {
-  read_state_proof: {
-    boc: HexBinary;
-    root_hash: HexBinary;
-  };
-} | {
-  parse_shard_proof_path: {
-    boc: HexBinary;
+  verify_shard_blocks: {
+    master_shard_proof_boc: HexBinary;
+    shard_state_boc: HexBinary;
   };
 } | {
   set_verified_block: {
     root_hash: HexBinary;
     seq_no: number;
-  };
-} | {
-  parse_part_validators: {
-    boc: HexBinary;
   };
 };
 export interface VdataHex {
@@ -47,9 +42,17 @@ export interface VdataHex {
 export type QueryMsg = {
   config: {};
 } | {
-  get_candidates_for_validators: {};
+  get_candidates_for_validators: {
+    limit?: number | null;
+    order?: number | null;
+    start_after?: number | null;
+  };
 } | {
-  get_validators: {};
+  get_validators: {
+    limit?: number | null;
+    order?: number | null;
+    start_after?: string | null;
+  };
 } | {
   is_verified_block: {
     root_hash: HexBinary;

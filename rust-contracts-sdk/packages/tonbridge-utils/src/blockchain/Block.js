@@ -1,5 +1,6 @@
 // const {Cell, Address} = require("../types");
-import { Cell, Address } from "../types/index.js";
+import { Address } from '../types/Address.js';
+import { Cell } from '../types/Cell.js';
 // const {BlockParser} = require("./BlockParser");
 import { BlockParser } from "./BlockParser.js";
 // const {BlockId} = require("./BlockId");
@@ -282,7 +283,7 @@ export class Block {
     return nodes;
   }
 
-  async _compute_node_id_short(ed25519_pubkey) {
+  static async _compute_node_id_short(ed25519_pubkey) {
     // pub.ed25519#4813b4c6 key:int256 = PublicKey;
     let pk = new Uint8Array(36);
     pk.set([0xc6, 0xb4, 0x13, 0x48], 0);
@@ -469,7 +470,7 @@ export class Block {
             let node_list = {};
             for (let j = 0; j < nodes.length; j++) {
               total_weight.iadd(nodes[j].weight);
-              const shord_id = new Uint8Array(await this._compute_node_id_short(nodes[j].key));
+              const shord_id = new Uint8Array(await Block._compute_node_id_short(nodes[j].key));
               node_list[bytesToHex(shord_id)] = nodes[j];
             }
 

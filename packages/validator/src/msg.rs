@@ -10,7 +10,7 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     ParseCandidatesRootBlock {
-        boc: HexBinary, // in hex form
+        keyblock_boc: HexBinary, // in hex form
     },
     ResetValidatorSet {
         boc: HexBinary,
@@ -20,27 +20,24 @@ pub enum ExecuteMsg {
         file_hash: HexBinary, // in hex form
         vdata: Vec<VdataHex>,
     },
+    VerifyBlockByValidatorSignatures {
+        block_boc: HexBinary, // in hex form
+        block_header_proof: HexBinary,
+        file_hash: HexBinary,
+        vdata: Vec<VdataHex>,
+    },
     // commented out because dont use yet
     // AddCurrentBlockToVerifiedSet {
     //     root_hash: String,
     // },
-    ReadMasterProof {
-        boc: HexBinary, // in hex form
-    },
-    ReadStateProof {
-        boc: HexBinary,       // in hex form
-        root_hash: HexBinary, // in hex form
-    },
-    ParseShardProofPath {
-        boc: HexBinary, // in hex form
+    VerifyShardBlocks {
+        master_shard_proof_boc: HexBinary, // in hex form
+        shard_state_boc: HexBinary,
     },
     SetVerifiedBlock {
         root_hash: HexBinary,
         seq_no: u32,
     },
-    ParsePartValidators {
-        boc: HexBinary
-    }
 }
 
 /// We currently take no arguments for migrations
@@ -53,9 +50,17 @@ pub enum QueryMsg {
     #[returns(ConfigResponse)]
     Config {},
     #[returns(Vec<UserFriendlyValidator>)]
-    GetCandidatesForValidators {},
+    GetCandidatesForValidators {
+        start_after: Option<u64>,
+        limit: Option<u32>,
+        order: Option<u8>,
+    },
     #[returns(Vec<UserFriendlyValidator>)]
-    GetValidators {},
+    GetValidators {
+        start_after: Option<String>,
+        limit: Option<u32>,
+        order: Option<u8>,
+    },
     #[returns(bool)]
     IsVerifiedBlock { root_hash: HexBinary }, // in hex form
     #[returns(bool)]

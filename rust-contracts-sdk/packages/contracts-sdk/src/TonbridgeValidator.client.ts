@@ -11,8 +11,24 @@ import {InstantiateMsg, ExecuteMsg, VdataHex, QueryMsg, MigrateMsg, ConfigRespon
 export interface TonbridgeValidatorReadOnlyInterface {
   contractAddress: string;
   config: () => Promise<ConfigResponse>;
-  getCandidatesForValidators: () => Promise<ArrayOfUserFriendlyValidator>;
-  getValidators: () => Promise<ArrayOfUserFriendlyValidator>;
+  getCandidatesForValidators: ({
+    limit,
+    order,
+    startAfter
+  }: {
+    limit?: number;
+    order?: number;
+    startAfter?: number;
+  }) => Promise<ArrayOfUserFriendlyValidator>;
+  getValidators: ({
+    limit,
+    order,
+    startAfter
+  }: {
+    limit?: number;
+    order?: number;
+    startAfter?: string;
+  }) => Promise<ArrayOfUserFriendlyValidator>;
   isVerifiedBlock: ({
     rootHash
   }: {
@@ -45,14 +61,38 @@ export class TonbridgeValidatorQueryClient implements TonbridgeValidatorReadOnly
       config: {}
     });
   };
-  getCandidatesForValidators = async (): Promise<ArrayOfUserFriendlyValidator> => {
+  getCandidatesForValidators = async ({
+    limit,
+    order,
+    startAfter
+  }: {
+    limit?: number;
+    order?: number;
+    startAfter?: number;
+  }): Promise<ArrayOfUserFriendlyValidator> => {
     return this.client.queryContractSmart(this.contractAddress, {
-      get_candidates_for_validators: {}
+      get_candidates_for_validators: {
+        limit,
+        order,
+        start_after: startAfter
+      }
     });
   };
-  getValidators = async (): Promise<ArrayOfUserFriendlyValidator> => {
+  getValidators = async ({
+    limit,
+    order,
+    startAfter
+  }: {
+    limit?: number;
+    order?: number;
+    startAfter?: string;
+  }): Promise<ArrayOfUserFriendlyValidator> => {
     return this.client.queryContractSmart(this.contractAddress, {
-      get_validators: {}
+      get_validators: {
+        limit,
+        order,
+        start_after: startAfter
+      }
     });
   };
   isVerifiedBlock = async ({
@@ -85,9 +125,9 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
   contractAddress: string;
   sender: string;
   parseCandidatesRootBlock: ({
-    boc
+    keyblockBoc
   }: {
-    boc: HexBinary;
+    keyblockBoc: HexBinary;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   resetValidatorSet: ({
     boc
@@ -103,22 +143,23 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
     rootHash: HexBinary;
     vdata: VdataHex[];
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
-  readMasterProof: ({
-    boc
+  verifyBlockByValidatorSignatures: ({
+    blockBoc,
+    blockHeaderProof,
+    fileHash,
+    vdata
   }: {
-    boc: HexBinary;
+    blockBoc: HexBinary;
+    blockHeaderProof: HexBinary;
+    fileHash: HexBinary;
+    vdata: VdataHex[];
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
-  readStateProof: ({
-    boc,
-    rootHash
+  verifyShardBlocks: ({
+    masterShardProofBoc,
+    shardStateBoc
   }: {
-    boc: HexBinary;
-    rootHash: HexBinary;
-  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
-  parseShardProofPath: ({
-    boc
-  }: {
-    boc: HexBinary;
+    masterShardProofBoc: HexBinary;
+    shardStateBoc: HexBinary;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   setVerifiedBlock: ({
     rootHash,
@@ -126,11 +167,6 @@ export interface TonbridgeValidatorInterface extends TonbridgeValidatorReadOnlyI
   }: {
     rootHash: HexBinary;
     seqNo: number;
-  }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
-  parsePartValidators: ({
-    boc
-  }: {
-    boc: HexBinary;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
 }
 export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient implements TonbridgeValidatorInterface {
@@ -146,21 +182,19 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
     this.parseCandidatesRootBlock = this.parseCandidatesRootBlock.bind(this);
     this.resetValidatorSet = this.resetValidatorSet.bind(this);
     this.verifyValidators = this.verifyValidators.bind(this);
-    this.readMasterProof = this.readMasterProof.bind(this);
-    this.readStateProof = this.readStateProof.bind(this);
-    this.parseShardProofPath = this.parseShardProofPath.bind(this);
+    this.verifyBlockByValidatorSignatures = this.verifyBlockByValidatorSignatures.bind(this);
+    this.verifyShardBlocks = this.verifyShardBlocks.bind(this);
     this.setVerifiedBlock = this.setVerifiedBlock.bind(this);
-    this.parsePartValidators = this.parsePartValidators.bind(this);
   }
 
   parseCandidatesRootBlock = async ({
-    boc
+    keyblockBoc
   }: {
-    boc: HexBinary;
+    keyblockBoc: HexBinary;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
       parse_candidates_root_block: {
-        boc
+        keyblock_boc: keyblockBoc
       }
     }, _fee, _memo, _funds);
   };
@@ -192,39 +226,37 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
       }
     }, _fee, _memo, _funds);
   };
-  readMasterProof = async ({
-    boc
+  verifyBlockByValidatorSignatures = async ({
+    blockBoc,
+    blockHeaderProof,
+    fileHash,
+    vdata
   }: {
-    boc: HexBinary;
+    blockBoc: HexBinary;
+    blockHeaderProof: HexBinary;
+    fileHash: HexBinary;
+    vdata: VdataHex[];
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
-      read_master_proof: {
-        boc
+      verify_block_by_validator_signatures: {
+        block_boc: blockBoc,
+        block_header_proof: blockHeaderProof,
+        file_hash: fileHash,
+        vdata
       }
     }, _fee, _memo, _funds);
   };
-  readStateProof = async ({
-    boc,
-    rootHash
+  verifyShardBlocks = async ({
+    masterShardProofBoc,
+    shardStateBoc
   }: {
-    boc: HexBinary;
-    rootHash: HexBinary;
+    masterShardProofBoc: HexBinary;
+    shardStateBoc: HexBinary;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
-      read_state_proof: {
-        boc,
-        root_hash: rootHash
-      }
-    }, _fee, _memo, _funds);
-  };
-  parseShardProofPath = async ({
-    boc
-  }: {
-    boc: HexBinary;
-  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
-    return await this.client.execute(this.sender, this.contractAddress, {
-      parse_shard_proof_path: {
-        boc
+      verify_shard_blocks: {
+        master_shard_proof_boc: masterShardProofBoc,
+        shard_state_boc: shardStateBoc
       }
     }, _fee, _memo, _funds);
   };
@@ -239,17 +271,6 @@ export class TonbridgeValidatorClient extends TonbridgeValidatorQueryClient impl
       set_verified_block: {
         root_hash: rootHash,
         seq_no: seqNo
-      }
-    }, _fee, _memo, _funds);
-  };
-  parsePartValidators = async ({
-    boc
-  }: {
-    boc: HexBinary;
-  }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
-    return await this.client.execute(this.sender, this.contractAddress, {
-      parse_part_validators: {
-        boc
       }
     }, _fee, _memo, _funds);
   };

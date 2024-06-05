@@ -37,14 +37,14 @@ sha2 = "0.10.8"
 osmosis-test-tube = { git = "https://github.com/oraichain/test-tube.git", rev = "354d580" }
 test-tube = { git = "https://github.com/oraichain/test-tube.git", rev = "354d580" }
 oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "daef7e664000a36214cc451a3965c398595be5e0" }
-cw20-ics20-msg = {git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev = "0a33b5ade31419b82617d0b3ab7958899d9598b7"}
+cw20-ics20-msg = { git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev = "0a33b5ade31419b82617d0b3ab7958899d9598b7" }
 
 tonbridge-parser = { path = "./packages/parser" }
 tonbridge-validator = { path = "./packages/validator" }
 tonbridge-adapter = { path = "./packages/adapter" }
 tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./rust-contracts/tonbridge_validator" }
-tonlib = "0.15.0"
+tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "359774ed74e1e50f54db4725e16433a97e439b4c" }
 
 [profile.release]
 opt-level = 3

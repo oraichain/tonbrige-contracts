@@ -14,9 +14,11 @@ use tonbridge_parser::{
     types::{Address, Bytes32},
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
+use tonlib::cell::BagOfCells;
 
 use crate::{
     channel::increase_channel_balance,
+    error::ContractError,
     state::{ics20_denoms, PROCESSED_TXS},
 };
 
@@ -47,7 +49,7 @@ impl Bridge {
         tx_boc: &[u8],
         block_boc: &[u8],
         opcode: Bytes32,
-    ) -> StdResult<Vec<CosmosMsg>> {
+    ) -> Result<Vec<CosmosMsg>, ContractError> {
         let mut tx_header = self.tree_of_cells_parser.parse_serialized_header(tx_boc)?;
         let mut block_header = self
             .tree_of_cells_parser
@@ -61,16 +63,18 @@ impl Bridge {
             .tree_of_cells_parser
             .get_tree_of_cells(block_boc, &mut block_header)?;
 
-        let root_hash = block_toc[block_header.root_idx].hashes[0];
+        let cells = BagOfCells::parse(block_boc)?;
+        let first_root = cells.single_root()?;
 
+        let root_hash = first_root.hashes[0].clone();
         let is_block_verified = self
             .validator
-            .is_verified_block(&deps.querier, HexBinary::from(&root_hash))?;
+            .is_verified_block(&deps.querier, HexBinary::from(root_hash))?;
 
         if !is_block_verified {
-            return Err(StdError::generic_err(
+            return Err(ContractError::Std(StdError::generic_err(
                 "The block is not verified or invalid. Cannot bridge!",
-            ));
+            )));
         }
 
         let mut tx_info = self.transaction_parser.parse_transaction_header(
@@ -87,7 +91,9 @@ impl Bridge {
             &mut tx_info,
         )?;
         if !is_tx_in_correct_block {
-            return Err(StdError::generic_err("Wrong block for transaction"));
+            return Err(ContractError::Std(StdError::generic_err(
+                "Wrong block for transaction",
+            )));
         }
 
         let is_tx_processed = PROCESSED_TXS
@@ -95,7 +101,9 @@ impl Bridge {
             .unwrap_or(false);
 
         if is_tx_processed {
-            return Err(StdError::generic_err("This tx has already been processed"));
+            return Err(ContractError::Std(StdError::generic_err(
+                "This tx has already been processed",
+            )));
         }
 
         PROCESSED_TXS.save(deps.storage, &tx_info.address_hash, &true)?;
@@ -120,7 +128,8 @@ impl Bridge {
             denom,
             packet_data.amount.try_into()?,
         )?;
-        adapter.execute(deps, packet_data, opcode, mapping)
+        let msgs = adapter.execute(deps, packet_data, opcode, mapping)?;
+        Ok(msgs)
     }
 
     pub fn swap_eth(to: Uint256, amount: Uint256, adapter: &Adapter) -> Response {
