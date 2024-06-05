@@ -248,7 +248,7 @@ impl ISignatureValidator for SignatureValidator {
     ) -> StdResult<Bytes32> {
         let val_set = get_signature_validator_set(storage);
         // remove old validators from the list to prevent unexpected errors
-        reset_signature_validator_set(storage);
+        // reset_signature_validator_set(storage);
         let candidates_for_validator_set = get_signature_candidate_validators(storage);
         // if current validator_set is empty, check caller
         // else check votes
@@ -266,13 +266,13 @@ impl ISignatureValidator for SignatureValidator {
         api.debug(&format!(
             "current weight: {:?}, total weight: {:?}",
             current_weight * 3,
-            self.total_weight * 2
+            self.sum_largest_total_weights * 2
         ));
 
-        if current_weight * 3 <= self.total_weight * 2 {
+        if current_weight * 3 <= self.sum_largest_total_weights * 2 {
             return Err(StdError::generic_err(&format!(
                 "not enough votes. Wanted {:?}; has {:?}",
-                self.total_weight * 2,
+                self.sum_largest_total_weights * 2,
                 current_weight * 3
             )));
         }
