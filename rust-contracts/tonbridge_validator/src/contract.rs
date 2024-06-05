@@ -42,7 +42,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::ParseCandidatesRootBlock { boc } => parse_candidates_root_block(deps, boc),
+        ExecuteMsg::ParseCandidatesRootBlock { keyblock_boc } => parse_candidates_root_block(deps, keyblock_boc),
         ExecuteMsg::ResetValidatorSet { boc } => reset_validator_set(deps, &info.sender, boc),
         // ExecuteMsg::SetValidatorSet {} => set_validator_set(deps),
         ExecuteMsg::VerifyValidators {
@@ -51,16 +51,17 @@ pub fn execute(
             vdata,
         } => verify_validators(deps, root_hash, file_hash, vdata),
         ExecuteMsg::VerifyBlockByValidatorSignatures {
-            boc,
+            block_boc,
             block_header_proof,
             file_hash,
             vdata,
         } => {
-            verify_block_with_validator_signatures(deps, boc, block_header_proof, file_hash, vdata)
+            verify_block_with_validator_signatures(deps, block_boc, block_header_proof, file_hash, vdata)
         }
-        ExecuteMsg::ReadMasterProof { boc } => read_master_proof(deps, boc),
-        ExecuteMsg::ReadStateProof { boc, root_hash } => read_state_proof(deps, boc, root_hash),
-        ExecuteMsg::ParseShardProofPath { boc } => parse_shard_proof_path(deps, boc),
+        ExecuteMsg::VerifyShardBlocks {
+            master_shard_proof_boc,
+            shard_state_boc,
+        } => verify_shard_blocks(deps, master_shard_proof_boc, shard_state_boc),
         ExecuteMsg::SetVerifiedBlock { root_hash, seq_no } => {
             set_verified_block(deps, &info.sender, root_hash, seq_no)
         }
@@ -133,7 +134,7 @@ pub fn verify_validators(
 // should be called by relayers
 pub fn verify_block_with_validator_signatures(
     deps: DepsMut,
-    boc: HexBinary,
+    block_boc: HexBinary,
     block_header_proof: HexBinary,
     file_hash: HexBinary,
     vdata: Vec<VdataHex>,
@@ -153,7 +154,7 @@ pub fn verify_block_with_validator_signatures(
     validator.verify_block_with_validator_signatures(
         deps.storage,
         deps.api,
-        boc,
+        block_boc,
         block_header_proof,
         to_bytes32(&file_hash)?,
         &vdata_bytes,
@@ -161,26 +162,15 @@ pub fn verify_block_with_validator_signatures(
     Ok(Response::new().add_attributes(vec![("action", "verify_block_with_validator_signatures")]))
 }
 
-pub fn read_master_proof(deps: DepsMut, boc: HexBinary) -> Result<Response, ContractError> {
-    let validator = VALIDATOR.load(deps.storage)?;
-    validator.read_master_proof(deps.storage, boc.as_slice())?;
-    Ok(Response::new().add_attributes(vec![("action", "read_master_proof")]))
-}
-
-pub fn read_state_proof(
+pub fn verify_shard_blocks(
     deps: DepsMut,
-    boc: HexBinary,
-    root_hash: HexBinary,
+    shard_proof_boc: HexBinary,
+    shard_state_boc: HexBinary,
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    validator.read_state_proof(deps.storage, boc.as_slice(), to_bytes32(&root_hash)?)?;
-    Ok(Response::new().add_attributes(vec![("action", "read_state_proof")]))
-}
-
-pub fn parse_shard_proof_path(deps: DepsMut, boc: HexBinary) -> Result<Response, ContractError> {
-    let validator = VALIDATOR.load(deps.storage)?;
-    validator.parse_shard_proof_path(deps.storage, boc.as_slice())?;
-    Ok(Response::new().add_attributes(vec![("action", "parse_shard_proof_path")]))
+    let root_hash = validator.read_master_shard_proof(deps.storage, shard_proof_boc.as_slice())?;
+    validator.read_shard_state_unsplit(deps.storage, shard_state_boc.as_slice(), root_hash)?;
+    Ok(Response::new().add_attributes(vec![("action", "verify_shard_blocks")]))
 }
 
 // this entrypoint is used mostly for testing or initialization

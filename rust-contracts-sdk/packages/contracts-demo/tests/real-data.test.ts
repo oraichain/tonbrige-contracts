@@ -145,7 +145,7 @@ describe("Real Ton data tests", () => {
     });
     await validator.verifyBlockByValidatorSignatures({
       blockHeaderProof: blockHeader.headerProof.toString("hex"),
-      boc: blockInfo.data.toString("hex"),
+      blockBoc: blockInfo.data.toString("hex"),
       fileHash: blockId.fileHash.toString("hex"),
       vdata
     });
@@ -235,22 +235,14 @@ describe("Real Ton data tests", () => {
 
   it("shard block test real data", async () => {
     // fixture. Setting up a new verified block
-    // Normally, this should be verified using validator signatures.
-
     const { parsedBlock, rawBlockData, initialKeyBlockInformation } = await queryKeyBlock(
       liteClient,
       liteEngine,
       masterchainInfo.last.seqno
     );
 
-    await validator.setVerifiedBlock({
-      rootHash: initialKeyBlockInformation.rootHash.toString("hex"),
-      seqNo: 0
-    });
-
     const tonWeb = new TonWeb();
     const blockShards = await tonWeb.provider.getBlockShards(masterchainInfo.last.seqno);
-    console.log("block shards: ", blockShards);
     for (const shard of blockShards.shards) {
       const shardInfo = await liteEngine.query(Functions.liteServer_getShardInfo, {
         kind: "liteServer.getShardInfo",
@@ -264,15 +256,12 @@ describe("Real Ton data tests", () => {
       });
       // const stateHashBoc = findBoc("state-hash").toString("hex");
       // Store state hash of the block so that we can use it to validate older blocks
-      // TODO: merge read master proof and state proof into one transaction because they share the same flow of proofing shard blocks
-      await validator.readMasterProof({ boc: shardInfo.shardProof.toString("hex") });
-
       const shardCells = Cell.fromBoc(shardInfo.shardProof);
       // 2nd cell of shard proof
       const shardStateRaw = shardCells[1].refs[0].toBoc();
-      await validator.readStateProof({
-        boc: shardStateRaw.toString("hex"),
-        rootHash: initialKeyBlockInformation.rootHash.toString("hex")
+      await validator.verifyShardBlocks({
+        masterShardProofBoc: shardInfo.shardProof.toString("hex"),
+        shardStateBoc: shardStateRaw.toString("hex")
       });
       const shardStateCell = await TonRocks.types.Cell.fromBoc(shardInfo.shardProof);
       const shardState = BlockParser.parseShardState(shardStateCell[1].refs[0]);
@@ -333,7 +322,7 @@ describe("Real Ton data tests", () => {
     });
     await validator.verifyBlockByValidatorSignatures({
       blockHeaderProof: blockHeader.headerProof.toString("hex"),
-      boc: blockInfo.data.toString("hex"),
+      blockBoc: blockInfo.data.toString("hex"),
       fileHash: blockId.fileHash.toString("hex"),
       vdata
     });

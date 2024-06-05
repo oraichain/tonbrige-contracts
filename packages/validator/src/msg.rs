@@ -10,7 +10,7 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     ParseCandidatesRootBlock {
-        boc: HexBinary, // in hex form
+        keyblock_boc: HexBinary, // in hex form
     },
     ResetValidatorSet {
         boc: HexBinary,
@@ -21,7 +21,7 @@ pub enum ExecuteMsg {
         vdata: Vec<VdataHex>,
     },
     VerifyBlockByValidatorSignatures {
-        boc: HexBinary, // in hex form
+        block_boc: HexBinary, // in hex form
         block_header_proof: HexBinary,
         file_hash: HexBinary,
         vdata: Vec<VdataHex>,
@@ -30,15 +30,9 @@ pub enum ExecuteMsg {
     // AddCurrentBlockToVerifiedSet {
     //     root_hash: String,
     // },
-    ReadMasterProof {
-        boc: HexBinary, // in hex form
-    },
-    ReadStateProof {
-        boc: HexBinary,       // in hex form
-        root_hash: HexBinary, // in hex form
-    },
-    ParseShardProofPath {
-        boc: HexBinary, // in hex form
+    VerifyShardBlocks {
+        master_shard_proof_boc: HexBinary, // in hex form
+        shard_state_boc: HexBinary,
     },
     SetVerifiedBlock {
         root_hash: HexBinary,

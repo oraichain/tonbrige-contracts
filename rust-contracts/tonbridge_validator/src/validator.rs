@@ -171,28 +171,28 @@ impl Validator {
         VERIFIED_BLOCKS.save(storage, &rh, &verified_block_info)
     }
 
-    pub fn parse_shard_proof_path(&self, storage: &mut dyn Storage, boc: &[u8]) -> StdResult<()> {
-        let mut header = self.toc_parser.parse_serialized_header(boc)?;
-        let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
+    // pub fn parse_shard_proof_path(&self, storage: &mut dyn Storage, boc: &[u8]) -> StdResult<()> {
+    //     let mut header = self.toc_parser.parse_serialized_header(boc)?;
+    //     let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
 
-        if !self.is_verified_block(storage, toc[toc[header.root_idx].refs[0]].hashes[0])? {
-            return Err(StdError::generic_err("Not verified"));
-        }
+    //     if !self.is_verified_block(storage, toc[toc[header.root_idx].refs[0]].hashes[0])? {
+    //         return Err(StdError::generic_err("Not verified"));
+    //     }
 
-        let (root_hashes, blocks) =
-            self.shard_validator
-                .parse_shard_proof_path(boc, header.root_idx, &mut toc)?;
+    //     let (root_hashes, blocks) =
+    //         self.shard_validator
+    //             .parse_shard_proof_path(boc, header.root_idx, &mut toc)?;
 
-        for i in 0..root_hashes.len() {
-            if root_hashes[i] == EMPTY_HASH {
-                break;
-            }
+    //     for i in 0..root_hashes.len() {
+    //         if root_hashes[i] == EMPTY_HASH {
+    //             break;
+    //         }
 
-            VERIFIED_BLOCKS.save(storage, &root_hashes[i], &blocks[i])?;
-        }
+    //         VERIFIED_BLOCKS.save(storage, &root_hashes[i], &blocks[i])?;
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     pub fn add_prev_block(&self, storage: &mut dyn Storage, boc: &[u8]) -> StdResult<()> {
         let mut header = self.toc_parser.parse_serialized_header(boc)?;
@@ -217,11 +217,11 @@ impl Validator {
         Ok(())
     }
 
-    pub fn read_master_proof(
+    pub fn read_master_shard_proof(
         &self,
         storage: &mut dyn Storage,
         boc: &[u8],
-    ) -> Result<(), ContractError> {
+    ) -> Result<Bytes32, ContractError> {
         let cells = BagOfCells::parse(boc)?;
 
         // reference: https://docs.ton.org/develop/data-formats/proofs#shard-block
@@ -257,10 +257,10 @@ impl Validator {
         block.new_hash = new_state_hash.as_slice().try_into()?;
 
         VERIFIED_BLOCKS.save(storage, &root_hash, &block)?;
-        Ok(())
+        Ok(root_hash)
     }
 
-    pub fn read_state_proof(
+    pub fn read_shard_state_unsplit(
         &self,
         storage: &mut dyn Storage,
         boc: &[u8],  // older block data

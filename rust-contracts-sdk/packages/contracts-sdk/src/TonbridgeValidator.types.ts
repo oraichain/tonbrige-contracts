@@ -4,7 +4,7 @@ export interface InstantiateMsg {
 }
 export type ExecuteMsg = {
   parse_candidates_root_block: {
-    boc: HexBinary;
+    keyblock_boc: HexBinary;
   };
 } | {
   reset_validator_set: {
@@ -18,23 +18,15 @@ export type ExecuteMsg = {
   };
 } | {
   verify_block_by_validator_signatures: {
+    block_boc: HexBinary;
     block_header_proof: HexBinary;
-    boc: HexBinary;
     file_hash: HexBinary;
     vdata: VdataHex[];
   };
 } | {
-  read_master_proof: {
-    boc: HexBinary;
-  };
-} | {
-  read_state_proof: {
-    boc: HexBinary;
-    root_hash: HexBinary;
-  };
-} | {
-  parse_shard_proof_path: {
-    boc: HexBinary;
+  verify_shard_blocks: {
+    master_shard_proof_boc: HexBinary;
+    shard_state_boc: HexBinary;
   };
 } | {
   set_verified_block: {
