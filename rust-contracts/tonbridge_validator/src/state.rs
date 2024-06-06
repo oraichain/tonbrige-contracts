@@ -27,7 +27,7 @@ impl<'a> IndexList<ValidatorDescription> for ValidatorSetIndexes<'a> {
     }
 }
 
-pub fn validator_set<'a>() -> IndexedMap<'a, &'a str, ValidatorDescription, ValidatorSetIndexes<'a>>
+pub fn validator_set<'a>() -> IndexedMap<'a, &'a [u8], ValidatorDescription, ValidatorSetIndexes<'a>>
 {
     let indexes = ValidatorSetIndexes {
         pubkey: MultiIndex::new(

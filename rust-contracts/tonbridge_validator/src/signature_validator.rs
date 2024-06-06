@@ -184,33 +184,29 @@ impl ISignatureValidator for SignatureValidator {
         }
 
         let mut current_weight = 0u64;
+        let mut message = MESSAGE_PREFIX.to_vec();
+        message.extend_from_slice(&root_h);
+        message.extend_from_slice(&file_hash);
 
         for vdata_item in vdata {
             // 1. found validator
-            let validator =
-                validator_set().may_load(storage, &HexBinary::from(vdata_item.node_id).to_hex())?;
-            if validator.is_none() {
-                continue;
-            }
-            let validator = validator.unwrap();
-            if self.is_signed_by_validator(storage, validator.node_id, root_h) {
-                continue;
-            }
+            if let Ok(validator) = validator_set().load(storage, &vdata_item.node_id) {
+                if self.is_signed_by_validator(storage, validator.node_id, root_h) {
+                    continue;
+                }
 
-            // require(validator_idx != validator_set.length, "wrong node_id");
-            let mut message = MESSAGE_PREFIX.to_vec();
-            message.extend_from_slice(&root_h);
-            message.extend_from_slice(&file_hash);
+                // require(validator_idx != validator_set.length, "wrong node_id");
 
-            // signature = r + s
-            if api.ed25519_verify(
-                &message,
-                &[vdata_item.r, vdata_item.s].concat(),
-                &validator.pubkey,
-            )? {
-                // update as verified
-                SIGNED_BLOCKS.save(storage, &[validator.node_id, root_h].concat(), &true)?;
-                current_weight += validator.weight;
+                // signature = r + s
+                if api.ed25519_verify(
+                    &message,
+                    &[vdata_item.r, vdata_item.s].concat(),
+                    &validator.pubkey,
+                )? {
+                    // update as verified
+                    SIGNED_BLOCKS.save(storage, &[validator.node_id, root_h].concat(), &true)?;
+                    current_weight += validator.weight;
+                }
             }
         }
 
@@ -221,11 +217,7 @@ impl ISignatureValidator for SignatureValidator {
         let candidates_for_validator_set = get_signature_candidate_validators(storage);
         // self.validator_set = self.candidates_for_validator_set.to_owned();
         for (_, candidate) in candidates_for_validator_set.iter().enumerate() {
-            validator_set().save(
-                storage,
-                &HexBinary::from(candidate.node_id).to_hex(),
-                candidate,
-            )?;
+            validator_set().save(storage, &candidate.node_id, candidate)?;
         }
 
         // reset candidate for validator set
@@ -278,11 +270,7 @@ impl ISignatureValidator for SignatureValidator {
         }
 
         for (_, candidate) in candidates_for_validator_set.iter().enumerate() {
-            validator_set().save(
-                storage,
-                &HexBinary::from(candidate.node_id).to_hex(),
-                candidate,
-            )?;
+            validator_set().save(storage, &candidate.node_id, candidate)?;
         }
         reset_signature_candidate_validators(storage);
 

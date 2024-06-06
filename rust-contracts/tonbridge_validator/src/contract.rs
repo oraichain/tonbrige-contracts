@@ -42,7 +42,9 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::ParseCandidatesRootBlock { keyblock_boc } => parse_candidates_root_block(deps, keyblock_boc),
+        ExecuteMsg::ParseCandidatesRootBlock { keyblock_boc } => {
+            parse_candidates_root_block(deps, keyblock_boc)
+        }
         ExecuteMsg::ResetValidatorSet { boc } => reset_validator_set(deps, &info.sender, boc),
         // ExecuteMsg::SetValidatorSet {} => set_validator_set(deps),
         ExecuteMsg::VerifyValidators {
@@ -55,9 +57,13 @@ pub fn execute(
             block_header_proof,
             file_hash,
             vdata,
-        } => {
-            verify_block_with_validator_signatures(deps, block_boc, block_header_proof, file_hash, vdata)
-        }
+        } => verify_block_with_validator_signatures(
+            deps,
+            block_boc,
+            block_header_proof,
+            file_hash,
+            vdata,
+        ),
         ExecuteMsg::VerifyShardBlocks {
             master_shard_proof_boc,
             shard_state_boc,
@@ -246,7 +252,7 @@ pub fn get_validators(
     order: Option<u8>,
 ) -> StdResult<Vec<UserFriendlyValidator>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start: Option<Bound<&str>> = start_after.as_deref().map(|start| {
+    let start: Option<Bound<&[u8]>> = start_after.as_deref().map(|start| {
         let mut range_start = start.as_bytes().to_vec();
         // push 1 so that it does not include the previous value
         range_start.push(1);

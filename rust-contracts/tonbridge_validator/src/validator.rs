@@ -149,7 +149,11 @@ impl Validator {
             verified: true,
             ..Default::default()
         };
-        VERIFIED_BLOCKS.save(storage, root_hash_from_block.as_slice().try_into()?, &verified_block_info)?;
+        VERIFIED_BLOCKS.save(
+            storage,
+            root_hash_from_block.as_slice().try_into()?,
+            &verified_block_info,
+        )?;
         Ok(())
     }
 
