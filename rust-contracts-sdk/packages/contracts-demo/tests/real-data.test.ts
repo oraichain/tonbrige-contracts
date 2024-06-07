@@ -19,7 +19,8 @@ import { queryAllValidatorCandidates, queryAllValidators, queryKeyBlock } from "
 describe("Real Ton data tests", () => {
   const client = new SimulateCosmWasmClient({
     chainId: "Oraichain",
-    bech32Prefix: "orai"
+    bech32Prefix: "orai",
+    metering: true
   });
   const sender = "orai12zyu8w93h0q2lcnt50g3fn0w3yqnhy4fvawaqz";
   let liteClient: LiteClient;
@@ -217,9 +218,8 @@ describe("Real Ton data tests", () => {
       masterchainInfo.last.seqno
     );
 
-    const tonWeb = new TonWeb();
-    const blockShards = await tonWeb.provider.getBlockShards(masterchainInfo.last.seqno);
-    for (const shard of blockShards.shards) {
+    const fullBlock = await liteClient.getAllShardsInfo(initialKeyBlockInformation);
+    for (const [shard, seqno] of Object.entries(fullBlock.shards["0"])) {
       const shardInfo = await liteEngine.query(Functions.liteServer_getShardInfo, {
         kind: "liteServer.getShardInfo",
         id: {
@@ -227,7 +227,7 @@ describe("Real Ton data tests", () => {
           ...initialKeyBlockInformation
         },
         workchain: 0,
-        shard: shard.shard,
+        shard: shard,
         exact: true
       });
       // const stateHashBoc = findBoc("state-hash").toString("hex");
@@ -247,7 +247,7 @@ describe("Real Ton data tests", () => {
     }
   }, 20000);
 
-  it("bridge contract reads real data from transaction", async () => {
+  it("bridge contract reads real data from masterchain block's transaction", async () => {
     // block info: https://tonscan.org/block/-1:8000000000000000:38206464
     // tx info: https://tonscan.org/tx/gr0uA0IOfsaBIisEcEQ5eETOE+qTZGNA3DWH+QlO47o=
     let initBlockSeqno = 38208790;
@@ -280,7 +280,7 @@ describe("Real Ton data tests", () => {
     await validator.verifyBlockByValidatorSignatures({
       blockHeaderProof: blockHeader.headerProof.toString("hex"),
       blockBoc: blockInfo.data.toString("hex"),
-      fileHash: blockId.fileHash.toString("hex"),
+      fileHash: blockInfo.id.fileHash.toString("hex"),
       vdata
     });
     expect(await validator.isVerifiedBlock({ rootHash: blockId.rootHash.toString("hex") })).toEqual(true);

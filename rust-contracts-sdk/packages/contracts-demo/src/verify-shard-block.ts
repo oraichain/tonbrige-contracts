@@ -3,7 +3,6 @@ import { assert } from "console";
 import "dotenv/config";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
 import { Functions } from "ton-lite-client/dist/schema";
-import TonWeb from "tonweb";
 
 function intToIP(int: number) {
   var part1 = int & 255;
@@ -29,23 +28,19 @@ function intToIP(int: number) {
   );
   const engine: LiteEngine = new LiteRoundRobinEngine(engines);
   const client = new LiteClient({ engine });
-  const master = await client.getMasterchainInfo();
 
   // Create Client
   const initKeyBlockSeqno = 38101265;
   let fullBlock = await client.getFullBlock(initKeyBlockSeqno);
   const initialKeyBlockInformation = fullBlock.shards.find((blockRes) => blockRes.seqno === initKeyBlockSeqno);
-  const minimalBlockShards = await client.getAllShardsInfo({ ...initialKeyBlockInformation });
-  const tonWeb = new TonWeb();
-  const blockShards = await tonWeb.provider.getBlockShards(initKeyBlockSeqno);
   const shardInfo = await engine.query(Functions.liteServer_getShardInfo, {
     kind: "liteServer.getShardInfo",
     id: {
       kind: "tonNode.blockIdExt",
       ...initialKeyBlockInformation
     },
-    workchain: 0,
-    shard: blockShards.shards[0].shard,
+    workchain: fullBlock.shards[1].workchain,
+    shard: fullBlock.shards[1].shard,
     exact: true
   });
   const shardCell = Cell.fromBoc(shardInfo.shardProof);

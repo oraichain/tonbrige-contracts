@@ -720,7 +720,7 @@ export class Block {
 
   }
 
-  _shardGetFromHashmap(m, wc, addr) {
+  static _shardGetFromHashmap(m, wc, addr) {
     if (!m.map.has(wc.toString()))
       return;
 
@@ -798,7 +798,7 @@ export class Block {
 
         const mcShardState = BlockParser.parseShardState(shardProofCell[1].refs[0]);
 
-        const shardDescr = this._shardGetFromHashmap(mcShardState.custom.shard_hashes, address.wc, address.hashPart);
+        const shardDescr = Block._shardGetFromHashmap(mcShardState.custom.shard_hashes, address.wc, address.hashPart);
         if (!shardDescr)
           throw Error('No account shard found');
 
