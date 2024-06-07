@@ -71,7 +71,6 @@ function intToIP(int: number) {
     if (i === 0) {
       console.log("block root hash i === 0: ", blockRootHash, mcBlockId.rootHash.toString("hex"));
       // gotta make sure this proof is valid by checking if the block in the proof matches our trusted masterchain hash
-      console.dir(block, { depth: null });
       assert(mcBlockId.rootHash.toString("hex") === blockRootHash);
       // TODO: need to make sure on Rust this is a list of shardDescr because shard_hashes is a map
       const shardDescr = Block._shardGetFromHashmap(
@@ -97,7 +96,6 @@ function intToIP(int: number) {
       break;
     }
   }
-  
   // PROVE TX MATCHES THE TX WE EXPECT AND IT IS IN OUR VALIDATED SHARD BLOCK
   const transaction = await client.getAccountTransaction(Address.parse(addressRaw), lt, shardBlockInfo.id);
   const transactionProofCell = await TonRocks.types.Cell.fromBoc(transaction.proof);
@@ -107,8 +105,7 @@ function intToIP(int: number) {
   const merkleProofHash = Buffer.from(transactionProofCell[0].refs[0].getHash(0)).toString("hex");
   // the transaction's block hash must match the shard block's hash
   assert(merkleProofHash === validatedShardBlockHashes[validatedShardBlockHashes.length - 1]);
-  const tonRockstxProofCell = await TonRocks.types.Cell.fromBoc(transaction.proof);
-  const blockExtra = loadBlockExtra(tonRockstxProofCell[0].refs[0].refs[3], { cs: 0, ref: 0 });
+  const blockExtra = loadBlockExtra(transactionProofCell[0].refs[0].refs[3], { cs: 0, ref: 0 });
   const blockExtraMap = blockExtra.account_blocks.map;
   blockExtraMap.forEach(async (value, key) => {
     const txHash = Buffer.from(value.value.transactions.map.get(Number(lt).toString(16)).value.getHash(0)).toString(
