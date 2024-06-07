@@ -50,7 +50,7 @@ function intToIP(int: number) {
   });
   console.log("shard block info: ", shardBlockInfo.id.rootHash, shardBlockInfo.id.seqno, shardBlockInfo.id.shard);
 
-  // prove that our shard block is valid via shard proofs.
+  // PROVE that our shard block is valid via shard proofs.
   const blockProof = await engine.query(Functions.liteServer_getShardBlockProof, {
     kind: "liteServer.getShardBlockProof",
     id: {
@@ -97,7 +97,8 @@ function intToIP(int: number) {
       break;
     }
   }
-  // DONE PROVING TX IS IN WANTED BLOCK
+  
+  // PROVE TX MATCHES THE TX WE EXPECT AND IT IS IN OUR VALIDATED SHARD BLOCK
   const transaction = await client.getAccountTransaction(Address.parse(addressRaw), lt, shardBlockInfo.id);
   const transactionProofCell = await TonRocks.types.Cell.fromBoc(transaction.proof);
   const transactionDetailCell = await TonRocks.types.Cell.fromBoc(transaction.transaction);
