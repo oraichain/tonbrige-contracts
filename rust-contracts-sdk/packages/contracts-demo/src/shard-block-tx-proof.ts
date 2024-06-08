@@ -41,14 +41,6 @@ function intToIP(int: number) {
   const fullBlock = await client.getFullBlock(mc_block_seqno);
   const mcBlockId = fullBlock.shards.find((shard) => shard.seqno === mc_block_seqno);
   const wantedShardInfo = fullBlock.shards.find((shard) => shard.seqno === block_ref.seqno);
-  const shardBlockInfo = await engine.query(Functions.liteServer_getBlock, {
-    kind: "liteServer.getBlock",
-    id: {
-      kind: "tonNode.blockIdExt",
-      ...wantedShardInfo
-    }
-  });
-  console.log("shard block info: ", shardBlockInfo.id.rootHash, shardBlockInfo.id.seqno, shardBlockInfo.id.shard);
 
   // PROVE that our shard block is valid via shard proofs.
   const blockProof = await engine.query(Functions.liteServer_getShardBlockProof, {
@@ -66,7 +58,8 @@ function intToIP(int: number) {
     //
     const blockProofCell = await TonRocks.types.Cell.fromBoc(link.proof);
     const block = TonRocks.bc.BlockParser.parseBlock(blockProofCell[0].refs[0]);
-    // console.log("block: ", block);
+    console.log("block boc: ", link.proof.toString("hex"));
+    console.log("block info: ", block.info);
     const blockRootHash = Buffer.from(blockProofCell[0].refs[0].getHash(0)).toString("hex");
     if (i === 0) {
       console.log("block root hash i === 0: ", blockRootHash, mcBlockId.rootHash.toString("hex"));
@@ -97,7 +90,7 @@ function intToIP(int: number) {
     }
   }
   // PROVE TX MATCHES THE TX WE EXPECT AND IT IS IN OUR VALIDATED SHARD BLOCK
-  const transaction = await client.getAccountTransaction(Address.parse(addressRaw), lt, shardBlockInfo.id);
+  const transaction = await client.getAccountTransaction(Address.parse(addressRaw), lt, wantedShardInfo);
   const transactionProofCell = await TonRocks.types.Cell.fromBoc(transaction.proof);
   const transactionDetailCell = await TonRocks.types.Cell.fromBoc(transaction.transaction);
   const transactionDetail = loadTransaction(transactionDetailCell[0], { cs: 0, ref: 0 });
