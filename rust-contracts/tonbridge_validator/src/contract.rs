@@ -42,22 +42,22 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::ParseCandidatesRootBlock { keyblock_boc } => {
+        ExecuteMsg::PrepareNewKeyBlock { keyblock_boc } => {
             parse_candidates_root_block(deps, keyblock_boc)
         }
         ExecuteMsg::ResetValidatorSet { boc } => reset_validator_set(deps, &info.sender, boc),
         // ExecuteMsg::SetValidatorSet {} => set_validator_set(deps),
-        ExecuteMsg::VerifyValidators {
+        ExecuteMsg::VerifyKeyBlock {
             root_hash,
             file_hash,
             vdata,
         } => verify_validators(deps, root_hash, file_hash, vdata),
-        ExecuteMsg::VerifyBlockByValidatorSignatures {
+        ExecuteMsg::VerifyMasterchainBlockByValidatorSignatures {
             block_boc,
             block_header_proof,
             file_hash,
             vdata,
-        } => verify_block_with_validator_signatures(
+        } => verify_masterchain_block_by_validator_signatures(
             deps,
             block_boc,
             block_header_proof,
@@ -138,7 +138,7 @@ pub fn verify_validators(
 }
 
 // should be called by relayers
-pub fn verify_block_with_validator_signatures(
+pub fn verify_masterchain_block_by_validator_signatures(
     deps: DepsMut,
     block_boc: HexBinary,
     block_header_proof: HexBinary,
@@ -157,7 +157,7 @@ pub fn verify_block_with_validator_signatures(
             Vdata { node_id, r, s }
         })
         .collect::<Vec<Vdata>>();
-    validator.verify_block_with_validator_signatures(
+    validator.verify_masterchain_block_by_validator_signatures(
         deps.storage,
         deps.api,
         block_boc,
@@ -165,7 +165,10 @@ pub fn verify_block_with_validator_signatures(
         to_bytes32(&file_hash)?,
         &vdata_bytes,
     )?;
-    Ok(Response::new().add_attributes(vec![("action", "verify_block_with_validator_signatures")]))
+    Ok(Response::new().add_attributes(vec![(
+        "action",
+        "verify_masterchain_block_by_validator_signatures",
+    )]))
 }
 
 pub fn verify_shard_blocks(

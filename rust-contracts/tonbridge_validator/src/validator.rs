@@ -106,7 +106,7 @@ impl Validator {
         Ok(())
     }
 
-    pub fn verify_block_with_validator_signatures(
+    pub fn verify_masterchain_block_by_validator_signatures(
         &self,
         storage: &mut dyn Storage,
         api: &dyn Api,
@@ -174,29 +174,6 @@ impl Validator {
         };
         VERIFIED_BLOCKS.save(storage, &rh, &verified_block_info)
     }
-
-    // pub fn parse_shard_proof_path(&self, storage: &mut dyn Storage, boc: &[u8]) -> StdResult<()> {
-    //     let mut header = self.toc_parser.parse_serialized_header(boc)?;
-    //     let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
-
-    //     if !self.is_verified_block(storage, toc[toc[header.root_idx].refs[0]].hashes[0])? {
-    //         return Err(StdError::generic_err("Not verified"));
-    //     }
-
-    //     let (root_hashes, blocks) =
-    //         self.shard_validator
-    //             .parse_shard_proof_path(boc, header.root_idx, &mut toc)?;
-
-    //     for i in 0..root_hashes.len() {
-    //         if root_hashes[i] == EMPTY_HASH {
-    //             break;
-    //         }
-
-    //         VERIFIED_BLOCKS.save(storage, &root_hashes[i], &blocks[i])?;
-    //     }
-
-    //     Ok(())
-    // }
 
     pub fn add_prev_block(&self, storage: &mut dyn Storage, boc: &[u8]) -> StdResult<()> {
         let mut header = self.toc_parser.parse_serialized_header(boc)?;

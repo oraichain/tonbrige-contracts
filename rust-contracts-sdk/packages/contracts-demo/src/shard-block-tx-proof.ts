@@ -1,8 +1,7 @@
 import TonRocks from "@oraichain/tonbridge-utils";
 import { Block } from "@oraichain/tonbridge-utils/build/blockchain";
 import { loadBlockExtra, loadTransaction } from "@oraichain/tonbridge-utils/build/blockchain/BlockParser";
-import { Address as TonRocksAddress } from "@oraichain/tonbridge-utils/build/types";
-import { Address, Cell } from "@ton/core";
+import { Address } from "@ton/core";
 import { assert } from "console";
 import "dotenv/config";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
@@ -63,19 +62,16 @@ function intToIP(int: number) {
     //
     const blockProofCell = await TonRocks.types.Cell.fromBoc(link.proof);
     const block = TonRocks.bc.BlockParser.parseBlock(blockProofCell[0].refs[0]);
-    console.log("block boc: ", Cell.fromBoc(link.proof));
     const blockRootHash = Buffer.from(blockProofCell[0].refs[0].getHash(0)).toString("hex");
     if (i === 0) {
       console.log("block root hash i === 0: ", blockRootHash, mcBlockId.rootHash.toString("hex"));
       // gotta make sure this proof is valid by checking if the block in the proof matches our trusted masterchain hash
       assert(mcBlockId.rootHash.toString("hex") === blockRootHash);
       // TODO: need to make sure on Rust this is a list of shardDescr because shard_hashes is a map
-      const shardDescr = Block._shardGetFromHashmap(
-        block.extra.custom.shard_hashes,
-        wantedShardInfo.workchain,
-        new TonRocksAddress(addressRaw).hashPart
+      const shardDescrs: any[] = Block._shardGetFromHashmap(block.extra.custom.shard_hashes, wantedShardInfo.workchain);
+      shardDescrs.forEach((shardDescr) =>
+        validatedShardBlockHashes.push(Buffer.from(shardDescr.root_hash).toString("hex"))
       );
-      validatedShardBlockHashes.push(Buffer.from(shardDescr.root_hash).toString("hex"));
     }
     if (i > 0) {
       console.log("block root hash i > 0: ", blockRootHash, validatedShardBlockHashes[i - 1]);
