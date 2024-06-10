@@ -76,7 +76,7 @@ describe("Tree of Cells parser tests 1", () => {
   it("Should throw an error when use wrong boc for parseCandidatesRootBlock", async () => {
     const boc = findBoc("state-hash");
     try {
-      await validator.parseCandidatesRootBlock({ keyblockBoc: boc.toString("hex") });
+      await validator.prepareNewKeyBlock({ keyblockBoc: boc.toString("hex") });
       expect(false);
     } catch (error) {
       expect(true);
@@ -101,7 +101,7 @@ describe("Tree of Cells parser tests 1", () => {
 
   it("Verify updated validator signatures in new block", async () => {
     const boc = findBoc("proof-validators");
-    await validator.parseCandidatesRootBlock({ keyblockBoc: boc.toString("hex") });
+    await validator.prepareNewKeyBlock({ keyblockBoc: boc.toString("hex") });
 
     let validators = (await queryAllValidatorCandidates(validator))
       .filter((validator) => validator.c_type !== 0)
@@ -117,7 +117,7 @@ describe("Tree of Cells parser tests 1", () => {
 
     const signatures = data.find((el) => el.type === "proof-validators")!.signatures!;
 
-    await validator.verifyValidators({
+    await validator.verifyKeyBlock({
       rootHash: "0000000000000000000000000000000000000000000000000000000000000000",
       fileHash: data.find((el) => el.type === "proof-validators")!.id!.fileHash,
       vdata: signatures

@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, DepsMut, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
+    bit_reader::to_bytes32,
     block_parser::ValidatorSet,
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser, EMPTY_HASH},
     types::{Bytes32, ValidatorDescription, Vdata, VerifiedBlockInfo},
@@ -198,78 +199,120 @@ impl Validator {
         Ok(())
     }
 
-    pub fn read_master_shard_proof(
+    pub fn verify_shard_blocks(
         &self,
         storage: &mut dyn Storage,
-        boc: &[u8],
-    ) -> Result<Bytes32, ContractError> {
-        let cells = BagOfCells::parse(boc)?;
-
-        // reference: https://docs.ton.org/develop/data-formats/proofs#shard-block
-        let masterchain_block_merkle_proof = cells.root(0)?;
-        let root_hash = masterchain_block_merkle_proof.reference(0)?.hashes[0]
-            .clone()
-            .as_slice()
-            .try_into()?;
-
-        if !self.is_verified_block(storage, root_hash)? {
-            return Err(ContractError::Std(StdError::generic_err("Not verified")));
-        }
-
-        let merkle_update_of_shard_state =
-            masterchain_block_merkle_proof.reference(0)?.reference(2)?;
-
-        let mut parser = merkle_update_of_shard_state.parser();
-        let _cell_type = parser.load_byte()?;
-        let _old_state_hash = parser.load_bits(256)?;
-        let new_state_hash = parser.load_bits(256)?;
-
-        let shard_state_raw = cells.root(1)?.reference(0)?;
-        let merkle_shard_state_hash = shard_state_raw.hashes[0].clone();
-        if HexBinary::from(new_state_hash.clone())
-            .ne(&HexBinary::from(merkle_shard_state_hash.clone()))
-        {
+        shard_proof_links: Vec<HexBinary>,
+        mc_block_root_hash: HexBinary,
+    ) -> Result<(), ContractError> {
+        if !self.is_verified_block(storage, to_bytes32(&mc_block_root_hash)?)? {
             return Err(ContractError::Std(StdError::generic_err(
-                &format!("New state hash does not match with the merkle shard state hash. Not trusted. New state hash: {:?}; merkle shard state hash: {:?}", HexBinary::from(new_state_hash).to_hex(), HexBinary::from(merkle_shard_state_hash).to_hex()),
+                "masterchain block root hash is not verified",
             )));
         }
+        for (i, proof_link) in shard_proof_links.iter().enumerate() {
+            let cells = BagOfCells::parse(proof_link.as_slice())?;
 
-        let mut block = VERIFIED_BLOCKS.load(storage, &root_hash)?;
-        block.new_hash = new_state_hash.as_slice().try_into()?;
-
-        VERIFIED_BLOCKS.save(storage, &root_hash, &block)?;
-        Ok(root_hash)
-    }
-
-    pub fn read_shard_state_unsplit(
-        &self,
-        storage: &mut dyn Storage,
-        boc: &[u8],  // older block data
-        rh: Bytes32, // newer root hash
-    ) -> StdResult<()> {
-        let mut header = self.toc_parser.parse_serialized_header(boc)?;
-        let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
-
-        let new_block = VERIFIED_BLOCKS.load(storage, &rh)?;
-
-        if toc[header.root_idx].hashes[0] != new_block.new_hash {
-            return Err(StdError::generic_err("Block with new hash is not verified"));
-        }
-
-        let (root_hashes, blocks) =
-            self.shard_validator
-                .read_state_proof(boc, header.root_idx, &mut toc)?;
-
-        for i in 0..root_hashes.len() {
-            if root_hashes[i] == EMPTY_HASH {
-                break;
+            let root = cells.single_root()?;
+            let first_ref = root.reference(0)?;
+            let block = first_ref.load_block()?;
+            let merkle_proof_root_hash = first_ref.hashes[0].clone();
+            if i == 0 {
+                if merkle_proof_root_hash.ne(&mc_block_root_hash.to_vec()) {
+                    return Err(ContractError::Std(StdError::generic_err(
+                        "merkle proof not verified",
+                    )));
+                }
+                if block.extra.is_none() {
+                    return Err(ContractError::Std(StdError::generic_err(
+                        "There is no shard included in this masterchain block to verify.",
+                    )));
+                }
+                let extra = block.extra.unwrap().custom.shards;
+                for shards in extra.values() {
+                    for shard in shards {
+                        let mut verified_block = VerifiedBlockInfo::default();
+                        verified_block.verified = true;
+                        verified_block.seq_no = shard.seqno;
+                        verified_block.start_lt = shard.start_lt;
+                        verified_block.end_lt = shard.end_lt;
+                        VERIFIED_BLOCKS.save(
+                            storage,
+                            shard.root_hash.as_slice().try_into()?,
+                            &verified_block,
+                        )?;
+                    }
+                }
+            } else {
+                if !self
+                    .is_verified_block(storage, merkle_proof_root_hash.as_slice().try_into()?)?
+                {
+                    return Err(ContractError::Std(StdError::generic_err(
+                        "The shard block root hash is not verified",
+                    )));
+                }
+                if block.info.is_none() {
+                    return Err(ContractError::Std(StdError::generic_err(
+                        "There is no shard block info to collect prev block hash from.",
+                    )));
+                }
+                let prev_ref = block.info.unwrap().prev_ref;
+                if let Some(prev_blk) = prev_ref.first_prev {
+                    let mut verified_block = VerifiedBlockInfo::default();
+                    verified_block.verified = true;
+                    verified_block.seq_no = prev_blk.seqno;
+                    verified_block.end_lt = prev_blk.end_lt;
+                    VERIFIED_BLOCKS.save(
+                        storage,
+                        prev_blk.root_hash.as_slice().try_into()?,
+                        &verified_block,
+                    )?;
+                }
+                if let Some(prev_blk) = prev_ref.second_prev {
+                    let mut verified_block = VerifiedBlockInfo::default();
+                    verified_block.verified = true;
+                    verified_block.seq_no = prev_blk.seqno;
+                    verified_block.end_lt = prev_blk.end_lt;
+                    VERIFIED_BLOCKS.save(
+                        storage,
+                        prev_blk.root_hash.as_slice().try_into()?,
+                        &verified_block,
+                    )?;
+                }
             }
-
-            VERIFIED_BLOCKS.save(storage, &root_hashes[i], &blocks[i])?;
         }
-
         Ok(())
     }
+
+    // pub fn read_shard_state_unsplit(
+    //     &self,
+    //     storage: &mut dyn Storage,
+    //     boc: &[u8],  // older block data
+    //     rh: Bytes32, // newer root hash
+    // ) -> StdResult<()> {
+    //     let mut header = self.toc_parser.parse_serialized_header(boc)?;
+    //     let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
+
+    //     let new_block = VERIFIED_BLOCKS.load(storage, &rh)?;
+
+    //     if toc[header.root_idx].hashes[0] != new_block.new_hash {
+    //         return Err(StdError::generic_err("Block with new hash is not verified"));
+    //     }
+
+    //     let (root_hashes, blocks) =
+    //         self.shard_validator
+    //             .read_state_proof(boc, header.root_idx, &mut toc)?;
+
+    //     for i in 0..root_hashes.len() {
+    //         if root_hashes[i] == EMPTY_HASH {
+    //             break;
+    //         }
+
+    //         VERIFIED_BLOCKS.save(storage, &root_hashes[i], &blocks[i])?;
+    //     }
+
+    //     Ok(())
+    // }
 
     pub fn set_verified_block(
         &self,

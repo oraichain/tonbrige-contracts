@@ -7,8 +7,7 @@ import {
 } from "@oraichain/oraidex-contracts-sdk/build/OraiswapToken.types";
 import { deployContract } from "@oraichain/tonbridge-contracts-build";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
-import { TonRocks, ValidatorSignature } from "@oraichain/tonbridge-utils";
-import { BlockParser } from "@oraichain/tonbridge-utils/build/blockchain/BlockParser";
+import { ValidatorSignature } from "@oraichain/tonbridge-utils";
 import { Address, Cell, Transaction, loadTransaction } from "@ton/core";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
 import { Functions, liteServer_masterchainInfoExt } from "ton-lite-client/dist/schema";
@@ -144,7 +143,7 @@ describe("Real Ton data tests", () => {
         ...blockId
       }
     });
-    await validator.verifyBlockByValidatorSignatures({
+    await validator.verifyMasterchainBlockByValidatorSignatures({
       blockHeaderProof: blockHeader.headerProof.toString("hex"),
       blockBoc: blockInfo.data.toString("hex"),
       fileHash: blockId.fileHash.toString("hex"),
@@ -167,7 +166,7 @@ describe("Real Ton data tests", () => {
     } = await queryKeyBlock(liteClient, liteEngine, blockToCheck);
     const boc = rawBlockData.data.toString("hex");
 
-    await validator.parseCandidatesRootBlock({ keyblockBoc: boc });
+    await validator.prepareNewKeyBlock({ keyblockBoc: boc });
 
     const tonweb = new TonWeb();
     const valSignatures = (await tonweb.provider.send("getMasterchainBlockSignatures", {
@@ -185,7 +184,7 @@ describe("Real Ton data tests", () => {
       };
     });
 
-    await validator.verifyValidators({
+    await validator.verifyKeyBlock({
       rootHash: rawBlockData.id.rootHash.toString("hex"),
       fileHash: rawBlockData.id.fileHash.toString("hex"),
       vdata
@@ -211,40 +210,29 @@ describe("Real Ton data tests", () => {
   }, 15000);
 
   it("shard block test real data", async () => {
-    // fixture. Setting up a new verified block
-    const { parsedBlock, rawBlockData, initialKeyBlockInformation } = await queryKeyBlock(
-      liteClient,
-      liteEngine,
-      masterchainInfo.last.seqno
-    );
+    const shardInfo = await liteClient.lookupBlockByID({ seqno: 43884169, shard: "2000000000000000", workchain: 0 });
+    const shardProof = await liteEngine.query(Functions.liteServer_getShardBlockProof, {
+      kind: "liteServer.getShardBlockProof",
+      id: {
+        kind: "tonNode.blockIdExt",
+        ...shardInfo.id
+      }
+    });
+    const mcBlockRootHash = shardProof.masterchainId.rootHash.toString("hex");
+    // assume that the masterchain block is already verified by validator signatures
+    await validator.setVerifiedBlock({ rootHash: mcBlockRootHash, seqNo: shardProof.masterchainId.seqno });
+    await validator.verifyShardBlocks({
+      mcBlockRootHash: mcBlockRootHash,
+      shardProofLinks: shardProof.links.map((link) => link.proof.toString("hex"))
+    });
 
-    const fullBlock = await liteClient.getAllShardsInfo(initialKeyBlockInformation);
-    for (const [shard, seqno] of Object.entries(fullBlock.shards["0"])) {
-      const shardInfo = await liteEngine.query(Functions.liteServer_getShardInfo, {
-        kind: "liteServer.getShardInfo",
-        id: {
-          kind: "tonNode.blockIdExt",
-          ...initialKeyBlockInformation
-        },
-        workchain: 0,
-        shard: shard,
-        exact: true
-      });
-      // const stateHashBoc = findBoc("state-hash").toString("hex");
-      // Store state hash of the block so that we can use it to validate older blocks
-      const shardCells = Cell.fromBoc(shardInfo.shardProof);
-      // 2nd cell of shard proof
-      const shardStateRaw = shardCells[1].refs[0].toBoc();
-      await validator.verifyShardBlocks({
-        masterShardProofBoc: shardInfo.shardProof.toString("hex"),
-        shardStateBoc: shardStateRaw.toString("hex")
-      });
-      const shardStateCell = await TonRocks.types.Cell.fromBoc(shardInfo.shardProof);
-      const shardState = BlockParser.parseShardState(shardStateCell[1].refs[0]);
-
-      // const shardState = loadShardStateUnsplit(shardStateCell[0]);
-      // console.log("shard state: ", shardState.custom.shard_hashes.map.get('0'));
-    }
+    // root hashes parsed from the proof links above. To know how to parse them, see https://github.com/oraichain/tonbridge-evm-contracts/tree/develop/rust-contracts-sdk/packages/contracts-demo/src/verify-shard-blocks-via-proof-link.ts
+    expect(
+      await validator.isVerifiedBlock({ rootHash: "5d5215c4dd5e2dc3e8b0640339303135cd7296c577e37d1f0e1781cde6fb9629" })
+    ).toEqual(true);
+    expect(
+      await validator.isVerifiedBlock({ rootHash: "0299328dbd84b0ece362aec8cb04f89f7f21b1908dd55542ae9983914d81b7d1" })
+    ).toEqual(true);
   }, 20000);
 
   it("bridge contract reads real data from masterchain block's transaction", async () => {
@@ -277,7 +265,7 @@ describe("Real Ton data tests", () => {
         ...blockId
       }
     });
-    await validator.verifyBlockByValidatorSignatures({
+    await validator.verifyMasterchainBlockByValidatorSignatures({
       blockHeaderProof: blockHeader.headerProof.toString("hex"),
       blockBoc: blockInfo.data.toString("hex"),
       fileHash: blockInfo.id.fileHash.toString("hex"),

@@ -55,24 +55,19 @@ function intToIP(int: number) {
       assert(blockRootHash === shardProof.masterchainId.rootHash.toString("hex"));
       // TODO: need to make sure on Rust this is a list of shardDescr because shard_hashes is a map
       const shardDescrs: any[] = Block._shardGetFromHashmap(block.extra.custom.shard_hashes, shardInfo.id.workchain);
-      shardDescrs.forEach((shardDescr) =>
-        validatedShardBlockHashes.push(Buffer.from(shardDescr.root_hash).toString("hex"))
-      );
+      shardDescrs.forEach((shardDescr) => {
+        console.log("shard root hash: ", Buffer.from(shardDescr.root_hash).toString("hex"));
+        validatedShardBlockHashes.push(Buffer.from(shardDescr.root_hash).toString("hex"));
+      });
     }
     if (i > 0) {
       console.log("block root hash i > 0: ", blockRootHash, validatedShardBlockHashes[i - 1]);
       // since the proofs are links from the wanted shard block to the masterchain block, hash of block_proof[i] must be in the validate shard block hashes
       assert(validatedShardBlockHashes.some((hash) => blockRootHash === hash));
       // since this block proof is validated, we can trust the prev ref root hash stored in it. We will use it to verify the next shard block proof until we find our wanted shard block
+      console.log("prev block root hash: ", Buffer.from(block.info.prev_ref.prev.root_hash).toString("hex"));
       const validatedBlockHash = Buffer.from(block.info.prev_ref.prev.root_hash).toString("hex");
       validatedShardBlockHashes.push(validatedBlockHash);
-    }
-    if (
-      validatedShardBlockHashes.length > 0 &&
-      validatedShardBlockHashes.some((hash) => hash === shardInfo.id.rootHash.toString("hex"))
-    ) {
-      console.log("finished validating our shard block");
-      break;
     }
   }
   engine.close();

@@ -3,7 +3,7 @@ export interface InstantiateMsg {
   boc?: HexBinary | null;
 }
 export type ExecuteMsg = {
-  parse_candidates_root_block: {
+  prepare_new_key_block: {
     keyblock_boc: HexBinary;
   };
 } | {
@@ -11,13 +11,13 @@ export type ExecuteMsg = {
     boc: HexBinary;
   };
 } | {
-  verify_validators: {
+  verify_key_block: {
     file_hash: HexBinary;
     root_hash: HexBinary;
     vdata: VdataHex[];
   };
 } | {
-  verify_block_by_validator_signatures: {
+  verify_masterchain_block_by_validator_signatures: {
     block_boc: HexBinary;
     block_header_proof: HexBinary;
     file_hash: HexBinary;
@@ -25,8 +25,8 @@ export type ExecuteMsg = {
   };
 } | {
   verify_shard_blocks: {
-    master_shard_proof_boc: HexBinary;
-    shard_state_boc: HexBinary;
+    mc_block_root_hash: HexBinary;
+    shard_proof_links: HexBinary[];
   };
 } | {
   set_verified_block: {

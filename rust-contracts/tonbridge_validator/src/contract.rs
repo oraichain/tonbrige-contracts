@@ -65,9 +65,9 @@ pub fn execute(
             vdata,
         ),
         ExecuteMsg::VerifyShardBlocks {
-            master_shard_proof_boc,
-            shard_state_boc,
-        } => verify_shard_blocks(deps, master_shard_proof_boc, shard_state_boc),
+            shard_proof_links,
+            mc_block_root_hash,
+        } => verify_shard_blocks(deps, shard_proof_links, mc_block_root_hash),
         ExecuteMsg::SetVerifiedBlock { root_hash, seq_no } => {
             set_verified_block(deps, &info.sender, root_hash, seq_no)
         }
@@ -173,12 +173,12 @@ pub fn verify_masterchain_block_by_validator_signatures(
 
 pub fn verify_shard_blocks(
     deps: DepsMut,
-    shard_proof_boc: HexBinary,
-    shard_state_boc: HexBinary,
+    shard_proof_links: Vec<HexBinary>,
+    mc_block_root_hash: HexBinary,
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    let root_hash = validator.read_master_shard_proof(deps.storage, shard_proof_boc.as_slice())?;
-    validator.read_shard_state_unsplit(deps.storage, shard_state_boc.as_slice(), root_hash)?;
+    validator.verify_shard_blocks(deps.storage, shard_proof_links, mc_block_root_hash)?;
+    // validator.read_shard_state_unsplit(deps.storage, shard_state_boc.as_slice(), root_hash)?;
     Ok(Response::new().add_attributes(vec![("action", "verify_shard_blocks")]))
 }
 

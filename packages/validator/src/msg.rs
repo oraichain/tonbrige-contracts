@@ -27,8 +27,8 @@ pub enum ExecuteMsg {
         vdata: Vec<VdataHex>,
     },
     VerifyShardBlocks {
-        master_shard_proof_boc: HexBinary, // in hex form
-        shard_state_boc: HexBinary,
+        shard_proof_links: Vec<HexBinary>, // in hex form
+        mc_block_root_hash: HexBinary,
     },
     SetVerifiedBlock {
         root_hash: HexBinary,
