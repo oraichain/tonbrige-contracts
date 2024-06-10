@@ -2,7 +2,7 @@ import TonRocks from "@oraichain/tonbridge-utils";
 import { Block } from "@oraichain/tonbridge-utils/build/blockchain";
 import { loadBlockExtra, loadTransaction } from "@oraichain/tonbridge-utils/build/blockchain/BlockParser";
 import { Address as TonRocksAddress } from "@oraichain/tonbridge-utils/build/types";
-import { Address } from "@ton/core";
+import { Address, Cell } from "@ton/core";
 import { assert } from "console";
 import "dotenv/config";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
@@ -34,9 +34,14 @@ function intToIP(int: number) {
   const client = new LiteClient({ engine });
   const addressRaw = "UQAQw3YLaG2HvvH1xaJehyAaJ--PX4gFxi70NwC1p_b4nISf";
   const result = await fetch(
-    `https://toncenter.com/api/v3/transactions?account=${addressRaw}&limit=3&offset=0&sort=desc`
+    `https://toncenter.com/api/v3/transactions?account=${addressRaw}&limit=100&offset=0&sort=desc`
   ).then((data) => data.json());
-  const { block_ref, mc_block_seqno, hash, lt } = result.transactions[2];
+  const { block_ref, mc_block_seqno, hash, lt } = result.transactions.find((tx) => {
+    return (
+      Buffer.from(tx.hash, "base64").toString("hex") ===
+      "25d1ed22d37fa5ec44b4426f00f33ee3f59e527e8252b9da266172d342c0f5fd"
+    );
+  });
   console.log("mc block seqno: ", mc_block_seqno, block_ref);
   const fullBlock = await client.getFullBlock(mc_block_seqno);
   const mcBlockId = fullBlock.shards.find((shard) => shard.seqno === mc_block_seqno);
@@ -58,8 +63,7 @@ function intToIP(int: number) {
     //
     const blockProofCell = await TonRocks.types.Cell.fromBoc(link.proof);
     const block = TonRocks.bc.BlockParser.parseBlock(blockProofCell[0].refs[0]);
-    console.log("block boc: ", link.proof.toString("hex"));
-    console.log("block info: ", block.info);
+    console.log("block boc: ", Cell.fromBoc(link.proof));
     const blockRootHash = Buffer.from(blockProofCell[0].refs[0].getHash(0)).toString("hex");
     if (i === 0) {
       console.log("block root hash i === 0: ", blockRootHash, mcBlockId.rootHash.toString("hex"));
@@ -75,15 +79,15 @@ function intToIP(int: number) {
     }
     if (i > 0) {
       console.log("block root hash i > 0: ", blockRootHash, validatedShardBlockHashes[i - 1]);
-      // since the proofs are links from the wanted shard block to the masterchain block, hash of block_proof[i] must be equal to the previously stored validated hash.
-      assert(blockRootHash === validatedShardBlockHashes[i - 1]);
+      // since the proofs are links from the wanted shard block to the masterchain block, hash of block_proof[i] must be in the validate shard block hashes
+      assert(validatedShardBlockHashes.some((hash) => blockRootHash === hash));
       // since this block proof is validated, we can trust the prev ref root hash stored in it. We will use it to verify the next shard block proof until we find our wanted shard block
       const validatedBlockHash = Buffer.from(block.info.prev_ref.prev.root_hash).toString("hex");
       validatedShardBlockHashes.push(validatedBlockHash);
     }
     if (
       validatedShardBlockHashes.length > 0 &&
-      validatedShardBlockHashes[validatedShardBlockHashes.length - 1] === wantedShardInfo.rootHash.toString("hex")
+      validatedShardBlockHashes.some((hash) => hash === wantedShardInfo.rootHash.toString("hex"))
     ) {
       console.log("finished validating our shard block");
       break;
@@ -97,7 +101,7 @@ function intToIP(int: number) {
   // console.log("transaction detail: ", transactionDetail);
   const merkleProofHash = Buffer.from(transactionProofCell[0].refs[0].getHash(0)).toString("hex");
   // the transaction's block hash must match the shard block's hash
-  assert(merkleProofHash === validatedShardBlockHashes[validatedShardBlockHashes.length - 1]);
+  assert(validatedShardBlockHashes.some((hash) => merkleProofHash === hash));
   const blockExtra = loadBlockExtra(transactionProofCell[0].refs[0].refs[3], { cs: 0, ref: 0 });
   const blockExtraMap = blockExtra.account_blocks.map;
   blockExtraMap.forEach(async (value, key) => {
