@@ -8,7 +8,6 @@ use tonbridge_bridge::{
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
 };
 use tonbridge_parser::{
-    transaction_parser::{ITransactionParser, TransactionParser},
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser},
     types::{Address, Bytes32},
 };
@@ -23,7 +22,6 @@ use crate::{
 
 #[cw_serde]
 pub struct Bridge {
-    pub transaction_parser: TransactionParser,
     pub tree_of_cells_parser: TreeOfCellsParser,
     pub validator: ValidatorWrapper,
 }
@@ -31,7 +29,6 @@ pub struct Bridge {
 impl Bridge {
     pub fn new(validator_contract_addr: Addr) -> Self {
         Self {
-            transaction_parser: TransactionParser::default(),
             tree_of_cells_parser: TreeOfCellsParser::default(),
             validator: ValidatorWrapper(validator_contract_addr),
         }
@@ -64,13 +61,11 @@ impl Bridge {
                 "The block root hash of the tx proof is not verified or invalid. Cannot bridge!",
             )));
         }
-
-        let tx_info = self.transaction_parser.parse_transaction_header(
-            tx_boc,
-            &mut tx_toc,
-            tx_header.root_idx,
-        )?;
-
+        // let tx_info = self.transaction_parser.parse_transaction_header(
+        //     tx_boc,
+        //     &mut tx_toc,
+        //     tx_header.root_idx,
+        // )?;
         let block_extra_cell = tx_proof_cell_first_ref.reference(3)?;
         let block_extra =
             Cell::load_block_extra(block_extra_cell, &mut 0, &mut block_extra_cell.parser())?;
@@ -81,12 +76,13 @@ impl Bridge {
         }
         let account_blocks = block_extra.account_blocks.unwrap();
         let mut found_matched_tx = false;
+        let transaction_hash = tx_toc[tx_header.root_idx].hashes[0];
         for acc_block in account_blocks.into_iter() {
             let txs = acc_block.1.transactions;
             for (_key, tx) in txs {
                 if let Some(tx_cell) = tx.1 {
                     let tx_hash = tx_cell.get_hash(0);
-                    if tx_hash.eq(&tx_toc[tx_header.root_idx].hashes[0]) {
+                    if tx_hash.eq(&transaction_hash) {
                         found_matched_tx = true;
                         break;
                     }
@@ -104,7 +100,7 @@ impl Bridge {
         }
 
         let is_tx_processed = PROCESSED_TXS
-            .may_load(deps.storage, &tx_info.address_hash)?
+            .may_load(deps.storage, &transaction_hash)?
             .unwrap_or(false);
 
         if is_tx_processed {
@@ -113,7 +109,7 @@ impl Bridge {
             )));
         }
 
-        PROCESSED_TXS.save(deps.storage, &tx_info.address_hash, &true)?;
+        PROCESSED_TXS.save(deps.storage, &transaction_hash, &true)?;
         let adapter = Adapter::new();
         // FIXME: packet data should have something for the bridge contract to query mapping pair
         let mut packet_data =
