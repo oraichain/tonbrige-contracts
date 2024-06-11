@@ -8,6 +8,7 @@ use tonbridge_bridge::{
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
 };
 use tonbridge_parser::{
+    transaction_parser::{ITransactionParser, TransactionParser},
     tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser},
     types::{Address, Bytes32},
 };
@@ -22,6 +23,7 @@ use crate::{
 
 #[cw_serde]
 pub struct Bridge {
+    pub transaction_parser: TransactionParser,
     pub tree_of_cells_parser: TreeOfCellsParser,
     pub validator: ValidatorWrapper,
 }
@@ -29,6 +31,7 @@ pub struct Bridge {
 impl Bridge {
     pub fn new(validator_contract_addr: Addr) -> Self {
         Self {
+            transaction_parser: TransactionParser::default(),
             tree_of_cells_parser: TreeOfCellsParser::default(),
             validator: ValidatorWrapper(validator_contract_addr),
         }
@@ -61,11 +64,13 @@ impl Bridge {
                 "The block root hash of the tx proof is not verified or invalid. Cannot bridge!",
             )));
         }
-        // let tx_info = self.transaction_parser.parse_transaction_header(
-        //     tx_boc,
-        //     &mut tx_toc,
-        //     tx_header.root_idx,
-        // )?;
+
+        let _tx_info = self.transaction_parser.parse_transaction_header(
+            tx_boc,
+            &mut tx_toc,
+            tx_header.root_idx,
+        )?;
+
         let block_extra_cell = tx_proof_cell_first_ref.reference(3)?;
         let block_extra =
             Cell::load_block_extra(block_extra_cell, &mut 0, &mut block_extra_cell.parser())?;
