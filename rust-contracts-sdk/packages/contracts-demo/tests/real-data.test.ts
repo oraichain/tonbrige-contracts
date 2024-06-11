@@ -8,11 +8,11 @@ import {
 import { deployContract } from "@oraichain/tonbridge-contracts-build";
 import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
 import { ValidatorSignature } from "@oraichain/tonbridge-utils";
-import { Address, Cell, Transaction, loadTransaction } from "@ton/core";
+import { Address } from "@ton/core";
 import { LiteClient, LiteEngine, LiteRoundRobinEngine, LiteSingleEngine } from "ton-lite-client";
 import { Functions, liteServer_masterchainInfoExt } from "ton-lite-client/dist/schema";
 import TonWeb from "tonweb";
-import { intToIP, parseBlock } from "../src/common";
+import { intToIP } from "../src/common";
 import { queryAllValidatorCandidates, queryAllValidators, queryKeyBlock } from "./common";
 
 describe("Real Ton data tests", () => {
@@ -236,73 +236,46 @@ describe("Real Ton data tests", () => {
   }, 20000);
 
   it("bridge contract reads real data from masterchain block's transaction", async () => {
-    // block info: https://tonscan.org/block/-1:8000000000000000:38206464
-    // tx info: https://tonscan.org/tx/gr0uA0IOfsaBIisEcEQ5eETOE+qTZGNA3DWH+QlO47o=
-    let initBlockSeqno = 38208790;
-    const fullBlock = await liteClient.getFullBlock(initBlockSeqno);
-    const blockId = fullBlock.shards.find((blockRes) => blockRes.seqno === initBlockSeqno);
-    const tonweb = new TonWeb();
-    const valSignatures = (await tonweb.provider.send("getMasterchainBlockSignatures", {
-      seqno: blockId.seqno
-    })) as any;
-    const signatures = valSignatures.signatures as ValidatorSignature[];
-    const vdata = signatures.map((sig) => {
-      const signatureBuffer = Buffer.from(sig.signature, "base64");
-      const r = signatureBuffer.subarray(0, 32);
-      const s = signatureBuffer.subarray(32);
-      return {
-        node_id: Buffer.from(sig.node_id_short, "base64").toString("hex"),
-        r: r.toString("hex"),
-        s: s.toString("hex")
-      };
+    // check if our wanted shard blocks have been verified or not. If not then we verify them
+    const isVerified = await validator.isVerifiedBlock({
+      rootHash: "0299328dbd84b0ece362aec8cb04f89f7f21b1908dd55542ae9983914d81b7d1"
     });
-
-    const blockHeader = await liteClient.getBlockHeader(blockId);
-    const blockInfo = await liteEngine.query(Functions.liteServer_getBlock, {
-      kind: "liteServer.getBlock",
-      id: {
-        kind: "tonNode.blockIdExt",
-        ...blockId
-      }
-    });
-    await validator.verifyMasterchainBlockByValidatorSignatures({
-      blockHeaderProof: blockHeader.headerProof.toString("hex"),
-      blockBoc: blockInfo.data.toString("hex"),
-      fileHash: blockInfo.id.fileHash.toString("hex"),
-      vdata
-    });
-    expect(await validator.isVerifiedBlock({ rootHash: blockId.rootHash.toString("hex") })).toEqual(true);
-    const parsedBlock = await parseBlock(blockInfo);
-    for (let i = Number(parsedBlock.info.start_lt); i <= Number(parsedBlock.info.end_lt); i++) {
-      try {
-        const transaction = await liteClient.getAccountTransaction(
-          Address.parse("Uf98l92gzaGGrFTEpjINq45F8BG2cmVaRzNxuvmH1rtQkaxE"),
-          i.toString(),
-          blockId
-        );
-        let transactionDetails: Transaction;
-        try {
-          const cell = Cell.fromBoc(transaction.transaction)[0].beginParse();
-          transactionDetails = loadTransaction(cell);
-        } catch (error) {
-          continue;
+    // verify necessary masterchain and shard blocks so that we can verify our tx
+    if (!isVerified) {
+      const shardInfo = await liteClient.lookupBlockByID({ seqno: 43884169, shard: "2000000000000000", workchain: 0 });
+      const shardProof = await liteEngine.query(Functions.liteServer_getShardBlockProof, {
+        kind: "liteServer.getShardBlockProof",
+        id: {
+          kind: "tonNode.blockIdExt",
+          ...shardInfo.id
         }
-        console.log("transaction details logical time: ", Number(transactionDetails.lt));
-        console.log("i: ", i);
-        if (Number(transactionDetails.lt) === i) {
-          // console.log("transaction: ", transactionDetails);
-          const result = await bridge.readTransaction({
-            txBoc: transaction.transaction.toString("hex"),
-            blockBoc: blockInfo.data.toString("hex"),
-            validatorContractAddr: validator.contractAddress,
-            opcode: "0000000000000000000000000000000000000000000000000000000000000001"
-          });
-          console.log("transaction hash: ", result.transactionHash);
-        }
-      } catch (error) {
-        console.log("error bridge contract read real data from tx: ", error);
-        console.log("index: ", i);
-      }
+      });
+      const mcBlockRootHash = shardProof.masterchainId.rootHash.toString("hex");
+      // assume that the masterchain block is already verified by validator signatures
+      await validator.setVerifiedBlock({ rootHash: mcBlockRootHash, seqNo: shardProof.masterchainId.seqno });
+      await validator.verifyShardBlocks({
+        mcBlockRootHash: mcBlockRootHash,
+        shardProofLinks: shardProof.links.map((link) => link.proof.toString("hex"))
+      });
     }
+    const addressRaw = "UQAQw3YLaG2HvvH1xaJehyAaJ--PX4gFxi70NwC1p_b4nISf";
+    const result = await fetch(
+      `https://toncenter.com/api/v3/transactions?account=${addressRaw}&limit=100&offset=0&sort=desc`
+    ).then((data) => data.json());
+    const { block_ref, mc_block_seqno, hash, lt } = result.transactions.find((tx) => {
+      return (
+        Buffer.from(tx.hash, "base64").toString("hex") ===
+        "25d1ed22d37fa5ec44b4426f00f33ee3f59e527e8252b9da266172d342c0f5fd"
+      );
+    });
+    const shardInfo = await liteClient.lookupBlockByID(block_ref);
+    // PROVE TX MATCHES THE TX WE EXPECT AND IT IS IN OUR VALIDATED SHARD BLOCK
+    const transaction = await liteClient.getAccountTransaction(Address.parse(addressRaw), lt, shardInfo.id);
+    await bridge.readTransaction({
+      txBoc: transaction.transaction.toString("hex"),
+      txProof: transaction.proof.toString("hex"),
+      validatorContractAddr: validator.contractAddress,
+      opcode: "0000000000000000000000000000000000000000000000000000000000000001"
+    });
   }, 100000);
 });

@@ -120,8 +120,8 @@ impl Validator {
         let root = block.single_root()?;
         let block_header_proof = BagOfCells::parse(block_header_proof.as_slice())?;
         let root_hash_from_block_header =
-            block_header_proof.root(0)?.reference(0)?.hashes[0].clone();
-        let root_hash_from_block = root.hashes[0].clone();
+            block_header_proof.root(0)?.reference(0)?.get_hash(0);
+        let root_hash_from_block = root.get_hash(0);
         if root_hash_from_block.ne(&root_hash_from_block_header) {
             return Err(ContractError::TonCellError(
                 TonCellError::cell_parser_error(
@@ -216,7 +216,7 @@ impl Validator {
             let root = cells.single_root()?;
             let first_ref = root.reference(0)?;
             let block = first_ref.load_block()?;
-            let merkle_proof_root_hash = first_ref.hashes[0].clone();
+            let merkle_proof_root_hash = first_ref.get_hash(0);
             if i == 0 {
                 if merkle_proof_root_hash.ne(&mc_block_root_hash.to_vec()) {
                     return Err(ContractError::Std(StdError::generic_err(
@@ -371,6 +371,8 @@ impl IValidator for Validator {
 
 #[cfg(test)]
 mod tests {
+    use std::hash::Hash;
+
     use cosmwasm_std::{
         from_binary,
         testing::{mock_dependencies, mock_env, mock_info},
@@ -381,6 +383,7 @@ mod tests {
         types::{Bytes32, Vdata, VerifiedBlockInfo},
     };
     use tonbridge_validator::msg::{InstantiateMsg, QueryMsg, UserFriendlyValidator};
+    use tonlib::cell::BagOfCells;
 
     use crate::contract::{get_validators, instantiate, query};
 

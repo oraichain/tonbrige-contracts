@@ -2,9 +2,9 @@ import {HexBinary, Boolean} from "./types";
 export interface InstantiateMsg {}
 export type ExecuteMsg = {
   read_transaction: {
-    block_boc: HexBinary;
     opcode: HexBinary;
     tx_boc: HexBinary;
+    tx_proof: HexBinary;
     validator_contract_addr: string;
   };
 } | {

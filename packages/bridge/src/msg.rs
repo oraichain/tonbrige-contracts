@@ -10,9 +10,9 @@ pub struct InstantiateMsg {}
 #[cw_serde]
 pub enum ExecuteMsg {
     ReadTransaction {
-        tx_boc: HexBinary,    // in hex form
-        block_boc: HexBinary, // in hex form
-        opcode: HexBinary,    // in hex form
+        tx_proof: HexBinary,
+        tx_boc: HexBinary, // in hex form
+        opcode: HexBinary, // in hex form
         validator_contract_addr: String,
     },
     UpdateMappingPair(UpdatePairMsg),

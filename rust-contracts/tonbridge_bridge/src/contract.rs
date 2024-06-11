@@ -37,18 +37,11 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::ReadTransaction {
+            tx_proof,
             tx_boc,
-            block_boc,
             opcode,
             validator_contract_addr,
-        } => read_transaction(
-            deps,
-            env,
-            tx_boc,
-            block_boc,
-            opcode,
-            validator_contract_addr,
-        ),
+        } => read_transaction(deps, env, tx_proof, tx_boc, opcode, validator_contract_addr),
         ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, env, &info.sender, msg),
         ExecuteMsg::BridgeToTon(msg) => handle_bridge_to_ton_native(deps, info, msg.boc),
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
@@ -58,8 +51,8 @@ pub fn execute(
 pub fn read_transaction(
     deps: DepsMut,
     env: Env,
+    tx_proof: HexBinary,
     tx_boc: HexBinary,
-    block_boc: HexBinary,
     opcode: HexBinary,
     validator_contract_addr: String,
 ) -> Result<Response, ContractError> {
@@ -67,8 +60,8 @@ pub fn read_transaction(
     let cosmos_msgs = bridge.read_transaction(
         deps,
         env.contract.address.as_str(),
+        tx_proof.as_slice(),
         tx_boc.as_slice(),
-        block_boc.as_slice(),
         to_bytes32(&opcode)?,
     )?;
     Ok(Response::new()

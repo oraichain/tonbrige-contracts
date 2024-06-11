@@ -303,7 +303,7 @@ impl ISignatureValidator for SignatureValidator {
         let cells = BagOfCells::parse(boc)?;
         let first_root = cells.single_root()?;
         // set root hash as the hash of the first root
-        self.root_hash = first_root.hashes[0].as_slice().try_into()?;
+        self.root_hash = first_root.get_hash(0).as_slice().try_into()?;
         let mut parser = first_root.parser();
 
         // magic number

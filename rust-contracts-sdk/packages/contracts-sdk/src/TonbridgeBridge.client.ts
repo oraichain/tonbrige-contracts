@@ -66,14 +66,14 @@ export interface TonbridgeBridgeInterface extends TonbridgeBridgeReadOnlyInterfa
   contractAddress: string;
   sender: string;
   readTransaction: ({
-    blockBoc,
     opcode,
     txBoc,
+    txProof,
     validatorContractAddr
   }: {
-    blockBoc: HexBinary;
     opcode: HexBinary;
     txBoc: HexBinary;
+    txProof: HexBinary;
     validatorContractAddr: string;
   }, _fee?: number | StdFee | "auto", _memo?: string, _funds?: Coin[]) => Promise<ExecuteResult>;
   updateMappingPair: ({
@@ -121,21 +121,21 @@ export class TonbridgeBridgeClient extends TonbridgeBridgeQueryClient implements
   }
 
   readTransaction = async ({
-    blockBoc,
     opcode,
     txBoc,
+    txProof,
     validatorContractAddr
   }: {
-    blockBoc: HexBinary;
     opcode: HexBinary;
     txBoc: HexBinary;
+    txProof: HexBinary;
     validatorContractAddr: string;
   }, _fee: number | StdFee | "auto" = "auto", _memo?: string, _funds?: Coin[]): Promise<ExecuteResult> => {
     return await this.client.execute(this.sender, this.contractAddress, {
       read_transaction: {
-        block_boc: blockBoc,
         opcode,
         tx_boc: txBoc,
+        tx_proof: txProof,
         validator_contract_addr: validatorContractAddr
       }
     }, _fee, _memo, _funds);

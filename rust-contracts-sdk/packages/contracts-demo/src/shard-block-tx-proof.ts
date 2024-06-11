@@ -91,6 +91,7 @@ function intToIP(int: number) {
   }
   // PROVE TX MATCHES THE TX WE EXPECT AND IT IS IN OUR VALIDATED SHARD BLOCK
   const transaction = await client.getAccountTransaction(Address.parse(addressRaw), lt, wantedShardInfo);
+  // console.log("transaction proof: ", Buffer.from(transaction.proof).toString('hex'));
   const transactionProofCell = await TonRocks.types.Cell.fromBoc(transaction.proof);
   const transactionDetailCell = await TonRocks.types.Cell.fromBoc(transaction.transaction);
   const transactionDetail = loadTransaction(transactionDetailCell[0], { cs: 0, ref: 0 });
@@ -104,6 +105,7 @@ function intToIP(int: number) {
     const txHash = Buffer.from(value.value.transactions.map.get(Number(lt).toString(16)).value.getHash(0)).toString(
       "hex"
     );
+    console.log("tx hash: ", txHash);
     assert(txHash === Buffer.from(transactionDetail.hash).toString("hex"));
   });
 
