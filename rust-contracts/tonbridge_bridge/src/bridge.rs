@@ -88,9 +88,9 @@ impl Bridge {
                     let tx_hash = tx_cell.get_hash(0);
                     if tx_hash.eq(&tx_toc[tx_header.root_idx].hashes[0]) {
                         found_matched_tx = true;
+                        break;
                     }
                 }
-                break;
             }
             if found_matched_tx {
                 break;
