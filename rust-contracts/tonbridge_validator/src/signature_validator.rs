@@ -91,7 +91,7 @@ impl SignatureValidator {
         storage: &mut dyn Storage,
         validators: &mut ValidatorSet,
     ) -> StdResult<()> {
-        let mut candidates_for_validator_set = get_signature_candidate_validators(storage);
+        let mut candidates_for_validator_set = get_signature_candidate_validators(storage)?;
         // let mut j = self.candidates_for_validator_set.len();
         let mut j = candidates_for_validator_set.len();
         let mut total_weight: Vec<u64> = Vec::with_capacity(j);
@@ -214,9 +214,9 @@ impl ISignatureValidator for SignatureValidator {
     }
 
     fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32> {
-        let candidates_for_validator_set = get_signature_candidate_validators(storage);
+        let candidates_for_validator_set = get_signature_candidate_validators(storage)?;
         // self.validator_set = self.candidates_for_validator_set.to_owned();
-        for (_, candidate) in candidates_for_validator_set.iter().enumerate() {
+        for candidate in &candidates_for_validator_set {
             validator_set().save(storage, &candidate.node_id, candidate)?;
         }
 
@@ -238,10 +238,10 @@ impl ISignatureValidator for SignatureValidator {
         storage: &mut dyn Storage,
         api: &dyn Api,
     ) -> StdResult<Bytes32> {
-        let val_set = get_signature_validator_set(storage);
+        let val_set = get_signature_validator_set(storage)?;
         // remove old validators from the list to prevent unexpected errors
         // reset_signature_validator_set(storage);
-        let candidates_for_validator_set = get_signature_candidate_validators(storage);
+        let candidates_for_validator_set = get_signature_candidate_validators(storage)?;
         // if current validator_set is empty, check caller
         // else check votes
         if val_set[0].weight == 0 {
@@ -262,14 +262,14 @@ impl ISignatureValidator for SignatureValidator {
         ));
 
         if current_weight * 3 <= self.sum_largest_total_weights * 2 {
-            return Err(StdError::generic_err(&format!(
+            return Err(StdError::generic_err(format!(
                 "not enough votes. Wanted {:?}; has {:?}",
                 self.sum_largest_total_weights * 2,
                 current_weight * 3
             )));
         }
 
-        for (_, candidate) in candidates_for_validator_set.iter().enumerate() {
+        for candidate in &candidates_for_validator_set {
             validator_set().save(storage, &candidate.node_id, candidate)?;
         }
         reset_signature_candidate_validators(storage);

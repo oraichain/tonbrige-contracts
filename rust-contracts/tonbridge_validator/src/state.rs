@@ -1,4 +1,4 @@
-use cosmwasm_std::{HexBinary, Order, Storage};
+use cosmwasm_std::{HexBinary, Order, StdResult, Storage};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 
 use cw_controllers::Admin;
@@ -39,26 +39,26 @@ pub fn validator_set<'a>() -> IndexedMap<'a, &'a [u8], ValidatorDescription, Val
     IndexedMap::new("validator_set_namespace", indexes)
 }
 
-pub fn get_signature_candidate_validators(storage: &dyn Storage) -> Vec<ValidatorDescription> {
+pub fn get_signature_candidate_validators(
+    storage: &dyn Storage,
+) -> StdResult<Vec<ValidatorDescription>> {
     SIGNATURE_CANDIDATE_VALIDATOR
         .range(storage, None, None, Order::Ascending)
-        .into_iter()
-        .map(|item| item.unwrap().1)
+        .map(|item| item.map(|item| item.1))
         .collect()
 }
 
-pub fn get_signature_validator_set(storage: &dyn Storage) -> Vec<ValidatorDescription> {
+pub fn get_signature_validator_set(storage: &dyn Storage) -> StdResult<Vec<ValidatorDescription>> {
     validator_set()
         .range(storage, None, None, Order::Ascending)
-        .into_iter()
-        .map(|item| item.unwrap().1)
+        .map(|item| item.map(|item| item.1))
         .collect()
 }
 
-pub fn reset_signature_candidate_validators(storage: &mut dyn Storage) -> () {
+pub fn reset_signature_candidate_validators(storage: &mut dyn Storage) {
     SIGNATURE_CANDIDATE_VALIDATOR.clear(storage);
 }
 
-pub fn reset_signature_validator_set(storage: &mut dyn Storage) -> () {
+pub fn reset_signature_validator_set(storage: &mut dyn Storage) {
     validator_set().clear(storage);
 }

@@ -91,7 +91,7 @@ impl IBaseAdapter for Adapter {
         )?;
         let msg = Asset {
             info: mapping.asset_info.clone(),
-            amount: local_amount.clone(),
+            amount: local_amount,
         };
         if opcode == OPCODE_1 {
             let msg = match msg.info {

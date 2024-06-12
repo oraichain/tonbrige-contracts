@@ -24,3 +24,7 @@ out
 # wasm file
 **/*.wasm
 !rust-contracts-sdk/packages/contracts-build/data/oraiswap-token.wasm
+
+# code analyzer
+.scannerwork/
+clippy-report.json
