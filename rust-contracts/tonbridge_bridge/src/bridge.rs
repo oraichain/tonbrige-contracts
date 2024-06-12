@@ -67,7 +67,7 @@ impl Bridge {
 
         let _tx_info = self.transaction_parser.parse_transaction_header(
             tx_boc,
-            &mut tx_toc,
+            &mut tx_toc.clone(),
             tx_header.root_idx,
         )?;
 
