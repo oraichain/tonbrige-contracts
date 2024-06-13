@@ -2091,6 +2091,11 @@
   resolved "https://registry.yarnpkg.com/@oraichain/oraidex-contracts-sdk/-/oraidex-contracts-sdk-1.0.44.tgz#9ff41ec388dd92ba112c2eef545d11fd6e18c684"
   integrity sha512-fMY/QOzO/afPlAVkLGH1bcpJTs6V/URrJju2r4UoE9f5HUWC/6OC6+H5dWuIgq26frp8wjH23mNCQAlmHzji8g==
 
+"@oraichain/tonbridge-contracts-build@latest":
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/@oraichain/tonbridge-contracts-build/-/tonbridge-contracts-build-1.0.1.tgz#6f25e62f74e703373d181f4005c20f6f60657e4a"
+  integrity sha512-1lI3QZVZA2ZdGEwfUahhe/Kj4e8RMVfnGJ8skOgVhTkx/ZrwX/KA5+LioT8xHEY7mC/5WAl4uU9z54VgRb5Cvg==
+
 "@oraichain/wasm-json-toolkit@^1.0.24":
   version "1.0.24"
   resolved "https://registry.yarnpkg.com/@oraichain/wasm-json-toolkit/-/wasm-json-toolkit-1.0.24.tgz#e9a431560e8e946fbb7ec257e5f13d9320ffd23a"
@@ -9460,11 +9465,6 @@ ton-tl@^1.0.1:
     case-shift "^2.5.3"
     crc-32 "^1.2.2"
     pegjs "^0.10.0"
-
-tonapi-sdk-js@^1.0.10:
-  version "1.0.10"
-  resolved "https://registry.yarnpkg.com/tonapi-sdk-js/-/tonapi-sdk-js-1.0.10.tgz#dd2e8c1cb1b3205527185664b422c190578e5012"
-  integrity sha512-fwVRzQyq1igox3NiP/uYgFwH9dVC+ky01VTG64MiGL57q8vBlM/iJZpcmm4/0CmKyGf0Z/y4ox0sykJEaNlP2A==
 
 tonweb@^0.0.66:
   version "0.0.66"
