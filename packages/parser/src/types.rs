@@ -1,6 +1,8 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{HexBinary, Uint256};
 
+use crate::block_parser::ValidatorSet;
+
 pub type Bytes32 = [u8; 32];
 pub type Bytes4 = [u8; 4];
 pub type Address = [u8; 20];
@@ -164,4 +166,12 @@ pub struct PacketData {
     pub receiving_address: Address,
     // pub receiving_token: AssetInfo,
     pub amount: Uint256,
+}
+
+#[cw_serde]
+#[derive(Default)]
+pub struct KeyBlockValidators {
+    pub previous: ValidatorSet,
+    pub current: ValidatorSet,
+    pub next: ValidatorSet,
 }

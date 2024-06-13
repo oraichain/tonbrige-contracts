@@ -3,7 +3,7 @@ use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
     block_parser::{compute_node_id, BlockParser, ValidatorSet},
     tree_of_cells_parser::EMPTY_HASH,
-    types::{Bytes32, ValidatorDescription, Vdata},
+    types::{Bytes32, KeyBlockValidators, ValidatorDescription, Vdata},
 };
 use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
 use tonlib::{
@@ -64,7 +64,10 @@ pub trait ISignatureValidator {
 
     fn init_validators(&mut self, storage: &mut dyn Storage) -> StdResult<Bytes32>;
 
-    fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> Result<ValidatorSet, ContractError>;
+    fn get_validators_set_from_boc(
+        &mut self,
+        boc: &[u8],
+    ) -> Result<KeyBlockValidators, ContractError>;
 }
 
 // need to deserialize from storage and better access directly from storage
@@ -80,35 +83,49 @@ pub struct SignatureValidator {
     sum_largest_candidates_total_weights: u64,
     pub root_hash: Bytes32,
     block_parser: BlockParser,
+    //
 }
 
 impl SignatureValidator {
     pub fn new() -> Self {
         Self::default()
     }
+
     fn parse_validators(
         &mut self,
         storage: &mut dyn Storage,
-        validators: &mut ValidatorSet,
+        validators: &mut KeyBlockValidators,
     ) -> StdResult<()> {
-        let mut candidates_for_validator_set = get_signature_candidate_validators(storage)?;
-        // let mut j = self.candidates_for_validator_set.len();
-        let mut j = candidates_for_validator_set.len();
-        let mut total_weight: Vec<u64> = Vec::with_capacity(j);
+        // get total weight of main validator in current validator set
+        validators.current.sort_by(|a, b| b.weight.cmp(&a.weight));
+        let sum_100_main_current: u64 = validators
+            .current
+            .iter()
+            .take(100)
+            .map(|desc| desc.weight)
+            .sum();
 
-        for i in 0..validators.len() {
+        // store all validators to candidate validator set
+        let mut candidates_for_validator_set = get_signature_candidate_validators(storage)?;
+        let mut j = candidates_for_validator_set.len();
+
+        let mut total_validators: Vec<ValidatorDescription> = validators.previous.to_vec();
+        total_validators.extend(validators.current.to_vec());
+        total_validators.extend(validators.next.to_vec());
+
+        for i in 0..total_validators.len() {
             // if the candidate is already in the list, we compare weight with the input
             if let Some(candidate) = candidates_for_validator_set.iter_mut().find(|val| {
                 HexBinary::from(val.pubkey)
                     .to_hex()
-                    .eq(&HexBinary::from(&validators[i].pubkey).to_string())
+                    .eq(&HexBinary::from(&total_validators[i].pubkey).to_string())
             }) {
                 // old validator has less weight then new
-                if candidate.weight < validators[i].weight {
-                    self.candidates_total_weight += validators[i].weight;
+                if candidate.weight < total_validators[i].weight {
+                    self.candidates_total_weight += total_validators[i].weight;
                     self.candidates_total_weight -= candidate.weight;
 
-                    std::mem::swap(candidate, &mut validators[i]);
+                    std::mem::swap(candidate, &mut total_validators[i]);
 
                     candidate.node_id = compute_node_id(candidate.pubkey);
                 }
@@ -116,26 +133,21 @@ impl SignatureValidator {
             // not found, we push a new default validator and update its info
             candidates_for_validator_set.push(ValidatorDescription::default());
 
-            self.candidates_total_weight += validators[i].weight;
-            total_weight.push(validators[i].weight);
-            candidates_for_validator_set[j] = validators[i];
+            self.candidates_total_weight += total_validators[i].weight;
+            candidates_for_validator_set[j] = total_validators[i];
             candidates_for_validator_set[j].node_id =
                 compute_node_id(candidates_for_validator_set[j].pubkey);
 
             // increment size of validator set
             j += 1;
         }
-        // sort desc
-        total_weight.sort_by(|a, b| b.cmp(a));
-        // FIXME: remove hardcode 100 largest. This is because Ton's config param limits 100 validators per block
-        let sum_100_largest_weights: u64 = total_weight[..100].to_vec().iter().sum();
-        self.sum_largest_candidates_total_weights = sum_100_largest_weights;
 
         // store candidate validator
+        self.sum_largest_candidates_total_weights = sum_100_main_current;
+
         for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
             SIGNATURE_CANDIDATE_VALIDATOR.save(storage, i as u64, candidate)?;
         }
-
         Ok(())
     }
 }
@@ -225,6 +237,7 @@ impl ISignatureValidator for SignatureValidator {
 
         self.total_weight = self.candidates_total_weight;
         self.sum_largest_total_weights = self.sum_largest_candidates_total_weights;
+
         self.candidates_total_weight = 0;
         self.sum_largest_candidates_total_weights = 0;
         let rh = self.root_hash;
@@ -276,6 +289,7 @@ impl ISignatureValidator for SignatureValidator {
 
         self.total_weight = self.candidates_total_weight;
         self.sum_largest_total_weights = self.sum_largest_candidates_total_weights;
+
         self.candidates_total_weight = 0;
         self.sum_largest_candidates_total_weights = 0;
         let rh = self.root_hash;
@@ -291,13 +305,16 @@ impl ISignatureValidator for SignatureValidator {
     ) -> Result<(), ContractError> {
         // self.candidates_for_validator_set = ValidatorSet::default();
         self.candidates_total_weight = 0;
-        let validators = self.get_validators_set_from_boc(boc)?;
-        self.parse_validators(storage, &mut validators.to_vec())?;
+        let mut validators = self.get_validators_set_from_boc(boc)?;
+        self.parse_validators(storage, &mut validators)?;
 
         Ok(())
     }
 
-    fn get_validators_set_from_boc(&mut self, boc: &[u8]) -> Result<ValidatorSet, ContractError> {
+    fn get_validators_set_from_boc(
+        &mut self,
+        boc: &[u8],
+    ) -> Result<KeyBlockValidators, ContractError> {
         // ref index = 3 because we skip load_block_info, load_value_flow, and load_merkle_update refs (dont care)
         let ref_index = &mut 3;
         let cells = BagOfCells::parse(boc)?;
@@ -319,19 +336,19 @@ impl ISignatureValidator for SignatureValidator {
             ));
         }
         let block_extra = block_extra.unwrap();
-        let mut validators =
+
+        let mut key_block_vals = KeyBlockValidators::default();
+
+        key_block_vals.current =
             SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 34)?;
-        validators.extend(SignatureValidator::load_validator_from_config_param(
-            &block_extra.custom.config,
-            32,
-        )?);
-        let next_validators =
+        key_block_vals.previous =
+            SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 32)?;
+        key_block_vals.next =
             SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 36)
-                .ok();
-        if let Some(next_validators) = next_validators {
-            validators.extend(next_validators)
-        }
-        Ok(validators)
+                .ok()
+                .unwrap_or_default();
+
+        Ok(key_block_vals)
     }
 
     fn load_validator_from_config_param(
