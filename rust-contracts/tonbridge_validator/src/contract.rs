@@ -14,8 +14,8 @@ use crate::state::{validator_set, OWNER, SIGNATURE_CANDIDATE_VALIDATOR, VALIDATO
 use crate::validator::{IValidator, Validator};
 
 // settings for pagination
-const MAX_LIMIT: u32 = 30;
-const DEFAULT_LIMIT: u32 = 10;
+const MAX_LIMIT: u32 = 100;
+const DEFAULT_LIMIT: u32 = 30;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -255,12 +255,9 @@ pub fn get_validators(
     order: Option<u8>,
 ) -> StdResult<Vec<UserFriendlyValidator>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start: Option<Bound<&[u8]>> = start_after.as_deref().map(|start| {
-        let mut range_start = start.as_bytes().to_vec();
-        // push 1 so that it does not include the previous value
-        range_start.push(1);
-        Bound::ExclusiveRaw(range_start)
-    });
+    let range_start =
+        start_after.map(|start| HexBinary::from_hex(&start).unwrap_or_default().to_vec());
+    let start = calc_range_start(range_start).map(Bound::ExclusiveRaw);
     let allow_range = validator_set().range(deps.storage, start, None, map_order(order));
     let validators = allow_range
         .take(limit)
@@ -310,4 +307,20 @@ fn map_order(order: Option<u8>) -> Order {
         }
         None => Order::Ascending,
     }
+}
+
+// upper bound key by 1, for Order::Ascending
+fn calc_range_start(start_after: Option<Vec<u8>>) -> Option<Vec<u8>> {
+    start_after.map(|mut input| {
+        // zero out all trailing 255, increment first that is not such
+        for i in (0..input.len()).rev() {
+            if input[i] == 255 {
+                input[i] = 0;
+            } else {
+                input[i] += 1;
+                break;
+            }
+        }
+        input
+    })
 }

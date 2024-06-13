@@ -15,8 +15,8 @@ use crate::{
     error::ContractError,
     state::{
         get_signature_candidate_validators, get_signature_validator_set,
-        reset_signature_candidate_validators, reset_signature_validator_set, validator_set,
-        SIGNATURE_CANDIDATE_VALIDATOR, SIGNED_BLOCKS,
+        reset_signature_candidate_validators, validator_set, SIGNATURE_CANDIDATE_VALIDATOR,
+        SIGNED_BLOCKS,
     },
 };
 
@@ -200,14 +200,20 @@ impl ISignatureValidator for SignatureValidator {
         message.extend_from_slice(&root_h);
         message.extend_from_slice(&file_hash);
 
+        // this makes sure vdata doesn't contain replicated signatures
+        let mut checked_validators: Vec<[u8; 32]> = vec![];
         for vdata_item in vdata {
             // 1. found validator
             if let Ok(validator) = validator_set().load(storage, &vdata_item.node_id) {
-                if self.is_signed_by_validator(storage, validator.node_id, root_h) {
+                if checked_validators.contains(&validator.pubkey) {
                     continue;
                 }
-
-                // require(validator_idx != validator_set.length, "wrong node_id");
+                // we also increment current_weight in this case because it is valid to re-verify a block given a correct set of signatures
+                if self.is_signed_by_validator(storage, validator.node_id, root_h) {
+                    checked_validators.push(validator.pubkey);
+                    current_weight += validator.weight;
+                    continue;
+                }
 
                 // signature = r + s
                 if api.ed25519_verify(
@@ -217,6 +223,7 @@ impl ISignatureValidator for SignatureValidator {
                 )? {
                     // update as verified
                     SIGNED_BLOCKS.save(storage, &[validator.node_id, root_h].concat(), &true)?;
+                    checked_validators.push(validator.pubkey);
                     current_weight += validator.weight;
                 }
             }
