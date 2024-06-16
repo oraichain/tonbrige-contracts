@@ -30,7 +30,7 @@ function intToIP(int: number) {
   const client = new LiteClient({ engine });
 
   // Create Client
-  const txCount = 5;
+  const txCount = 2;
   const master = await client.getMasterchainInfo();
   const addr = Address.parse("EQARXqu9hEzxsSP5ZdI5n3gv5XxFJQu8uPvEt0IJOwadzfA0");
   const accState = await client.getAccountState(addr, master.last);
@@ -61,6 +61,8 @@ function intToIP(int: number) {
       }
     });
     console.log("masterchain ref: ", masterchainRef);
+    const txDetail = await client.getAccountTransaction(addr, tx.lt.toString(), accountTxs.ids[i]);
+    console.log(txDetail);
   }
 
   engine.close();
