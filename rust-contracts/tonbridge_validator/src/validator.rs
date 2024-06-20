@@ -3,13 +3,10 @@ use cosmwasm_std::{Addr, Api, DepsMut, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
     bit_reader::to_bytes32,
     block_parser::ValidatorSet,
-    tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser, EMPTY_HASH},
+    tree_of_cells_parser::EMPTY_HASH,
     types::{Bytes32, ValidatorDescription, Vdata, VerifiedBlockInfo},
 };
-use tonbridge_validator::{
-    msg::UserFriendlyValidator,
-    shard_validator::{IShardValidator, ShardValidator},
-};
+use tonbridge_validator::msg::UserFriendlyValidator;
 use tonlib::cell::{BagOfCells, TonCellError};
 
 use crate::{
@@ -28,8 +25,6 @@ pub trait IValidator {
 #[derive(Default)]
 pub struct Validator {
     pub signature_validator: SignatureValidator,
-    toc_parser: TreeOfCellsParser,
-    shard_validator: ShardValidator,
 }
 
 impl Validator {
@@ -175,29 +170,6 @@ impl Validator {
         VERIFIED_BLOCKS.save(storage, &rh, &verified_block_info)
     }
 
-    pub fn add_prev_block(&self, storage: &mut dyn Storage, boc: &[u8]) -> StdResult<()> {
-        let mut header = self.toc_parser.parse_serialized_header(boc)?;
-        let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
-
-        if !self.is_verified_block(storage, toc[toc[header.root_idx].refs[0]].hashes[0])? {
-            return Err(StdError::generic_err("Not verified"));
-        }
-
-        let (root_hashes, blocks) =
-            self.shard_validator
-                .add_prev_block(boc, header.root_idx, &mut toc)?;
-
-        for i in 0..root_hashes.len() {
-            if root_hashes[i] == EMPTY_HASH {
-                break;
-            }
-
-            VERIFIED_BLOCKS.save(storage, &root_hashes[i], &blocks[i])?;
-        }
-
-        Ok(())
-    }
-
     pub fn verify_shard_blocks(
         &self,
         storage: &mut dyn Storage,
@@ -283,36 +255,6 @@ impl Validator {
         Ok(())
     }
 
-    // pub fn read_shard_state_unsplit(
-    //     &self,
-    //     storage: &mut dyn Storage,
-    //     boc: &[u8],  // older block data
-    //     rh: Bytes32, // newer root hash
-    // ) -> StdResult<()> {
-    //     let mut header = self.toc_parser.parse_serialized_header(boc)?;
-    //     let mut toc = self.toc_parser.get_tree_of_cells(boc, &mut header)?;
-
-    //     let new_block = VERIFIED_BLOCKS.load(storage, &rh)?;
-
-    //     if toc[header.root_idx].hashes[0] != new_block.new_hash {
-    //         return Err(StdError::generic_err("Block with new hash is not verified"));
-    //     }
-
-    //     let (root_hashes, blocks) =
-    //         self.shard_validator
-    //             .read_state_proof(boc, header.root_idx, &mut toc)?;
-
-    //     for i in 0..root_hashes.len() {
-    //         if root_hashes[i] == EMPTY_HASH {
-    //             break;
-    //         }
-
-    //         VERIFIED_BLOCKS.save(storage, &root_hashes[i], &blocks[i])?;
-    //     }
-
-    //     Ok(())
-    // }
-
     pub fn set_verified_block(
         &self,
         deps_mut: DepsMut,
@@ -370,25 +312,12 @@ impl IValidator for Validator {
 
 #[cfg(test)]
 mod tests {
-    use std::hash::Hash;
 
-    use cosmwasm_std::{
-        from_binary,
-        testing::{mock_dependencies, mock_env, mock_info},
-        HexBinary,
-    };
-    use tonbridge_parser::{
-        tree_of_cells_parser::{ITreeOfCellsParser, TreeOfCellsParser},
-        types::{Bytes32, Vdata, VerifiedBlockInfo},
-    };
-    use tonbridge_validator::msg::{InstantiateMsg, QueryMsg, UserFriendlyValidator};
-    use tonlib::cell::BagOfCells;
-
-    use crate::contract::{get_validators, instantiate, query};
+    use cosmwasm_std::{testing::mock_dependencies, HexBinary};
+    use tonbridge_parser::types::{Bytes32, Vdata, VerifiedBlockInfo};
 
     use super::Validator;
 
-    const MASTER_PROOF: &str = include_str!("testing/testdata/master_proof.hex");
     const BOCS: &str = include_str!("testing/testdata/bocs.hex");
     const BOCS_LARGE: &str = include_str!("testing/testdata/bocs_large.hex");
 
@@ -404,22 +333,6 @@ mod tests {
     fn test_default_verified_blocks_info() {
         let default_block_info = VerifiedBlockInfo::default();
         assert_eq!(default_block_info.verified, false);
-    }
-
-    #[test]
-    fn test_master_proof() {
-        let boc = HexBinary::from_hex(MASTER_PROOF).unwrap().to_vec();
-
-        let tree_of_cells_parser = TreeOfCellsParser::default();
-
-        let mut header = tree_of_cells_parser.parse_serialized_header(&boc).unwrap();
-
-        let toc = tree_of_cells_parser
-            .get_tree_of_cells(&boc, &mut header)
-            .unwrap();
-
-        println!("{}", header.root_idx);
-        println!("{}", toc[0].special)
     }
 
     #[test]

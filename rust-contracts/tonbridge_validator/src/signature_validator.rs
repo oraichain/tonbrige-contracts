@@ -1,11 +1,10 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
-    block_parser::{compute_node_id, BlockParser, ValidatorSet},
+    block_parser::{compute_node_id, ValidatorSet},
     tree_of_cells_parser::EMPTY_HASH,
     types::{Bytes32, KeyBlockValidators, ValidatorDescription, Vdata},
 };
-use tonbridge_validator::shard_validator::MESSAGE_PREFIX;
 use tonlib::{
     cell::{BagOfCells, Cell, TonCellError},
     responses::{ConfigParam, ConfigParams, ConfigParamsValidatorSet},
@@ -19,6 +18,8 @@ use crate::{
         SIGNED_BLOCKS,
     },
 };
+
+pub const MESSAGE_PREFIX: [u8; 4] = [0x70, 0x6e, 0x0b, 0xc5];
 
 pub trait ISignatureValidator {
     fn add_current_block_to_verified_set(
@@ -82,8 +83,6 @@ pub struct SignatureValidator {
     // sum of 100 largest weights of the candidates
     sum_largest_candidates_total_weights: u64,
     pub root_hash: Bytes32,
-    block_parser: BlockParser,
-    //
 }
 
 impl SignatureValidator {
