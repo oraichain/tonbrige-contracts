@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{HexBinary, Uint256};
+use cosmwasm_std::{HexBinary, Uint128, Uint256};
 
 use crate::block_parser::ValidatorSet;
 
@@ -174,4 +174,15 @@ pub struct KeyBlockValidators {
     pub previous: ValidatorSet,
     pub current: ValidatorSet,
     pub next: ValidatorSet,
+}
+
+#[cw_serde]
+#[derive(Default)]
+pub struct BridgePacketData {
+    pub denom: String,
+    pub amount: Uint128,
+    pub dest_denom: String,
+    pub dest_channel: String,
+    pub dest_receiver: String,
+    pub orai_address: String, // use as recovery address
 }

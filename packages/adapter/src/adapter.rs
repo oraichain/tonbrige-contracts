@@ -9,7 +9,7 @@ use tonbridge_parser::{
     bit_reader::read_cell,
     transaction_parser::{ITransactionParser, TransactionParser},
     tree_of_cells_parser::{OPCODE_1, OPCODE_2},
-    types::{Address, Bytes32, CellData, PacketData},
+    types::{Address, BridgePacketData, Bytes32, CellData, PacketData},
 };
 
 pub trait IBaseAdapter {
@@ -24,7 +24,7 @@ pub trait IBaseAdapter {
         &self,
         api: &dyn Api,
         querier: &QuerierWrapper,
-        data: PacketData,
+        data: BridgePacketData,
         opcode: Bytes32,
         bridge_token_mapping: MappingMetadata,
     ) -> StdResult<Vec<CosmosMsg>>;
@@ -78,14 +78,14 @@ impl IBaseAdapter for Adapter {
         &self,
         api: &dyn Api,
         querier: &QuerierWrapper,
-        data: PacketData,
+        data: BridgePacketData,
         opcode: Bytes32,
         mapping: MappingMetadata,
     ) -> StdResult<Vec<CosmosMsg>> {
         let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-        let recipient = api.addr_validate(&data.receiving_address)?;
+        let recipient = api.addr_validate(&data.orai_address)?;
 
-        let remote_amount: Uint128 = data.amount.try_into()?;
+        let remote_amount: Uint128 = data.amount;
         let local_amount = convert_remote_to_local(
             remote_amount,
             mapping.remote_decimals,

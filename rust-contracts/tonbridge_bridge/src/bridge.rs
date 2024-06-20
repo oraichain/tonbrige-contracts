@@ -11,7 +11,7 @@ use tonbridge_bridge::{
 };
 use tonbridge_parser::{
     bit_reader::to_bytes32,
-    types::{Address, Bytes32, PacketData},
+    types::{Address, BridgePacketData, Bytes32, PacketData},
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
@@ -122,25 +122,25 @@ impl Bridge {
             if out_msg.info.msg_type != MessageType::Internal as u8 {
                 continue;
             }
-            // FIXME: parse & use data from out_msg.body, not from src and value grams.
-            let packet_data = PacketData {
-                // FIXME: use the correct receiving address
-                receiving_address: self.validator.0.to_string(),
-                amount: Uint256::from_str(&out_msg.info.value.grams.value.to_string())?,
-            };
-            // FIXME: remove hardcode ics denom key
-            let channel_id = "";
-            let denom = "";
+
+            let cell = out_msg.body.cell_ref.unwrap().0.unwrap().cell;
+
+            let packet_data = Bridge::parse_packet_data(&cell)?;
 
             let _mapping = ics20_denoms().load(
                 storage,
                 &get_key_ics20_ibc_denom(
                     &parse_ibc_wasm_port_id(contract_address),
-                    channel_id,
-                    denom,
+                    &packet_data.dest_channel,
+                    &packet_data.denom,
                 ),
             )?;
-            increase_channel_balance(storage, channel_id, denom, packet_data.amount.try_into()?)?;
+            increase_channel_balance(
+                storage,
+                &packet_data.dest_channel,
+                &packet_data.denom,
+                packet_data.amount,
+            )?;
             let channel_id = "";
             let denom = "";
 
@@ -152,7 +152,7 @@ impl Bridge {
                     denom,
                 ),
             )?;
-            increase_channel_balance(storage, channel_id, denom, packet_data.amount.try_into()?)?;
+            increase_channel_balance(storage, channel_id, denom, packet_data.amount)?;
             let mut msgs = adapter.execute(api, &querier, packet_data, opcode, mapping)?;
             cosmos_msgs.append(&mut msgs);
         }
@@ -199,6 +199,40 @@ impl Bridge {
             )));
         }
         Ok(())
+    }
+
+    pub fn parse_packet_data(cell: &Cell) -> StdResult<BridgePacketData> {
+        let mut parser = cell.parser();
+
+        let source_denom = parser.load_address().unwrap();
+        let amount = parser.load_coins().unwrap();
+
+        let mut des_denom: Vec<u8> = vec![];
+
+        cell.references[0].references[0]
+            .load_buffer(&mut des_denom)
+            .unwrap();
+        let mut des_channel: Vec<u8> = vec![];
+        cell.references[0].references[1]
+            .load_buffer(&mut des_channel)
+            .unwrap();
+        let mut des_receiver: Vec<u8> = vec![];
+        cell.references[0].references[2]
+            .load_buffer(&mut des_receiver)
+            .unwrap();
+        let mut orai_address: Vec<u8> = vec![];
+        cell.references[0].references[3]
+            .load_buffer(&mut orai_address)
+            .unwrap();
+
+        Ok(BridgePacketData {
+            denom: source_denom.to_string(),
+            amount: Uint128::from_str(&amount.to_str_radix(10))?,
+            dest_denom: String::from_utf8(des_denom)?,
+            dest_channel: String::from_utf8(des_channel)?,
+            dest_receiver: String::from_utf8(des_receiver)?,
+            orai_address: String::from_utf8(orai_address)?,
+        })
     }
 }
 
