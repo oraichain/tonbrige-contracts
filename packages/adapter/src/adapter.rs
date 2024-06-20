@@ -39,7 +39,7 @@ pub trait IBaseAdapter {
 }
 
 pub struct Adapter {
-    transaction_parser: TransactionParser,
+    pub transaction_parser: TransactionParser,
 }
 
 impl Adapter {

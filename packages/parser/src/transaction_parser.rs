@@ -1,7 +1,10 @@
-use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{StdError, StdResult, Uint256};
+use std::str::FromStr;
 
-use crate::types::Bytes32;
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{StdError, StdResult, Uint128, Uint256};
+use tonlib::cell::Cell;
+
+use crate::types::{BridgePacketData, Bytes32};
 
 use super::{
     bit_reader::{
@@ -45,6 +48,8 @@ pub trait ITransactionParser {
         cells: &mut [CellData],
         out_messages: &mut [Message; 5],
     ) -> StdResult<PacketData>;
+
+    fn parse_packet_data(&self, cell: &Cell) -> StdResult<BridgePacketData>;
 }
 
 #[cw_serde]
@@ -153,6 +158,40 @@ impl ITransactionParser for TransactionParser {
         }
 
         Ok(data)
+    }
+
+    fn parse_packet_data(&self, cell: &Cell) -> StdResult<BridgePacketData> {
+        let mut parser = cell.parser();
+
+        let source_denom = parser.load_address().unwrap();
+        let amount = parser.load_coins().unwrap();
+
+        let mut des_denom: Vec<u8> = vec![];
+
+        cell.references[0].references[0]
+            .load_buffer(&mut des_denom)
+            .unwrap();
+        let mut des_channel: Vec<u8> = vec![];
+        cell.references[0].references[1]
+            .load_buffer(&mut des_channel)
+            .unwrap();
+        let mut des_receiver: Vec<u8> = vec![];
+        cell.references[0].references[2]
+            .load_buffer(&mut des_receiver)
+            .unwrap();
+        let mut orai_address: Vec<u8> = vec![];
+        cell.references[0].references[3]
+            .load_buffer(&mut orai_address)
+            .unwrap();
+
+        Ok(BridgePacketData {
+            denom: source_denom.to_string(),
+            amount: Uint128::from_str(&amount.to_str_radix(10))?,
+            dest_denom: String::from_utf8(des_denom)?,
+            dest_channel: String::from_utf8(des_channel)?,
+            dest_receiver: String::from_utf8(des_receiver)?,
+            orai_address: String::from_utf8(orai_address)?,
+        })
     }
 }
 
