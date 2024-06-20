@@ -1,4 +1,4 @@
-use cosmwasm_std::{StdResult};
+use cosmwasm_std::StdResult;
 
 use crate::msg::Ics20Packet;
 
