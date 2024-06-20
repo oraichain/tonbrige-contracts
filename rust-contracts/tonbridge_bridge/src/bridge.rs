@@ -1,18 +1,12 @@
-use std::str::FromStr;
-
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{
-    Addr, CosmosMsg, Deps, DepsMut, HexBinary, Response, StdError, StdResult, Uint128, Uint256,
-};
+use cosmwasm_std::{Addr, CosmosMsg, DepsMut, HexBinary, StdError, StdResult, Uint128};
 use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
 use tonbridge_bridge::{
     msg::Ics20Packet,
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
 };
 use tonbridge_parser::{
-    bit_reader::to_bytes32,
-    transaction_parser::ITransactionParser,
-    types::{Address, BridgePacketData, Bytes32, PacketData},
+    bit_reader::to_bytes32, transaction_parser::ITransactionParser, types::Bytes32,
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
@@ -118,16 +112,29 @@ impl Bridge {
         let querier = deps.querier;
         for (_, out_msg) in transaction.out_msgs.into_values().enumerate() {
             if out_msg.data.is_none() {
+                deps.api.debug("empty out_msg data");
                 continue;
             }
             let out_msg = out_msg.data.unwrap();
             if out_msg.info.msg_type != MessageType::ExternalOut as u8 {
+                deps.api.debug("msg type is not external out");
                 continue;
             }
 
-            let cell = out_msg.body.cell_ref.unwrap().0.unwrap().cell;
+            if out_msg.body.cell_ref.is_none() {
+                deps.api.debug("cell ref is none when reading transaction");
+                continue;
+            }
+            let cell = out_msg.body.cell_ref.unwrap().0;
+            if cell.is_none() {
+                deps.api.debug("any cell is empty when reading transaction");
+            }
+            let cell = cell.unwrap().cell;
 
-            let packet_data = adapter.transaction_parser.parse_packet_data(&cell)?;
+            let packet_data = adapter
+                .transaction_parser
+                .parse_packet_data(&cell)?
+                .to_pretty()?;
 
             let _mapping = ics20_denoms().load(
                 storage,
@@ -159,21 +166,6 @@ impl Bridge {
             cosmos_msgs.append(&mut msgs);
         }
         Ok(cosmos_msgs)
-    }
-
-    pub fn swap_eth(to: Uint256, amount: Uint256, adapter: &Adapter) -> Response {
-        adapter.swap_eth(to, amount)
-    }
-
-    pub fn swap_token(
-        &self,
-        deps: Deps,
-        from: Address,
-        amount: Uint256,
-        to: Uint256,
-        adapter: &Adapter,
-    ) -> StdResult<Response> {
-        adapter.swap_token(deps, from, amount, to)
     }
 
     pub fn validate_basic_ics20_packet(

@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{HexBinary, Uint128, Uint256};
+use cosmwasm_std::{HexBinary, StdResult, Uint128, Uint256};
+use tonlib::address::TonAddress as TonlibTonAddress;
 
 use crate::block_parser::ValidatorSet;
 
@@ -174,6 +177,29 @@ pub struct KeyBlockValidators {
     pub previous: ValidatorSet,
     pub current: ValidatorSet,
     pub next: ValidatorSet,
+}
+
+#[derive(Default, Clone)]
+pub struct BridgePacketDataRaw {
+    pub denom: TonlibTonAddress,
+    pub amount: String,
+    pub dest_denom: Vec<u8>,
+    pub dest_channel: Vec<u8>,
+    pub dest_receiver: Vec<u8>,
+    pub orai_address: Vec<u8>, // use as recovery address
+}
+
+impl BridgePacketDataRaw {
+    pub fn to_pretty(self) -> StdResult<BridgePacketData> {
+        Ok(BridgePacketData {
+            denom: self.denom.to_string(),
+            amount: Uint128::from_str(&self.amount)?,
+            dest_denom: String::from_utf8(self.dest_denom)?,
+            dest_channel: String::from_utf8(self.dest_channel)?,
+            dest_receiver: String::from_utf8(self.dest_receiver)?,
+            orai_address: String::from_utf8(self.orai_address)?,
+        })
+    }
 }
 
 #[cw_serde]
