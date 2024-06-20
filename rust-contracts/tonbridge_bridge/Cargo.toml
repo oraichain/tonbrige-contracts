@@ -32,3 +32,9 @@ thiserror = { workspace = true }
 tonbridge-bridge = { workspace = true }
 cw20-ics20-msg = { workspace = true }
 tonlib = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = { workspace = true }
+cw-tonbridge-validator = { workspace = true }
+cw20-base = { workspace = true }
+oraiswap = { workspace = true }

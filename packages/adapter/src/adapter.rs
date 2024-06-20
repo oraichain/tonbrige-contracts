@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    CosmosMsg, Deps, DepsMut, Event, Response, StdError, StdResult, Uint128, Uint256,
+    Api, CosmosMsg, Deps, Event, QuerierWrapper, Response, StdError, StdResult, Uint128, Uint256,
 };
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
 use cw20_ics20_msg::amount::convert_remote_to_local;
@@ -22,7 +22,8 @@ pub trait IBaseAdapter {
     ) -> StdResult<PacketData>;
     fn execute(
         &self,
-        deps: DepsMut,
+        api: &dyn Api,
+        querier: &QuerierWrapper,
         data: PacketData,
         opcode: Bytes32,
         bridge_token_mapping: MappingMetadata,
@@ -75,13 +76,14 @@ impl IBaseAdapter for Adapter {
 
     fn execute(
         &self,
-        deps: DepsMut,
+        api: &dyn Api,
+        querier: &QuerierWrapper,
         data: PacketData,
         opcode: Bytes32,
         mapping: MappingMetadata,
     ) -> StdResult<Vec<CosmosMsg>> {
         let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-        let recipient = deps.api.addr_humanize(&data.receiving_address.into())?;
+        let recipient = api.addr_validate(&data.receiving_address)?;
 
         let remote_amount: Uint128 = data.amount.try_into()?;
         let local_amount = convert_remote_to_local(
@@ -107,7 +109,7 @@ impl IBaseAdapter for Adapter {
             }?;
             cosmos_msgs.push(msg);
         } else if opcode == OPCODE_2 {
-            cosmos_msgs.push(msg.into_msg(None, &deps.querier, recipient)?);
+            cosmos_msgs.push(msg.into_msg(None, querier, recipient)?);
         }
 
         Ok(cosmos_msgs)

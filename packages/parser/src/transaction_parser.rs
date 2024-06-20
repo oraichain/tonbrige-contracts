@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{StdError, StdResult, Uint256};
 
-use crate::{bit_reader::address, types::Bytes32};
+use crate::types::Bytes32;
 
 use super::{
     bit_reader::{
@@ -142,7 +142,7 @@ impl ITransactionParser for TransactionParser {
             if out_message.info.dest.hash == opcode {
                 let idx = out_message.body_idx;
                 let hash = read_bytes32_bit_size(boc_data, cells, idx, 256);
-                data.receiving_address = address(hash)?;
+                // data.receiving_address = address(hash)?;
                 // data.amount = 0;
                 // console.log("amount");
                 // console.log(uint(read_coins(boc_data, cells, idx)));

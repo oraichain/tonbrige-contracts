@@ -271,11 +271,12 @@ describe("Real Ton data tests", () => {
     const shardInfo = await liteClient.lookupBlockByID(block_ref);
     // PROVE TX MATCHES THE TX WE EXPECT AND IT IS IN OUR VALIDATED SHARD BLOCK
     const transaction = await liteClient.getAccountTransaction(Address.parse(addressRaw), lt, shardInfo.id);
-    await bridge.readTransaction({
+    const response = await bridge.readTransaction({
       txBoc: transaction.transaction.toString("hex"),
       txProof: transaction.proof.toString("hex"),
       validatorContractAddr: validator.contractAddress,
       opcode: "0000000000000000000000000000000000000000000000000000000000000001"
     });
+    console.dir(response, { depth: null });
   }, 100000);
 });

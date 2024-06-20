@@ -163,7 +163,7 @@ pub struct TransactionHeader {
 #[derive(Default)]
 pub struct PacketData {
     // should change to cannonical addr, same as Address with 20 bytes
-    pub receiving_address: Address,
+    pub receiving_address: String,
     // pub receiving_token: AssetInfo,
     pub amount: Uint256,
 }

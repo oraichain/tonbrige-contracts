@@ -117,14 +117,14 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
 name = "cosmwasm-crypto"
-version = "1.5.5"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd50718a2b6830ce9eb5d465de5a018a12e71729d66b70807ce97e6dd14f931d"
+checksum = "8ed6aa9f904de106fa16443ad14ec2abe75e94ba003bb61c681c0e43d4c58d2a"
 dependencies = [
  "digest 0.10.7",
  "ecdsa 0.16.9",
  "ed25519-zebra",
- "k256 0.13.1",
+ "k256 0.13.3",
  "rand_core 0.6.4",
  "thiserror",
 ]
@@ -332,10 +332,14 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-controllers",
+ "cw-multi-test",
  "cw-storage-plus 1.1.0",
+ "cw-tonbridge-validator",
  "cw-utils 1.0.1",
  "cw20",
+ "cw20-base",
  "cw20-ics20-msg",
+ "oraiswap 0.2.0 (git+https://github.com/oraichain/oraiswap.git?rev=daef7e664000a36214cc451a3965c398595be5e0)",
  "thiserror",
  "tonbridge-adapter",
  "tonbridge-bridge",
@@ -729,9 +733,9 @@ dependencies = [
 
 [[package]]
 name = "k256"
-version = "0.13.1"
+version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cadb76004ed8e97623117f3df85b17aaa6626ab0b0831e6573f104df16cd1bcc"
+checksum = "956ff9b67e26e1a6a866cb758f12c6f8746208489e3e4a4b5580802f2f0a587b"
 dependencies = [
  "cfg-if",
  "ecdsa 0.16.9",
@@ -1233,7 +1237,7 @@ dependencies = [
 [[package]]
 name = "tonlib"
 version = "0.15.0"
-source = "git+https://github.com/oraichain/tonlib-rs.git?rev=a6c72d8b0fa7f42fd2e87e54d8ce96fa8fbe9552#a6c72d8b0fa7f42fd2e87e54d8ce96fa8fbe9552"
+source = "git+https://github.com/oraichain/tonlib-rs.git?rev=04bbfdc8752a2ca12d203696d41d74a7f95915b0#04bbfdc8752a2ca12d203696d41d74a7f95915b0"
 dependencies = [
  "base64 0.22.1",
  "bitstream-io",

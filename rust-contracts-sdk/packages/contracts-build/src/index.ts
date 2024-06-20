@@ -7,7 +7,7 @@ export type ContractName =
   | "cw-tonbridge-bridge"
   | "oraiswap-token"
 
-const contractDir = path.join(path.dirname(module.filename), "..", "data");
+const contractDir = path.join(__dirname, "..", "data");
 
 export const getContractDir = (name: ContractName = "cw-tonbridge-validator") => {
   return path.join(contractDir, name + ".wasm");
