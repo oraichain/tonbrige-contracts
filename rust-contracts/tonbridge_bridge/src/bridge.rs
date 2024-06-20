@@ -119,7 +119,7 @@ impl Bridge {
                 continue;
             }
             let out_msg = out_msg.data.unwrap();
-            if out_msg.info.msg_type != MessageType::Internal as u8 {
+            if out_msg.info.msg_type != MessageType::ExternalOut as u8 {
                 continue;
             }
 
