@@ -1237,7 +1237,7 @@ dependencies = [
 [[package]]
 name = "tonlib"
 version = "0.15.0"
-source = "git+https://github.com/oraichain/tonlib-rs.git?rev=04bbfdc8752a2ca12d203696d41d74a7f95915b0#04bbfdc8752a2ca12d203696d41d74a7f95915b0"
+source = "git+https://github.com/oraichain/tonlib-rs.git?rev=bb0d139a6f8a3f73d53a33c9b9331e69e7f4528c#bb0d139a6f8a3f73d53a33c9b9331e69e7f4528c"
 dependencies = [
  "base64 0.22.1",
  "bitstream-io",
