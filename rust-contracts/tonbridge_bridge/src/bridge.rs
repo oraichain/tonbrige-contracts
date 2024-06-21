@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, Api, CosmosMsg, Deps, DepsMut, Env, HexBinary, QuerierWrapper, Response, StdError,
-    StdResult, Uint128,
+    Addr, Api, CosmosMsg, DepsMut, Env, HexBinary, QuerierWrapper, Response, StdError, StdResult,
+    Uint128,
 };
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
 use cw20_ics20_msg::amount::{convert_local_to_remote, convert_remote_to_local, Amount};
@@ -296,7 +296,7 @@ impl Bridge {
                 to: msg.to.clone(),
                 denom: msg.denom.clone(),
                 amount: remote_amount,
-                crc_src: msg.crc_src.clone(),
+                crc_src: msg.crc_src,
             },
         )?;
         LAST_PACKET_SEQ.save(deps.storage, &(last_packet_seq + 1))?;
@@ -307,7 +307,7 @@ impl Bridge {
             ("dest_denom", &msg.denom),
             ("local_amount", &local_amount.to_string()),
             ("remote_amount", &remote_amount.to_string()),
-            ("crc_src", &msg.crc_src),
+            ("crc_src", &msg.crc_src.to_string()),
         ]))
     }
 }

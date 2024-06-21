@@ -86,5 +86,5 @@ pub struct SendPacket {
     pub to: String,
     pub denom: String,
     pub amount: Uint128,
-    pub crc_src: String,
+    pub crc_src: u32,
 }

@@ -1,22 +1,22 @@
-use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Order, Uint128};
+use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Order, StdError, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
-use cw20_ics20_msg::amount::{self, Amount};
+use cw20_ics20_msg::amount::Amount;
 use cw_utils::{nonpayable, one_coin};
-use oraiswap::asset::{Asset, AssetInfo};
 use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
     QueryMsg, UpdatePairMsg,
 };
-use tonbridge_bridge::parser::{
-    get_key_ics20_ibc_denom, parse_ibc_wasm_port_id, parse_packet_boc_to_ics_20,
-};
+use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
 use tonbridge_bridge::state::MappingMetadata;
 use tonbridge_parser::bit_reader::to_bytes32;
+use tonlib::cell::Cell;
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
-use crate::state::{ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE};
+use crate::state::{
+    ics20_denoms, SendPacket, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
+};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -50,6 +50,7 @@ pub fn execute(
             Bridge::handle_bridge_to_ton(deps, env, msg, amount, info.sender)
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
+        ExecuteMsg::SubmitBridgeToTonInfo { data } => execute_submit_bridge_to_ton_info(deps, data),
     }
 }
 
@@ -116,6 +117,43 @@ pub fn execute_receive(
     let msg: BridgeToTonMsg = from_binary(&wrapper.msg)?;
     let sender = deps.api.addr_validate(&wrapper.sender)?;
     Bridge::handle_bridge_to_ton(deps, env, msg, amount, sender)
+}
+
+fn execute_submit_bridge_to_ton_info(
+    deps: DepsMut,
+    boc: HexBinary,
+) -> Result<Response, ContractError> {
+    // seq: 64 bit
+    // address:
+
+    let mut cell = Cell::default();
+    cell.data = boc.as_slice().to_vec();
+    cell.bit_len = cell.data.len() * 8;
+
+    let mut parsers = cell.parser();
+
+    let seq = parsers.load_u64(64)?;
+    let to = parsers.load_address()?;
+    let denom = parsers.load_address()?;
+    let amount = u128::from_be_bytes(parsers.load_bits(128)?.as_slice().try_into().unwrap());
+    let crc_src = parsers.load_u32(32)?;
+
+    let send_packet = SEND_PACKET.load(deps.storage, seq)?;
+    if send_packet.ne(&SendPacket {
+        sequence: seq,
+        to: to.to_string(),
+        denom: denom.to_string(),
+        amount: Uint128::from(amount),
+        crc_src,
+    }) {
+        return Err(ContractError::Std(StdError::generic_err(
+            "Invalid send_packet",
+        )));
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "submit_bridge_to_ton_info")
+        .add_attribute("data", boc.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

@@ -18,6 +18,9 @@ pub enum ExecuteMsg {
     UpdateMappingPair(UpdatePairMsg),
     BridgeToTon(BridgeToTonMsg),
     Receive(Cw20ReceiveMsg),
+    SubmitBridgeToTonInfo {
+        data: HexBinary,
+    },
 }
 
 #[cw_serde]
@@ -36,7 +39,7 @@ pub struct BridgeToTonMsg {
     pub local_channel_id: String, // default channel-0
     pub to: String,
     pub denom: String,
-    pub crc_src: String,
+    pub crc_src: u32,
 }
 
 /// We currently take no arguments for migrations
