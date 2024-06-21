@@ -1,12 +1,21 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, CosmosMsg, DepsMut, HexBinary, StdError, StdResult, Uint128};
-use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
+use cosmwasm_std::{
+    Addr, Api, CosmosMsg, Deps, DepsMut, Env, HexBinary, QuerierWrapper, Response, StdError,
+    StdResult, Uint128,
+};
+use cw20::{Cw20Contract, Cw20ExecuteMsg};
+use cw20_ics20_msg::amount::{convert_local_to_remote, convert_remote_to_local, Amount};
+use oraiswap::asset::{Asset, AssetInfo};
 use tonbridge_bridge::{
-    msg::Ics20Packet,
+    msg::{BridgeToTonMsg, Ics20Packet},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
+    state::MappingMetadata,
 };
 use tonbridge_parser::{
-    bit_reader::to_bytes32, transaction_parser::ITransactionParser, types::Bytes32,
+    bit_reader::to_bytes32,
+    transaction_parser::{ITransactionParser, TransactionParser},
+    tree_of_cells_parser::{OPCODE_1, OPCODE_2},
+    types::{BridgePacketData, Bytes32},
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
@@ -15,9 +24,9 @@ use tonlib::{
 };
 
 use crate::{
-    channel::increase_channel_balance,
+    channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
-    state::{ics20_denoms, PROCESSED_TXS},
+    state::{ics20_denoms, SendPacket, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET},
 };
 
 #[cw_serde]
@@ -105,7 +114,7 @@ impl Bridge {
         }
 
         PROCESSED_TXS.save(deps.storage, &transaction_hash, &true)?;
-        let adapter = Adapter::new();
+        let tx_parser = TransactionParser::default();
 
         let storage = deps.storage;
         let api = deps.api;
@@ -131,12 +140,9 @@ impl Bridge {
             }
             let cell = cell.unwrap().cell;
 
-            let packet_data = adapter
-                .transaction_parser
-                .parse_packet_data(&cell)?
-                .to_pretty()?;
+            let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
 
-            let _mapping = ics20_denoms().load(
+            let mapping = ics20_denoms().load(
                 storage,
                 &get_key_ics20_ibc_denom(
                     &parse_ibc_wasm_port_id(contract_address),
@@ -150,21 +156,62 @@ impl Bridge {
                 &packet_data.denom,
                 packet_data.amount,
             )?;
-            let channel_id = "";
-            let denom = "";
+            // let channel_id = "";
+            // let denom = "";
 
-            let mapping = ics20_denoms().load(
-                storage,
-                &get_key_ics20_ibc_denom(
-                    &parse_ibc_wasm_port_id(contract_address),
-                    channel_id,
-                    denom,
-                ),
-            )?;
-            increase_channel_balance(storage, channel_id, denom, packet_data.amount)?;
-            let mut msgs = adapter.execute(api, &querier, packet_data, opcode, mapping)?;
+            // let mapping = ics20_denoms().load(
+            //     storage,
+            //     &get_key_ics20_ibc_denom(
+            //         &parse_ibc_wasm_port_id(contract_address),
+            //         channel_id,
+            //         denom,
+            //     ),
+            // )?;
+            // increase_channel_balance(storage, channel_id, denom, packet_data.amount)?;
+            let mut msgs =
+                Bridge::handle_packet_receive(api, &querier, packet_data, opcode, mapping)?;
             cosmos_msgs.append(&mut msgs);
         }
+        Ok(cosmos_msgs)
+    }
+
+    pub fn handle_packet_receive(
+        api: &dyn Api,
+        querier: &QuerierWrapper,
+        data: BridgePacketData,
+        opcode: Bytes32,
+        mapping: MappingMetadata,
+    ) -> StdResult<Vec<CosmosMsg>> {
+        let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+        let recipient = api.addr_validate(&data.orai_address)?;
+
+        let remote_amount: Uint128 = data.amount;
+        let local_amount = convert_remote_to_local(
+            remote_amount,
+            mapping.remote_decimals,
+            mapping.asset_info_decimals,
+        )?;
+        let msg = Asset {
+            info: mapping.asset_info.clone(),
+            amount: local_amount,
+        };
+        if opcode == OPCODE_1 {
+            let msg = match msg.info {
+                AssetInfo::NativeToken { denom: _ } => {
+                    return Err(StdError::generic_err("Cannot mint a native token"))
+                }
+                AssetInfo::Token { contract_addr } => {
+                    Cw20Contract(contract_addr).call(Cw20ExecuteMsg::Mint {
+                        recipient: recipient.to_string(),
+                        amount: local_amount,
+                    })
+                }
+            }?;
+            cosmos_msgs.push(msg);
+        } else if opcode == OPCODE_2 {
+            cosmos_msgs.push(msg.into_msg(None, querier, recipient)?);
+        }
+
         Ok(cosmos_msgs)
     }
 
@@ -193,6 +240,75 @@ impl Bridge {
             )));
         }
         Ok(())
+    }
+
+    pub fn handle_bridge_to_ton(
+        deps: DepsMut,
+        env: Env,
+        msg: BridgeToTonMsg,
+        amount: Amount,
+        _sender: Addr,
+    ) -> Result<Response, ContractError> {
+        if amount.is_empty() {
+            return Err(ContractError::NoFunds {});
+        }
+
+        let denom_key = get_key_ics20_ibc_denom(
+            &parse_ibc_wasm_port_id(env.contract.address.as_str()),
+            &msg.local_channel_id,
+            &msg.denom,
+        );
+
+        let mapping = ics20_denoms().load(deps.storage, &denom_key)?;
+        // ensure amount is correct
+        if mapping
+            .asset_info
+            .ne(&amount.into_asset_info(deps.api).unwrap())
+        {
+            return Err(ContractError::InvalidFund {});
+        }
+
+        //TODO: Process deduct fee
+
+        let local_amount: Uint128 = amount.amount();
+        let remote_amount = convert_local_to_remote(
+            local_amount,
+            mapping.remote_decimals,
+            mapping.asset_info_decimals,
+        )?;
+        // try decrease channel balance
+        decrease_channel_balance(
+            deps.storage,
+            &msg.local_channel_id,
+            &msg.denom,
+            remote_amount,
+        )?;
+
+        // store to pending packet transfer
+
+        let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default();
+
+        SEND_PACKET.save(
+            deps.storage,
+            last_packet_seq + 1,
+            &SendPacket {
+                sequence: last_packet_seq,
+                to: msg.to.clone(),
+                denom: msg.denom.clone(),
+                amount: remote_amount,
+                crc_src: msg.crc_src.clone(),
+            },
+        )?;
+        LAST_PACKET_SEQ.save(deps.storage, &(last_packet_seq + 1))?;
+
+        Ok(Response::new().add_attributes(vec![
+            ("action", "bridge_to_ton"),
+            ("dest_receiver", &msg.to),
+            ("dest_denom", &msg.denom),
+            ("local_amount", &local_amount.to_string()),
+            ("remote_amount", &remote_amount.to_string()),
+            ("crc_src", &msg.crc_src),
+        ]))
     }
 }
 

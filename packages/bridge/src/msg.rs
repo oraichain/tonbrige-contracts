@@ -33,7 +33,10 @@ pub struct UpdatePairMsg {
 
 #[cw_serde]
 pub struct BridgeToTonMsg {
-    pub boc: HexBinary,
+    pub local_channel_id: String, // default channel-0
+    pub to: String,
+    pub denom: String,
+    pub crc_src: String,
 }
 
 /// We currently take no arguments for migrations

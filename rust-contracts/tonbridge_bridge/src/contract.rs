@@ -1,8 +1,9 @@
-use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Order};
+use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Order, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
-use cw20_ics20_msg::amount::Amount;
+use cw20_ics20_msg::amount::{self, Amount};
 use cw_utils::{nonpayable, one_coin};
+use oraiswap::asset::{Asset, AssetInfo};
 use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
     QueryMsg, UpdatePairMsg,
@@ -15,7 +16,7 @@ use tonbridge_parser::bit_reader::to_bytes32;
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
-use crate::state::{ics20_denoms, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE};
+use crate::state::{ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -43,7 +44,11 @@ pub fn execute(
             validator_contract_addr,
         } => read_transaction(deps, env, tx_proof, tx_boc, opcode, validator_contract_addr),
         ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, env, &info.sender, msg),
-        ExecuteMsg::BridgeToTon(msg) => handle_bridge_to_ton_native(deps, info, msg.boc),
+        ExecuteMsg::BridgeToTon(msg) => {
+            let coin = one_coin(&info)?;
+            let amount = Amount::from_parts(coin.denom, coin.amount);
+            Bridge::handle_bridge_to_ton(deps, env, msg, amount, info.sender)
+        }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
     }
 }
@@ -99,19 +104,9 @@ pub fn update_mapping_pair(
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
 }
 
-pub fn handle_bridge_to_ton_native(
-    deps: DepsMut,
-    info: MessageInfo,
-    packet_boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let coin = one_coin(&info)?;
-    let sent_amount = Amount::native(coin.amount, coin.denom);
-    bridge_to_ton(deps, info.sender.into_string(), sent_amount, packet_boc)
-}
-
 pub fn execute_receive(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     wrapper: Cw20ReceiveMsg,
 ) -> Result<Response, ContractError> {
@@ -119,24 +114,8 @@ pub fn execute_receive(
 
     let amount = Amount::cw20(wrapper.amount, info.sender);
     let msg: BridgeToTonMsg = from_binary(&wrapper.msg)?;
-    bridge_to_ton(deps, wrapper.sender, amount, msg.boc)
-}
-
-pub fn bridge_to_ton(
-    _deps: DepsMut,
-    sender: String,
-    sent_amount: Amount,
-    packet_boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let ics20_packet = parse_packet_boc_to_ics_20(&packet_boc)?;
-    Bridge::validate_basic_ics20_packet(
-        &ics20_packet,
-        &sent_amount.amount(),
-        &sent_amount.denom(),
-        sender.as_str(),
-    )?;
-    // TODO: do something here to bridge to ton
-    Ok(Response::new().add_attributes(vec![("action", "bridge_to_ton")]))
+    let sender = deps.api.addr_validate(&wrapper.sender)?;
+    Bridge::handle_bridge_to_ton(deps, env, msg, amount, sender)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
