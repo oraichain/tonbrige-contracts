@@ -119,7 +119,7 @@ pub fn execute_receive(
     Bridge::handle_bridge_to_ton(deps, env, msg, amount, sender)
 }
 
-fn execute_submit_bridge_to_ton_info(
+pub fn execute_submit_bridge_to_ton_info(
     deps: DepsMut,
     boc: HexBinary,
 ) -> Result<Response, ContractError> {
@@ -137,6 +137,17 @@ fn execute_submit_bridge_to_ton_info(
     let denom = parsers.load_address()?;
     let amount = u128::from_be_bytes(parsers.load_bits(128)?.as_slice().try_into().unwrap());
     let crc_src = parsers.load_u32(32)?;
+
+    println!(
+        "{:?}",
+        (&SendPacket {
+            sequence: seq,
+            to: to.to_string(),
+            denom: denom.to_string(),
+            amount: Uint128::from(amount),
+            crc_src,
+        })
+    );
 
     let send_packet = SEND_PACKET.load(deps.storage, seq)?;
     if send_packet.ne(&SendPacket {

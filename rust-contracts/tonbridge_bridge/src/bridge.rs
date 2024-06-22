@@ -314,12 +314,17 @@ impl Bridge {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::{to_binary, Addr, Empty, HexBinary, Uint128};
+    use cosmwasm_std::{testing::mock_dependencies, to_binary, Addr, Empty, HexBinary, Uint128};
     use cw20::{BalanceResponse, Cw20Coin};
     use oraiswap::asset::AssetInfo;
     use tonbridge_bridge::msg::UpdatePairMsg;
 
     use cw_multi_test::{App, Contract, ContractWrapper, Executor};
+
+    use crate::{
+        contract::execute_submit_bridge_to_ton_info,
+        state::{SendPacket, SEND_PACKET},
+    };
 
     fn validator_contract() -> Box<dyn Contract<Empty>> {
         let contract = ContractWrapper::new(
@@ -481,5 +486,27 @@ mod tests {
             .unwrap();
 
         println!("bridge balance: {:?}", bridge_balance);
+    }
+
+    #[test]
+    fn test_submit_bridge_to_ton_info() {
+        let mut deps = mock_dependencies();
+        SEND_PACKET
+            .save(
+                deps.as_mut().storage,
+                1,
+                &SendPacket {
+                    sequence: 1,
+                    to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
+                    denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
+                    amount: Uint128::from(10000000000u128),
+                    crc_src: 82134516,
+                },
+            )
+            .unwrap();
+
+        let data = "000000000000000180002255D73E3A5C1A9589F0AECE31E97B54B261AC3D7D16D4F1068FDF9D4B4E18300071737B65193DDBB57097037AE801EE6DC77EE97DD5862112116B04DA4EB70080000000000000000000000009502F9000139517D2";
+        execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data).unwrap())
+            .unwrap();
     }
 }
