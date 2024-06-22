@@ -1,8 +1,10 @@
-use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Order, StdError, Uint128};
+use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use cw_utils::{nonpayable, one_coin};
+use oraiswap::asset::AssetInfo;
+use oraiswap::router::RouterController;
 use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
     QueryMsg, UpdatePairMsg,
@@ -29,10 +31,11 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
-            fee_denom: msg.fee_denom,
+            relayer_fee_token: msg.relayer_fee_token,
             token_fee_receiver: msg.token_fee_receiver,
             relayer_fee_receiver: msg.relayer_fee_receiver,
             relayer_fee: msg.relayer_fee.unwrap_or_default(),
+            swap_router_contract: RouterController(msg.swap_router_contract),
         },
     )?;
     OWNER.set(deps, Some(info.sender))?;
@@ -48,6 +51,22 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        ExecuteMsg::UpdateOwner { new_owner } => execute_update_owner(deps, info, new_owner),
+        ExecuteMsg::UpdateConfig {
+            relayer_fee_token,
+            token_fee_receiver,
+            relayer_fee_receiver,
+            relayer_fee,
+            swap_router_contract,
+        } => execute_update_config(
+            deps,
+            info,
+            relayer_fee_token,
+            token_fee_receiver,
+            relayer_fee_receiver,
+            relayer_fee,
+            swap_router_contract,
+        ),
         ExecuteMsg::ReadTransaction {
             tx_proof,
             tx_boc,
@@ -65,6 +84,55 @@ pub fn execute(
     }
 }
 
+pub fn execute_update_owner(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_owner: Addr,
+) -> Result<Response, ContractError> {
+    OWNER
+        .execute_update_admin::<Empty, Empty>(deps, info, Some(new_owner.clone()))
+        .map_err(|error| StdError::generic_err(error.to_string()))?;
+
+    Ok(Response::new().add_attributes(vec![
+        ("action", "update_owner"),
+        ("new_owner", new_owner.as_str()),
+    ]))
+}
+
+pub fn execute_update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    relayer_fee_token: Option<AssetInfo>,
+    token_fee_receiver: Option<Addr>,
+    relayer_fee_receiver: Option<Addr>,
+    relayer_fee: Option<Uint128>,
+    swap_router_contract: Option<String>,
+) -> Result<Response, ContractError> {
+    OWNER.assert_admin(deps.as_ref(), &info.sender)?;
+
+    let mut config = CONFIG.load(deps.storage)?;
+
+    if let Some(relayer_fee_token) = relayer_fee_token {
+        config.relayer_fee_token = relayer_fee_token;
+    }
+    if let Some(token_fee_receiver) = token_fee_receiver {
+        config.token_fee_receiver = token_fee_receiver;
+    }
+    if let Some(relayer_fee_receiver) = relayer_fee_receiver {
+        config.relayer_fee_receiver = relayer_fee_receiver;
+    }
+    if let Some(relayer_fee) = relayer_fee {
+        config.relayer_fee = relayer_fee;
+    }
+    if let Some(swap_router_contract) = swap_router_contract {
+        config.swap_router_contract = RouterController(swap_router_contract);
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    Ok(Response::default().add_attribute("action", "update_config"))
+}
+
 pub fn read_transaction(
     deps: DepsMut,
     env: Env,
@@ -74,7 +142,7 @@ pub fn read_transaction(
     validator_contract_addr: String,
 ) -> Result<Response, ContractError> {
     let bridge = Bridge::new(deps.api.addr_validate(&validator_contract_addr)?);
-    let cosmos_msgs = bridge.read_transaction(
+    let res = bridge.read_transaction(
         deps,
         env.contract.address.as_str(),
         tx_proof.as_slice(),
@@ -82,8 +150,9 @@ pub fn read_transaction(
         to_bytes32(&opcode)?,
     )?;
     Ok(Response::new()
-        .add_messages(cosmos_msgs)
-        .add_attributes(vec![("action", "read_transaction")]))
+        .add_messages(res.0)
+        .add_attributes(vec![("action", "read_transaction")])
+        .add_attributes(res.1))
 }
 
 pub fn update_mapping_pair(

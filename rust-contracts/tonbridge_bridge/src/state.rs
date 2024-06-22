@@ -3,6 +3,7 @@ use cosmwasm_std::{Addr, Uint128};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 
 use cw_controllers::Admin;
+use oraiswap::{asset::AssetInfo, router::RouterController};
 use tonbridge_bridge::state::{ChannelState, MappingMetadata};
 use tonbridge_parser::types::Bytes32;
 
@@ -71,10 +72,11 @@ pub struct Ratio {
 
 #[cw_serde]
 pub struct Config {
-    pub fee_denom: String,
+    pub relayer_fee_token: AssetInfo,
+    pub relayer_fee: Uint128, // This fee depends on the network type, not token type decimals of relayer fee should always be 10^6
     pub token_fee_receiver: Addr,
     pub relayer_fee_receiver: Addr,
-    pub relayer_fee: Uint128, // This fee depends on the network type, not token type decimals of relayer fee should always be 10^6 because we use ORAI as relayer fee
+    pub swap_router_contract: RouterController,
 }
 
 #[cw_serde]

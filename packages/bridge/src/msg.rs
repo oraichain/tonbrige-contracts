@@ -6,10 +6,11 @@ use oraiswap::asset::AssetInfo;
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    pub fee_denom: String,
+    pub relayer_fee_token: AssetInfo,
     pub token_fee_receiver: Addr,
     pub relayer_fee_receiver: Addr,
     pub relayer_fee: Option<Uint128>,
+    pub swap_router_contract: String,
 }
 
 #[cw_serde]
@@ -25,6 +26,16 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
     SubmitBridgeToTonInfo {
         data: HexBinary,
+    },
+    UpdateOwner {
+        new_owner: Addr,
+    },
+    UpdateConfig {
+        relayer_fee_token: Option<AssetInfo>,
+        token_fee_receiver: Option<Addr>,
+        relayer_fee_receiver: Option<Addr>,
+        relayer_fee: Option<Uint128>,
+        swap_router_contract: Option<String>,
     },
 }
 
@@ -112,4 +123,11 @@ pub struct ChannelResponse {
     /// The total number of tokens that have been sent over this channel
     /// (even if many have been returned, so balance is low)
     pub total_sent: Vec<Amount>,
+}
+
+#[cw_serde]
+pub struct FeeData {
+    pub deducted_amount: Uint128,
+    pub token_fee: Amount,
+    pub relayer_fee: Amount,
 }

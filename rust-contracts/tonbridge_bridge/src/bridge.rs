@@ -1,13 +1,20 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    Addr, Api, CosmosMsg, DepsMut, Env, HexBinary, QuerierWrapper, Response, StdError, StdResult,
-    Uint128,
+    attr, Addr, Api, Attribute, CosmosMsg, Decimal, DepsMut, Env, HexBinary, QuerierWrapper,
+    Response, StdError, StdResult, Storage, Uint128,
 };
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
-use cw20_ics20_msg::amount::{convert_local_to_remote, convert_remote_to_local, Amount};
-use oraiswap::asset::{Asset, AssetInfo};
+use cw20_ics20_msg::{
+    amount::{convert_local_to_remote, convert_remote_to_local, Amount},
+    helper::{denom_to_asset_info, parse_asset_info_denom},
+};
+use oraiswap::{
+    asset::{Asset, AssetInfo},
+    router::{RouterController, SwapOperation},
+};
+use std::ops::Mul;
 use tonbridge_bridge::{
-    msg::{BridgeToTonMsg, Ics20Packet},
+    msg::{BridgeToTonMsg, FeeData, Ics20Packet},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
     state::MappingMetadata,
 };
@@ -26,7 +33,10 @@ use tonlib::{
 use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
-    state::{ics20_denoms, SendPacket, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET},
+    state::{
+        ics20_denoms, Ratio, SendPacket, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET,
+        TOKEN_FEE,
+    },
 };
 
 #[cw_serde]
@@ -50,8 +60,9 @@ impl Bridge {
         tx_proof: &[u8],
         tx_boc: &[u8],
         opcode: Bytes32,
-    ) -> Result<Vec<CosmosMsg>, ContractError> {
+    ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+        let mut attrs: Vec<Attribute> = vec![];
 
         let tx_cells = BagOfCells::parse(tx_boc)?;
         let tx_root = tx_cells.single_root()?;
@@ -150,50 +161,78 @@ impl Bridge {
                     &packet_data.denom,
                 ),
             )?;
-            increase_channel_balance(
-                storage,
-                &packet_data.dest_channel,
-                &packet_data.denom,
-                packet_data.amount,
-            )?;
-            // let channel_id = "";
-            // let denom = "";
 
-            // let mapping = ics20_denoms().load(
-            //     storage,
-            //     &get_key_ics20_ibc_denom(
-            //         &parse_ibc_wasm_port_id(contract_address),
-            //         channel_id,
-            //         denom,
-            //     ),
-            // )?;
-            // increase_channel_balance(storage, channel_id, denom, packet_data.amount)?;
-            let mut msgs =
-                Bridge::handle_packet_receive(api, &querier, packet_data, opcode, mapping)?;
-            cosmos_msgs.append(&mut msgs);
+            let mut res = Bridge::handle_packet_receive(
+                storage,
+                api,
+                &querier,
+                packet_data,
+                opcode,
+                mapping,
+            )?;
+            cosmos_msgs.append(&mut res.0);
+            attrs.append(&mut res.1);
         }
-        Ok(cosmos_msgs)
+        Ok((cosmos_msgs, attrs))
     }
 
     pub fn handle_packet_receive(
+        storage: &mut dyn Storage,
         api: &dyn Api,
         querier: &QuerierWrapper,
         data: BridgePacketData,
         opcode: Bytes32,
         mapping: MappingMetadata,
-    ) -> StdResult<Vec<CosmosMsg>> {
+    ) -> StdResult<(Vec<CosmosMsg>, Vec<Attribute>)> {
+        let config = CONFIG.load(storage)?;
+        // increase first
+        increase_channel_balance(storage, &data.dest_channel, &data.denom, data.amount)?;
+
         let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
         let recipient = api.addr_validate(&data.orai_address)?;
 
-        let remote_amount: Uint128 = data.amount;
-        let local_amount = convert_remote_to_local(
-            remote_amount,
-            mapping.remote_decimals,
-            mapping.asset_info_decimals,
-        )?;
+        let to_send = Amount::from_parts(
+            parse_asset_info_denom(&mapping.asset_info),
+            convert_remote_to_local(
+                data.amount,
+                mapping.remote_decimals,
+                mapping.asset_info_decimals,
+            )?,
+        );
+
+        let fee_data = Bridge::process_deduct_fee(storage, querier, api, data.denom, to_send)?;
+
+        if !fee_data.token_fee.is_empty() {
+            cosmos_msgs.push(
+                fee_data
+                    .token_fee
+                    .send_amount(config.token_fee_receiver.into_string(), None),
+            )
+        }
+        if !fee_data.relayer_fee.is_empty() {
+            cosmos_msgs.push(
+                fee_data
+                    .relayer_fee
+                    .send_amount(config.relayer_fee_receiver.to_string(), None),
+            )
+        }
+
+        let attributes: Vec<Attribute> = vec![
+            attr("action", "bridge_to_cosmos"),
+            attr("dest_receiver", &recipient.to_string()),
+            attr("local_amount", &fee_data.deducted_amount.to_string()),
+            attr("relayer_fee", &fee_data.relayer_fee.amount().to_string()),
+            attr("token_fee", &fee_data.token_fee.amount().to_string()),
+        ];
+
+        // if the fees have consumed all user funds, we send all the fees to our token fee receiver
+        if fee_data.deducted_amount.is_zero() {
+            return Ok((cosmos_msgs, attributes.into()));
+        }
+
         let msg = Asset {
             info: mapping.asset_info.clone(),
-            amount: local_amount,
+            amount: fee_data.deducted_amount,
         };
         if opcode == OPCODE_1 {
             let msg = match msg.info {
@@ -203,7 +242,7 @@ impl Bridge {
                 AssetInfo::Token { contract_addr } => {
                     Cw20Contract(contract_addr).call(Cw20ExecuteMsg::Mint {
                         recipient: recipient.to_string(),
-                        amount: local_amount,
+                        amount: fee_data.deducted_amount,
                     })
                 }
             }?;
@@ -212,7 +251,7 @@ impl Bridge {
             cosmos_msgs.push(msg.into_msg(None, querier, recipient)?);
         }
 
-        Ok(cosmos_msgs)
+        Ok((cosmos_msgs, attributes))
     }
 
     pub fn validate_basic_ics20_packet(
@@ -253,6 +292,7 @@ impl Bridge {
             return Err(ContractError::NoFunds {});
         }
 
+        let config = CONFIG.load(deps.storage)?;
         let denom_key = get_key_ics20_ibc_denom(
             &parse_ibc_wasm_port_id(env.contract.address.as_str()),
             &msg.local_channel_id,
@@ -268,11 +308,55 @@ impl Bridge {
             return Err(ContractError::InvalidFund {});
         }
 
-        // TODO: Process deduct fee
+        let fee_data = Bridge::process_deduct_fee(
+            deps.storage,
+            &deps.querier,
+            deps.api,
+            msg.denom.clone(),
+            amount.clone(),
+        )?;
 
-        let local_amount: Uint128 = amount.amount();
+        let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+        if !fee_data.token_fee.is_empty() {
+            cosmos_msgs.push(
+                fee_data
+                    .token_fee
+                    .send_amount(config.token_fee_receiver.into_string(), None),
+            )
+        }
+        if !fee_data.relayer_fee.is_empty() {
+            cosmos_msgs.push(
+                fee_data
+                    .relayer_fee
+                    .send_amount(config.relayer_fee_receiver.into_string(), None),
+            )
+        }
+
+        let token_fee_str = &fee_data.token_fee.amount().to_string();
+        let relayer_fee_str = &fee_data.relayer_fee.amount().to_string();
+        let denom_str = &msg.denom;
+        let local_amount_str = &fee_data.deducted_amount.to_string();
+        let crc_str = &msg.crc_src.to_string();
+        let attributes = vec![
+            ("action", "bridge_to_ton"),
+            ("dest_receiver", &msg.to),
+            ("dest_denom", denom_str),
+            ("local_amount", local_amount_str),
+            ("crc_src", crc_str),
+            ("relayer_fee", relayer_fee_str),
+            ("token_fee", token_fee_str),
+        ];
+
+        // if our fees have drained the initial amount entirely, then we just get all the fees and that's it
+        //  // if our fees have drained the initial amount entirely, then we just get all the fees and that's it
+        if fee_data.deducted_amount.is_zero() {
+            return Ok(Response::new()
+                .add_messages(cosmos_msgs)
+                .add_attributes(attributes));
+        }
+
         let remote_amount = convert_local_to_remote(
-            local_amount,
+            fee_data.deducted_amount,
             mapping.remote_decimals,
             mapping.asset_info_decimals,
         )?;
@@ -301,14 +385,133 @@ impl Bridge {
         )?;
         LAST_PACKET_SEQ.save(deps.storage, &(last_packet_seq + 1))?;
 
-        Ok(Response::new().add_attributes(vec![
-            ("action", "bridge_to_ton"),
-            ("dest_receiver", &msg.to),
-            ("dest_denom", &msg.denom),
-            ("local_amount", &local_amount.to_string()),
-            ("remote_amount", &remote_amount.to_string()),
-            ("crc_src", &msg.crc_src.to_string()),
-        ]))
+        Ok(Response::new()
+            .add_messages(cosmos_msgs)
+            .add_attributes(vec![("remote_amount", &remote_amount.to_string())]))
+    }
+
+    pub fn process_deduct_fee(
+        storage: &dyn Storage,
+        querier: &QuerierWrapper,
+        api: &dyn Api,
+        remote_token_denom: String,
+        local_amount: Amount, // local amount
+    ) -> StdResult<FeeData> {
+        let local_denom = local_amount.denom();
+        let (deducted_amount, token_fee) =
+            Bridge::deduct_token_fee(storage, remote_token_denom, local_amount.amount())?;
+
+        let mut fee_data = FeeData {
+            deducted_amount,
+            token_fee: Amount::from_parts(local_denom.clone(), token_fee),
+            relayer_fee: Amount::from_parts(local_denom.clone(), Uint128::zero()),
+        };
+        // if after token fee, the deducted amount is 0 then we deduct all to token fee
+        if deducted_amount.is_zero() {
+            fee_data.token_fee = local_amount;
+            return Ok(fee_data);
+        }
+
+        // simulate for relayer fee
+        let ask_asset_info = denom_to_asset_info(api, &local_amount.raw_denom());
+        let relayer_fee = Bridge::deduct_relayer_fee(storage, api, querier, ask_asset_info)?;
+
+        fee_data.deducted_amount = deducted_amount.checked_sub(relayer_fee).unwrap_or_default();
+        fee_data.relayer_fee = Amount::from_parts(local_denom.clone(), relayer_fee);
+        // if the relayer fee makes the final amount 0, then we charge the remaining deducted amount as relayer fee
+        if fee_data.deducted_amount.is_zero() {
+            fee_data.relayer_fee = Amount::from_parts(local_denom.clone(), deducted_amount);
+            return Ok(fee_data);
+        }
+        Ok(fee_data)
+    }
+
+    pub fn deduct_relayer_fee(
+        storage: &dyn Storage,
+        _api: &dyn Api,
+        querier: &QuerierWrapper,
+        ask_asset_info: AssetInfo,
+    ) -> StdResult<Uint128> {
+        let config = CONFIG.load(storage)?;
+        // no need to deduct fee if no fee is found in the mapping
+        if config.relayer_fee.is_zero() {
+            return Ok(Uint128::from(0u64));
+        }
+
+        let relayer_fee = Bridge::get_swap_token_amount_out(
+            querier,
+            config.relayer_fee,
+            &config.swap_router_contract,
+            ask_asset_info,
+            config.relayer_fee_token,
+        );
+
+        Ok(relayer_fee)
+    }
+
+    pub fn deduct_token_fee(
+        storage: &dyn Storage,
+        remote_token_denom: String,
+        amount: Uint128,
+    ) -> StdResult<(Uint128, Uint128)> {
+        let token_fee = TOKEN_FEE.may_load(storage, &remote_token_denom)?;
+        if let Some(token_fee) = token_fee {
+            let fee = Bridge::deduct_fee(token_fee, amount);
+            let new_deducted_amount = amount.checked_sub(fee)?;
+            return Ok((new_deducted_amount, fee));
+        }
+        Ok((amount, Uint128::from(0u64)))
+    }
+
+    pub fn deduct_fee(token_fee: Ratio, amount: Uint128) -> Uint128 {
+        // ignore case where denominator is zero since we cannot divide with 0
+        if token_fee.denominator == 0 {
+            return Uint128::from(0u64);
+        }
+
+        amount.mul(Decimal::from_ratio(
+            token_fee.nominator,
+            token_fee.denominator,
+        ))
+    }
+
+    pub fn get_swap_token_amount_out(
+        querier: &QuerierWrapper,
+        offer_amount: Uint128,
+        swap_router_contract: &RouterController,
+        ask_asset_info: AssetInfo,
+        relayer_fee_token: AssetInfo,
+    ) -> Uint128 {
+        if ask_asset_info.eq(&relayer_fee_token) {
+            return offer_amount;
+        }
+
+        let orai_asset = AssetInfo::NativeToken {
+            denom: "orai".to_string(),
+        };
+
+        let swap_ops = if ask_asset_info.eq(&orai_asset) || relayer_fee_token.eq(&orai_asset) {
+            vec![SwapOperation::OraiSwap {
+                offer_asset_info: relayer_fee_token,
+                ask_asset_info,
+            }]
+        } else {
+            vec![
+                SwapOperation::OraiSwap {
+                    offer_asset_info: relayer_fee_token,
+                    ask_asset_info: orai_asset.clone(),
+                },
+                SwapOperation::OraiSwap {
+                    offer_asset_info: orai_asset,
+                    ask_asset_info,
+                },
+            ]
+        };
+
+        swap_router_contract
+            .simulate_swap(querier, offer_amount, swap_ops)
+            .map(|data| data.amount)
+            .unwrap_or_default()
     }
 }
 
@@ -382,10 +585,13 @@ mod tests {
                 bridge_id,
                 admin.clone(),
                 &tonbridge_bridge::msg::InstantiateMsg {
-                    fee_denom: "orai".to_string(),
+                    relayer_fee_token: AssetInfo::NativeToken {
+                        denom: "orai".to_string(),
+                    },
                     token_fee_receiver: Addr::unchecked("token_fee"),
                     relayer_fee_receiver: Addr::unchecked("relayer_fee"),
                     relayer_fee: None,
+                    swap_router_contract: "router".to_string(),
                 },
                 &vec![],
                 "bridge".to_string(),
