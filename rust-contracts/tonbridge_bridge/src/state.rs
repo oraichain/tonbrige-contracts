@@ -14,10 +14,6 @@ pub const PROCESSED_TXS: Map<&Bytes32, bool> = Map::new("processed_txs");
 
 pub const TOKEN_FEE: Map<&str, Ratio> = Map::new("token_fee");
 
-// relayer fee. This fee depends on the network type, not token type
-// decimals of relayer fee should always be 10^6 because we use ORAI as relayer fee
-pub const RELAYER_FEE: Map<&str, Uint128> = Map::new("relayer_fee");
-
 pub const CONFIG: Item<Config> = Item::new("config");
 
 pub const SEND_PACKET: Map<u64, SendPacket> = Map::new("send_packet");
@@ -78,6 +74,7 @@ pub struct Config {
     pub fee_denom: String,
     pub token_fee_receiver: Addr,
     pub relayer_fee_receiver: Addr,
+    pub relayer_fee: Uint128, // This fee depends on the network type, not token type decimals of relayer fee should always be 10^6 because we use ORAI as relayer fee
 }
 
 #[cw_serde]

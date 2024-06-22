@@ -15,7 +15,8 @@ use tonlib::cell::Cell;
 use crate::bridge::Bridge;
 use crate::error::ContractError;
 use crate::state::{
-    ics20_denoms, SendPacket, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
+    ics20_denoms, Config, SendPacket, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
+    SEND_PACKET,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -23,9 +24,19 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    _msg: InstantiateMsg,
+    msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    CONFIG.save(
+        deps.storage,
+        &Config {
+            fee_denom: msg.fee_denom,
+            token_fee_receiver: msg.token_fee_receiver,
+            relayer_fee_receiver: msg.relayer_fee_receiver,
+            relayer_fee: msg.relayer_fee.unwrap_or_default(),
+        },
+    )?;
     OWNER.set(deps, Some(info.sender))?;
+
     Ok(Response::new())
 }
 
@@ -137,17 +148,6 @@ pub fn execute_submit_bridge_to_ton_info(
     let denom = parsers.load_address()?;
     let amount = u128::from_be_bytes(parsers.load_bits(128)?.as_slice().try_into().unwrap());
     let crc_src = parsers.load_u32(32)?;
-
-    println!(
-        "{:?}",
-        (&SendPacket {
-            sequence: seq,
-            to: to.to_string(),
-            denom: denom.to_string(),
-            amount: Uint128::from(amount),
-            crc_src,
-        })
-    );
 
     let send_packet = SEND_PACKET.load(deps.storage, seq)?;
     if send_packet.ne(&SendPacket {

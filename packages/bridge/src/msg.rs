@@ -1,11 +1,16 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{HexBinary, Uint128};
+use cosmwasm_std::{Addr, HexBinary, Uint128};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
 #[cw_serde]
-pub struct InstantiateMsg {}
+pub struct InstantiateMsg {
+    pub fee_denom: String,
+    pub token_fee_receiver: Addr,
+    pub relayer_fee_receiver: Addr,
+    pub relayer_fee: Option<Uint128>,
+}
 
 #[cw_serde]
 pub enum ExecuteMsg {

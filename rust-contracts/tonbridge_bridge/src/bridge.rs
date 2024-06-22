@@ -268,7 +268,7 @@ impl Bridge {
             return Err(ContractError::InvalidFund {});
         }
 
-        //TODO: Process deduct fee
+        // TODO: Process deduct fee
 
         let local_amount: Uint128 = amount.amount();
         let remote_amount = convert_local_to_remote(
@@ -314,6 +314,7 @@ impl Bridge {
 
 #[cfg(test)]
 mod tests {
+
     use cosmwasm_std::{testing::mock_dependencies, to_binary, Addr, Empty, HexBinary, Uint128};
     use cw20::{BalanceResponse, Cw20Coin};
     use oraiswap::asset::AssetInfo;
@@ -380,7 +381,12 @@ mod tests {
             .instantiate_contract(
                 bridge_id,
                 admin.clone(),
-                &tonbridge_bridge::msg::InstantiateMsg {},
+                &tonbridge_bridge::msg::InstantiateMsg {
+                    fee_denom: "orai".to_string(),
+                    token_fee_receiver: Addr::unchecked("token_fee"),
+                    relayer_fee_receiver: Addr::unchecked("relayer_fee"),
+                    relayer_fee: None,
+                },
                 &vec![],
                 "bridge".to_string(),
                 None,
