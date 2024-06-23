@@ -157,8 +157,8 @@ impl Bridge {
                 storage,
                 &get_key_ics20_ibc_denom(
                     &parse_ibc_wasm_port_id(contract_address),
-                    &packet_data.dest_channel,
-                    &packet_data.denom,
+                    &packet_data.src_channel,
+                    &packet_data.src_denom,
                 ),
             )?;
 
@@ -186,7 +186,7 @@ impl Bridge {
     ) -> StdResult<(Vec<CosmosMsg>, Vec<Attribute>)> {
         let config = CONFIG.load(storage)?;
         // increase first
-        increase_channel_balance(storage, &data.dest_channel, &data.denom, data.amount)?;
+        increase_channel_balance(storage, &data.src_channel, &data.src_denom, data.amount)?;
 
         let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
         let recipient = api.addr_validate(&data.orai_address)?;
@@ -200,7 +200,7 @@ impl Bridge {
             )?,
         );
 
-        let fee_data = Bridge::process_deduct_fee(storage, querier, api, data.denom, to_send)?;
+        let fee_data = Bridge::process_deduct_fee(storage, querier, api, data.src_denom, to_send)?;
 
         if !fee_data.token_fee.is_empty() {
             cosmos_msgs.push(

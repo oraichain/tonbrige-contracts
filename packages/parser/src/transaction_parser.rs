@@ -34,7 +34,8 @@ impl ITransactionParser for TransactionParser {
         first_ref.references[3].load_buffer(&mut orai_address)?;
 
         Ok(BridgePacketDataRaw {
-            denom: source_denom,
+            src_denom: source_denom,
+            src_channel: "channel-0".as_bytes().to_vec(), // FIXME: get src_channel from body data
             amount: amount.to_str_radix(10),
             dest_denom: des_denom,
             dest_channel: des_channel,
@@ -91,7 +92,8 @@ mod tests {
             assert_eq!(
                 packet_data.to_pretty().unwrap(),
                 BridgePacketData {
-                    denom: "EQB76ac6w5o4fyBzzpGcJeMPOfltDqpBbKWSoXU0w0ygCYVs".to_string(),
+                    src_denom: "EQB76ac6w5o4fyBzzpGcJeMPOfltDqpBbKWSoXU0w0ygCYVs".to_string(),
+                    src_channel: "channel-0".to_string(),
                     amount: Uint128::from_str("333000000000").unwrap(),
                     dest_denom: "".to_string(),
                     dest_channel: "channel-1".to_string(),
