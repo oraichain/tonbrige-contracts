@@ -376,7 +376,7 @@ impl Bridge {
             deps.storage,
             last_packet_seq + 1,
             &SendPacket {
-                sequence: last_packet_seq,
+                sequence: last_packet_seq + 1,
                 to: msg.to.clone(),
                 denom: msg.denom.clone(),
                 amount: remote_amount,
