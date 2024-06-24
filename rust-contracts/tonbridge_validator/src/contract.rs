@@ -219,6 +219,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             validator_node_id,
             root_hash,
         } => to_binary(&is_signed_by_validator(deps, validator_node_id, root_hash)?),
+        QueryMsg::NextValidatorUpdated {} => to_binary(&next_validator_updated(deps)?),
     }
 }
 
@@ -289,6 +290,11 @@ pub fn is_signed_by_validator(
         to_bytes32(&validator_node_id)?,
         to_bytes32(&root_hash)?,
     ))
+}
+
+pub fn next_validator_updated(deps: Deps) -> StdResult<bool> {
+    let validator = VALIDATOR.load(deps.storage)?;
+    Ok(validator.next_validator_updated())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

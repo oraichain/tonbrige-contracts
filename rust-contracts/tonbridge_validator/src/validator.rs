@@ -50,6 +50,10 @@ impl Validator {
         get_signature_candidate_validators(storage)
     }
 
+    pub fn next_validator_updated(&self) -> bool {
+        self.signature_validator.has_next
+    }
+
     pub fn parse_candidates_root_block(
         &mut self,
         storage: &mut dyn Storage,

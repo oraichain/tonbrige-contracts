@@ -1,12 +1,28 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, CosmosMsg, DepsMut, HexBinary, StdError, StdResult, Uint128};
-use tonbridge_adapter::adapter::{Adapter, IBaseAdapter};
+use cosmwasm_std::{
+    attr, Addr, Api, Attribute, CosmosMsg, Decimal, DepsMut, Env, HexBinary, QuerierWrapper,
+    Response, StdError, StdResult, Storage, Uint128,
+};
+use cw20::{Cw20Contract, Cw20ExecuteMsg};
+use cw20_ics20_msg::{
+    amount::{convert_local_to_remote, convert_remote_to_local, Amount},
+    helper::{denom_to_asset_info, parse_asset_info_denom},
+};
+use oraiswap::{
+    asset::{Asset, AssetInfo},
+    router::{RouterController, SwapOperation},
+};
+use std::ops::Mul;
 use tonbridge_bridge::{
-    msg::Ics20Packet,
+    msg::{BridgeToTonMsg, FeeData, Ics20Packet},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
+    state::{MappingMetadata, Ratio, SendPacket},
 };
 use tonbridge_parser::{
-    bit_reader::to_bytes32, transaction_parser::ITransactionParser, types::Bytes32,
+    bit_reader::to_bytes32,
+    transaction_parser::{ITransactionParser, TransactionParser},
+    tree_of_cells_parser::{OPCODE_1, OPCODE_2},
+    types::BridgePacketData,
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
@@ -15,9 +31,9 @@ use tonlib::{
 };
 
 use crate::{
-    channel::increase_channel_balance,
+    channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
-    state::{ics20_denoms, PROCESSED_TXS},
+    state::{ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, TOKEN_FEE},
 };
 
 #[cw_serde]
@@ -40,9 +56,10 @@ impl Bridge {
         contract_address: &str,
         tx_proof: &[u8],
         tx_boc: &[u8],
-        opcode: Bytes32,
-    ) -> Result<Vec<CosmosMsg>, ContractError> {
+    ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+        let mut attrs: Vec<Attribute> = vec![];
+        let config = CONFIG.load(deps.storage)?;
 
         let tx_cells = BagOfCells::parse(tx_boc)?;
         let tx_root = tx_cells.single_root()?;
@@ -52,6 +69,7 @@ impl Bridge {
         let tx_proof_cells = BagOfCells::parse(tx_proof)?;
         let tx_proof_cell_first_ref = tx_proof_cells.single_root()?.reference(0)?;
         let root_hash = tx_proof_cell_first_ref.get_hash(0);
+
         let is_root_hash_verified = self
             .validator
             .is_verified_block(&deps.querier, HexBinary::from(root_hash))?;
@@ -105,7 +123,7 @@ impl Bridge {
         }
 
         PROCESSED_TXS.save(deps.storage, &transaction_hash, &true)?;
-        let adapter = Adapter::new();
+        let tx_parser = TransactionParser::default();
 
         let storage = deps.storage;
         let api = deps.api;
@@ -129,43 +147,109 @@ impl Bridge {
             if cell.is_none() {
                 deps.api.debug("any cell is empty when reading transaction");
             }
+
+            // verify source of tx is bridge adapter contract
+            if out_msg.info.src.to_string() != config.bridge_adapter {
+                deps.api
+                    .debug("this tx is not from bridge_adapter contract");
+                continue;
+            }
+
             let cell = cell.unwrap().cell;
-
-            let packet_data = adapter
-                .transaction_parser
-                .parse_packet_data(&cell)?
-                .to_pretty()?;
-
-            let _mapping = ics20_denoms().load(
-                storage,
-                &get_key_ics20_ibc_denom(
-                    &parse_ibc_wasm_port_id(contract_address),
-                    &packet_data.dest_channel,
-                    &packet_data.denom,
-                ),
-            )?;
-            increase_channel_balance(
-                storage,
-                &packet_data.dest_channel,
-                &packet_data.denom,
-                packet_data.amount,
-            )?;
-            let channel_id = "";
-            let denom = "";
+            let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
 
             let mapping = ics20_denoms().load(
                 storage,
                 &get_key_ics20_ibc_denom(
                     &parse_ibc_wasm_port_id(contract_address),
-                    channel_id,
-                    denom,
+                    &packet_data.src_channel,
+                    &packet_data.src_denom,
                 ),
             )?;
-            increase_channel_balance(storage, channel_id, denom, packet_data.amount)?;
-            let mut msgs = adapter.execute(api, &querier, packet_data, opcode, mapping)?;
-            cosmos_msgs.append(&mut msgs);
+
+            let mut res =
+                Bridge::handle_packet_receive(storage, api, &querier, packet_data, mapping)?;
+            cosmos_msgs.append(&mut res.0);
+            attrs.append(&mut res.1);
         }
-        Ok(cosmos_msgs)
+        Ok((cosmos_msgs, attrs))
+    }
+
+    pub fn handle_packet_receive(
+        storage: &mut dyn Storage,
+        api: &dyn Api,
+        querier: &QuerierWrapper,
+        data: BridgePacketData,
+        mapping: MappingMetadata,
+    ) -> StdResult<(Vec<CosmosMsg>, Vec<Attribute>)> {
+        let config = CONFIG.load(storage)?;
+        // increase first
+        increase_channel_balance(storage, &data.src_channel, &data.src_denom, data.amount)?;
+
+        let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+        let recipient = api.addr_validate(&data.orai_address)?;
+
+        let to_send = Amount::from_parts(
+            parse_asset_info_denom(&mapping.asset_info),
+            convert_remote_to_local(
+                data.amount,
+                mapping.remote_decimals,
+                mapping.asset_info_decimals,
+            )?,
+        );
+
+        let fee_data = Bridge::process_deduct_fee(storage, querier, api, data.src_denom, to_send)?;
+
+        if !fee_data.token_fee.is_empty() {
+            cosmos_msgs.push(
+                fee_data
+                    .token_fee
+                    .send_amount(config.token_fee_receiver.into_string(), None),
+            )
+        }
+        if !fee_data.relayer_fee.is_empty() {
+            cosmos_msgs.push(
+                fee_data
+                    .relayer_fee
+                    .send_amount(config.relayer_fee_receiver.to_string(), None),
+            )
+        }
+
+        let attributes: Vec<Attribute> = vec![
+            attr("action", "bridge_to_cosmos"),
+            attr("dest_receiver", &recipient.to_string()),
+            attr("local_amount", &fee_data.deducted_amount.to_string()),
+            attr("relayer_fee", &fee_data.relayer_fee.amount().to_string()),
+            attr("token_fee", &fee_data.token_fee.amount().to_string()),
+        ];
+
+        // if the fees have consumed all user funds, we send all the fees to our token fee receiver
+        if fee_data.deducted_amount.is_zero() {
+            return Ok((cosmos_msgs, attributes.into()));
+        }
+
+        let msg = Asset {
+            info: mapping.asset_info.clone(),
+            amount: fee_data.deducted_amount,
+        };
+        if mapping.opcode == OPCODE_1 {
+            let msg = match msg.info {
+                AssetInfo::NativeToken { denom: _ } => {
+                    return Err(StdError::generic_err("Cannot mint a native token"))
+                }
+                AssetInfo::Token { contract_addr } => {
+                    Cw20Contract(contract_addr).call(Cw20ExecuteMsg::Mint {
+                        recipient: recipient.to_string(),
+                        amount: fee_data.deducted_amount,
+                    })
+                }
+            }?;
+            cosmos_msgs.push(msg);
+        } else if mapping.opcode == OPCODE_2 {
+            cosmos_msgs.push(msg.into_msg(None, querier, recipient)?);
+        }
+
+        Ok((cosmos_msgs, attributes))
     }
 
     pub fn validate_basic_ics20_packet(
@@ -194,16 +278,252 @@ impl Bridge {
         }
         Ok(())
     }
+
+    pub fn handle_bridge_to_ton(
+        deps: DepsMut,
+        env: Env,
+        msg: BridgeToTonMsg,
+        amount: Amount,
+        _sender: Addr,
+    ) -> Result<Response, ContractError> {
+        if amount.is_empty() {
+            return Err(ContractError::NoFunds {});
+        }
+
+        let config = CONFIG.load(deps.storage)?;
+        let denom_key = get_key_ics20_ibc_denom(
+            &parse_ibc_wasm_port_id(env.contract.address.as_str()),
+            &msg.local_channel_id,
+            &msg.denom,
+        );
+
+        let mapping = ics20_denoms().load(deps.storage, &denom_key)?;
+        // ensure amount is correct
+        if mapping
+            .asset_info
+            .ne(&amount.into_asset_info(deps.api).unwrap())
+        {
+            return Err(ContractError::InvalidFund {});
+        }
+
+        let fee_data = Bridge::process_deduct_fee(
+            deps.storage,
+            &deps.querier,
+            deps.api,
+            msg.denom.clone(),
+            amount.clone(),
+        )?;
+
+        let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+        if !fee_data.token_fee.is_empty() {
+            cosmos_msgs.push(
+                fee_data
+                    .token_fee
+                    .send_amount(config.token_fee_receiver.into_string(), None),
+            )
+        }
+        if !fee_data.relayer_fee.is_empty() {
+            cosmos_msgs.push(
+                fee_data
+                    .relayer_fee
+                    .send_amount(config.relayer_fee_receiver.into_string(), None),
+            )
+        }
+
+        let token_fee_str = &fee_data.token_fee.amount().to_string();
+        let relayer_fee_str = &fee_data.relayer_fee.amount().to_string();
+        let denom_str = &msg.denom;
+        let local_amount_str = &fee_data.deducted_amount.to_string();
+        let crc_str = &msg.crc_src.to_string();
+        let attributes = vec![
+            ("action", "bridge_to_ton"),
+            ("dest_receiver", &msg.to),
+            ("dest_denom", denom_str),
+            ("local_amount", local_amount_str),
+            ("crc_src", crc_str),
+            ("relayer_fee", relayer_fee_str),
+            ("token_fee", token_fee_str),
+        ];
+
+        // if our fees have drained the initial amount entirely, then we just get all the fees and that's it
+        //  // if our fees have drained the initial amount entirely, then we just get all the fees and that's it
+        if fee_data.deducted_amount.is_zero() {
+            return Ok(Response::new()
+                .add_messages(cosmos_msgs)
+                .add_attributes(attributes));
+        }
+
+        let remote_amount = convert_local_to_remote(
+            fee_data.deducted_amount,
+            mapping.remote_decimals,
+            mapping.asset_info_decimals,
+        )?;
+        // try decrease channel balance
+        decrease_channel_balance(
+            deps.storage,
+            &msg.local_channel_id,
+            &msg.denom,
+            remote_amount,
+        )?;
+
+        // store to pending packet transfer
+
+        let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default();
+
+        SEND_PACKET.save(
+            deps.storage,
+            last_packet_seq + 1,
+            &SendPacket {
+                sequence: last_packet_seq + 1,
+                to: msg.to.clone(),
+                denom: msg.denom.clone(),
+                amount: remote_amount,
+                crc_src: msg.crc_src,
+            },
+        )?;
+        LAST_PACKET_SEQ.save(deps.storage, &(last_packet_seq + 1))?;
+
+        Ok(Response::new()
+            .add_messages(cosmos_msgs)
+            .add_attributes(vec![("remote_amount", &remote_amount.to_string())]))
+    }
+
+    pub fn process_deduct_fee(
+        storage: &dyn Storage,
+        querier: &QuerierWrapper,
+        api: &dyn Api,
+        remote_token_denom: String,
+        local_amount: Amount, // local amount
+    ) -> StdResult<FeeData> {
+        let local_denom = local_amount.denom();
+        let (deducted_amount, token_fee) =
+            Bridge::deduct_token_fee(storage, remote_token_denom, local_amount.amount())?;
+
+        let mut fee_data = FeeData {
+            deducted_amount,
+            token_fee: Amount::from_parts(local_denom.clone(), token_fee),
+            relayer_fee: Amount::from_parts(local_denom.clone(), Uint128::zero()),
+        };
+        // if after token fee, the deducted amount is 0 then we deduct all to token fee
+        if deducted_amount.is_zero() {
+            fee_data.token_fee = local_amount;
+            return Ok(fee_data);
+        }
+
+        // simulate for relayer fee
+        let ask_asset_info = denom_to_asset_info(api, &local_amount.raw_denom());
+        let relayer_fee = Bridge::deduct_relayer_fee(storage, api, querier, ask_asset_info)?;
+
+        fee_data.deducted_amount = deducted_amount.checked_sub(relayer_fee).unwrap_or_default();
+        fee_data.relayer_fee = Amount::from_parts(local_denom.clone(), relayer_fee);
+        // if the relayer fee makes the final amount 0, then we charge the remaining deducted amount as relayer fee
+        if fee_data.deducted_amount.is_zero() {
+            fee_data.relayer_fee = Amount::from_parts(local_denom.clone(), deducted_amount);
+            return Ok(fee_data);
+        }
+        Ok(fee_data)
+    }
+
+    pub fn deduct_relayer_fee(
+        storage: &dyn Storage,
+        _api: &dyn Api,
+        querier: &QuerierWrapper,
+        ask_asset_info: AssetInfo,
+    ) -> StdResult<Uint128> {
+        let config = CONFIG.load(storage)?;
+        // no need to deduct fee if no fee is found in the mapping
+        if config.relayer_fee.is_zero() {
+            return Ok(Uint128::from(0u64));
+        }
+
+        let relayer_fee = Bridge::get_swap_token_amount_out(
+            querier,
+            config.relayer_fee,
+            &config.swap_router_contract,
+            ask_asset_info,
+            config.relayer_fee_token,
+        );
+
+        Ok(relayer_fee)
+    }
+
+    pub fn deduct_token_fee(
+        storage: &dyn Storage,
+        remote_token_denom: String,
+        amount: Uint128,
+    ) -> StdResult<(Uint128, Uint128)> {
+        let token_fee = TOKEN_FEE.may_load(storage, &remote_token_denom)?;
+        if let Some(token_fee) = token_fee {
+            let fee = Bridge::deduct_fee(token_fee, amount);
+            let new_deducted_amount = amount.checked_sub(fee)?;
+            return Ok((new_deducted_amount, fee));
+        }
+        Ok((amount, Uint128::from(0u64)))
+    }
+
+    pub fn deduct_fee(token_fee: Ratio, amount: Uint128) -> Uint128 {
+        // ignore case where denominator is zero since we cannot divide with 0
+        if token_fee.denominator == 0 {
+            return Uint128::from(0u64);
+        }
+
+        amount.mul(Decimal::from_ratio(
+            token_fee.nominator,
+            token_fee.denominator,
+        ))
+    }
+
+    pub fn get_swap_token_amount_out(
+        querier: &QuerierWrapper,
+        offer_amount: Uint128,
+        swap_router_contract: &RouterController,
+        ask_asset_info: AssetInfo,
+        relayer_fee_token: AssetInfo,
+    ) -> Uint128 {
+        if ask_asset_info.eq(&relayer_fee_token) {
+            return offer_amount;
+        }
+
+        let orai_asset = AssetInfo::NativeToken {
+            denom: "orai".to_string(),
+        };
+
+        let swap_ops = if ask_asset_info.eq(&orai_asset) || relayer_fee_token.eq(&orai_asset) {
+            vec![SwapOperation::OraiSwap {
+                offer_asset_info: relayer_fee_token,
+                ask_asset_info,
+            }]
+        } else {
+            vec![
+                SwapOperation::OraiSwap {
+                    offer_asset_info: relayer_fee_token,
+                    ask_asset_info: orai_asset.clone(),
+                },
+                SwapOperation::OraiSwap {
+                    offer_asset_info: orai_asset,
+                    ask_asset_info,
+                },
+            ]
+        };
+
+        swap_router_contract
+            .simulate_swap(querier, offer_amount, swap_ops)
+            .map(|data| data.amount)
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::{to_binary, Addr, Empty, HexBinary, Uint128};
+
+    use cosmwasm_std::{testing::mock_dependencies, to_binary, Addr, Empty, HexBinary, Uint128};
     use cw20::{BalanceResponse, Cw20Coin};
     use oraiswap::asset::AssetInfo;
-    use tonbridge_bridge::msg::UpdatePairMsg;
+    use tonbridge_bridge::{msg::UpdatePairMsg, state::SendPacket};
 
     use cw_multi_test::{App, Contract, ContractWrapper, Executor};
+
+    use crate::{contract::execute_submit_bridge_to_ton_info, state::SEND_PACKET};
 
     fn validator_contract() -> Box<dyn Contract<Empty>> {
         let contract = ContractWrapper::new(
@@ -242,7 +562,7 @@ mod tests {
         let validator_id = app.store_code(validator_contract);
         let bridge_id = app.store_code(bridge_contract);
         let cw20_id = app.store_code(dummy_cw20_contract);
-        let bridge_cw20_balance = Uint128::from(1000000001u64);
+        let bridge_cw20_balance = Uint128::from(10000000000000001u64);
 
         let validator_addr = app
             .instantiate_contract(
@@ -259,7 +579,16 @@ mod tests {
             .instantiate_contract(
                 bridge_id,
                 admin.clone(),
-                &tonbridge_bridge::msg::InstantiateMsg {},
+                &tonbridge_bridge::msg::InstantiateMsg {
+                    bridge_adapter: "EQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
+                    relayer_fee_token: AssetInfo::NativeToken {
+                        denom: "orai".to_string(),
+                    },
+                    token_fee_receiver: Addr::unchecked("token_fee"),
+                    relayer_fee_receiver: Addr::unchecked("relayer_fee"),
+                    relayer_fee: None,
+                    swap_router_contract: "router".to_string(),
+                },
                 &vec![],
                 "bridge".to_string(),
                 None,
@@ -289,9 +618,9 @@ mod tests {
             )
             .unwrap();
 
-        let tx_boc = HexBinary::from_hex("b5ee9c7201020a010002800003b5710c3760b686d87bef1f5c5a25e87201a27ef8f5f8805c62ef43700b5a7f6f89c00002aabe17f71c1261bcd503ea556b967295eeaa3d2935ddf3a8e268b87b0349f701490a360c9db00002aabe0113bc16660c34000034641b0de80102030201e004050082726303c5d7b1bc0da5acf09ab3b9cfdffb55ea0ec7f6929c09a76a49932263d1b92e977b92eb9d78b2494efa376962706b566f3b92ab7eea53e12ebdaf034cc0c3020f0c470618a1860440080901e188002186ec16d0db0f7de3eb8b44bd0e40344fdf1ebf100b8c5de86e016b4fedf138034329ed2412425c96cbcb1d44b4bfcb96b693ecf9fa4fac12b64fc913ebae528091837d8e3fd367b28676505f89fbb2bc58f8c32130d9fcba920680a7a24798514d4d18bb33061b6800000018001c060101df0700a062002d40675afa88251845b411ed5e2910e0e15892dea75b0ff286dbcba225cece54a1dcd65000000000000000000000000000000000000036363565623039393662393265643564633736303731353600e968002186ec16d0db0f7de3eb8b44bd0e40344fdf1ebf100b8c5de86e016b4fedf1390016a033ad7d44128c22da08f6af14887070ac496f53ad87f9436de5d112e7672a50ee6b28000608235a00005557c2fee384ccc18680000000001b1b1ab2b1181c9c9b311c9932b21ab2319b9b181b989a9b40009d419d8313880000000000000000110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020006fc9830d404c08234c0000000000020000000000028e07461aec104405e30a0eb4866ac725676188a0dfe539c310058492e5ece42040501d0c").unwrap();
+        let tx_boc = HexBinary::from_hex("b5ee9c72010210010002a00003b5704f1a9d989d4054ca72c292ffdf220c45c592fba86b562654fc500b6efdcc0a1000014c775004781596aa8bae813b9e6a71ade2ba8a393b7b1fff5c20db8414268e761e80f445466000014c774a4ba016675543a00034671e79e80102030201e00405008272c22a17f9d66afb94f83e04c02edc5abb7f2a15486ef4beaa703990dbfadb3b4085457ef326f4ecbbe9d81236ead8479f8765194636e87e84ca27eff6a7ec1f1d02170447c90ec90dd418656798110e0f01b16801ed89e454ebd04155a7ef579cecc7ff77907f2288f16bb339766711298f1f775700013c6a766275015329cb0a4bff7c883117164beea1ad589953f1402dbbf7302850ec90dd400613faa00000298ee9a50184cceaa864c0060101df080118af35dc850000000000000000070155ffff801397b648216d9f2f44369a4d6a5d42c41146f4cbc66093a35ba780f4e6a405714e071afd498d00010a019fe000278d4ecc4ea02a653961497fef910622e2c97dd435ab132a7e2805b77ee6050b006b6841e5c7db57b8d076dfa4368dea08e132f2917969b5920fbd8229dc6560d7000014c7750047826675543a60090153801397b648216d9f2f44369a4d6a5d42c41146f4cbc66093a35ba780f4e6a405714e071afd498d0000100a04000c0b0c0d00126368616e6e656c2d31000000566f726169317263686e6b647073787a687175753633793672346a34743537706e6339773865686468656478009e43758c3d090000000000000000008c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc986db784c36dbc000000000000200000000000390f7bed18b3fc226db7ad9ac1961b38a37b80e826f33ccabfa03d8405819e6ca41902b2c").unwrap();
 
-        let tx_proof = HexBinary::from_hex("b5ee9c7201021e01000444000946030299328dbd84b0ece362aec8cb04f89f7f21b1908dd55542ae9983914d81b7d1002801241011ef55aaffffff110203040502a09bc7a987000000008001029d9e8900000001020000000000000000000000006660c34000002aabe17f71c000002aabe17f71fa6f2862d90008bf1b024720d0024711a2c400000007000000000000002e0607284801015643265b6cffa70dc9e813a64a3f6e6b6cb2d9eecdd4c0132d7cc8b6f6980234000228480101f1ef4849255d409ea4809cc7af48726e7cba7e8e6a0551120a2191684b576d7b002723894a33f6fdbfde8507db6befffe5a57ad26aadb2f90b7d5beab6b118f0ddad8153bb784b1ac28cac5958bde45d7b4839cd371f8b6d2dbbc6f1626ebb185dd5b03bcce7bbb54008090a009800002aabe1702f84024720d0fe987ca6d7a6c373433d0501a25685d620df208aafe798cbfd3af74103fe9d9310b099470cd8b563a069a8d742321b3f1dfa3c84cc8283b8d90f66cf6f3b4bd0009800002aabe160ed5f029d9e88cbb5b00727d017d06a3e812942605fbbed8510a823bba5be5af7e24649c971ece4a7cf33e0bdb68bd5c222c9b92253dbea5b8ac31fb0122b5e374506e90768a328480101004ff947a10e7a705c6c825569cac87098eb2c125b5fe9f8e95bb91d2b4b8940001828480101aa145fdfa31eb650bd814230f6a9a5b339d9feade846a837416ea3dfed1e5f51001a2109a132c44cb20b220b6109962265900c0d2209106689fbe10e0f2848010185f95f36a058aa0dfedf0274cbf62bc61a5dc4fc3f747771a0b5a4ff2bccd06000142848010143509a6ced216b57d9489df9a7634b3b0606d8c12918dd4defb551cb8fe34fd500142209104c87b6e9101122091032c1051d121328480101a86e1f1f96d15eadcf76cda1d7d7a608e86aa93cdbaad190b83d3748bab2d72800102209101789f79114152848010188cef0c4bf6b35316a6dd1749c7708a562889991a40dbff5652c1f4a7da9251f001222091014fe07211617284801018a3019f94446ea33abccf41a779e4c7c448ea69cb61727b22fb558b7c2208181000922070e170aed181928480101c6f5b7be07850ac1d3638e6bd89328c8fa3cb4caa43a7ee58ba48e43a6336dd0000e28480101e1414eaea227f221b8cdef63756d370621464cdc96e172a3b9b4931061d17a990010220968d3f137901a1b22a1bd0dd82da1b61efbc7d716897a1c80689fbe3d7e201718bbd0dc02d69fdbe270c8361bca2186ec16d0db0f7de3eb8b44bd0e40344fdf1ebf100b8c5de86e016b4fedf1394000002aabe17f71c1320d86f41c1d284801013064f2f17d28bcf9b6dc4fa1a9ab257b0ef5f696c9c609b7304dc7b41215f3bf00062848010125d1ed22d37fa5ec44b4426f00f33ee3f59e527e8252b9da266172d342c0f5fd00030082726303c5d7b1bc0da5acf09ab3b9cfdffb55ea0ec7f6929c09a76a49932263d1b92e977b92eb9d78b2494efa376962706b566f3b92ab7eea53e12ebdaf034cc0c3").unwrap();
+        let tx_proof = HexBinary::from_hex("b5ee9c7201020e010002cd00094603b4107e11da299213c78b889ec423fe1c7de98b508a4fdd113c6990b307235d80001d01241011ef55aafffffffd0203040502a09bc7a987000000008401014ceab100000000020000000000000000000000006675543a000014c775004780000014c7750047831736f9b3000446e401361bf701361bd7c400000007000000000000002e06072848010169df3a129570f135f49a71d8b483fa4c1c482f3f66ed85120a88d1b12fa9d16500012848010140bc4dd799a511514e2389685f05400ff4552fd0742fa5bcffc54f5628ba2728001c23894a33f6fde40b062e4f9ca75cdd7575e0d2ad61010f65e76ead272c60375bbdf85721963d37da28343e390d3d0fcc100f52754cdd13a8e4b655b0b6d5953c09f2f928d8ce4008090a0098000014c774e1c30401361bf750761c553cb279919d5c01370e223caddc8aed39f253c97e2067fab0d970edb84dfe70fb36e9e9e40e03596ed1ede5e16b95c4ab61817ceac5e86ca43fd7b4480098000014c774f10543014ceab0eadce00e65f2d6771561346ad31884c67e036c6aa63d14ba694d6affdf684810f750e961923988298da0b1dbe93abce9756cc3ef6b72dfd97531c7ce6199cabb28480101a7f5bf430102522e84d0b8b108a45efc71925ce0c6c591ae5ac50e7ead9baa15000828480101db58517b1e79f67b35742f301a407f7edf1b95fae995d949f62cbeb17f10e0e60009210799c79e7a0b22a5a0009e353b313a80a994e58525ffbe44188b8b25f750d6ac4ca9f8a016ddfb98142671e79e504f1a9d989d4054ca72c292ffdf220c45c592fba86b562654fc500b6efdcc0a1a000000a63ba8023c099c79e7a00c0d28480101f12edcfd2cb61fdee42d31cd884d21f92891e1ef9072f3ba4dded90ea5a09f380006008272c22a17f9d66afb94f83e04c02edc5abb7f2a15486ef4beaa703990dbfadb3b4085457ef326f4ecbbe9d81236ead8479f8765194636e87e84ca27eff6a7ec1f1d").unwrap();
 
         let opcode =
             HexBinary::from_hex("0000000000000000000000000000000000000000000000000000000000000002")
@@ -299,7 +628,7 @@ mod tests {
 
         // shard block with block hash
         let block_hash =
-            HexBinary::from_hex("0299328dbd84b0ece362aec8cb04f89f7f21b1908dd55542ae9983914d81b7d1")
+            HexBinary::from_hex("b4107e11da299213c78b889ec423fe1c7de98b508a4fdd113c6990b307235d80")
                 .unwrap();
 
         // set verified for simplicity
@@ -323,13 +652,14 @@ mod tests {
                 contract_addr: bridge_addr.to_string(),
                 msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
                     UpdatePairMsg {
-                        local_channel_id: "".to_string(),
-                        denom: "".to_string(),
+                        local_channel_id: "channel-0".to_string(),
+                        denom: "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl".to_string(),
                         local_asset_info: AssetInfo::Token {
                             contract_addr: Addr::unchecked(cw20_addr.clone()),
                         },
                         remote_decimals: 6,
                         local_asset_info_decimals: 6,
+                        opcode,
                     },
                 ))
                 .unwrap(),
@@ -345,7 +675,6 @@ mod tests {
                 msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::ReadTransaction {
                     tx_proof,
                     tx_boc,
-                    opcode,
                     validator_contract_addr: validator_addr.to_string(),
                 })
                 .unwrap(),
@@ -365,5 +694,27 @@ mod tests {
             .unwrap();
 
         println!("bridge balance: {:?}", bridge_balance);
+    }
+
+    #[test]
+    fn test_submit_bridge_to_ton_info() {
+        let mut deps = mock_dependencies();
+        SEND_PACKET
+            .save(
+                deps.as_mut().storage,
+                1,
+                &SendPacket {
+                    sequence: 1,
+                    to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
+                    denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
+                    amount: Uint128::from(10000000000u128),
+                    crc_src: 82134516,
+                },
+            )
+            .unwrap();
+
+        let data = "000000000000000180002255D73E3A5C1A9589F0AECE31E97B54B261AC3D7D16D4F1068FDF9D4B4E18300071737B65193DDBB57097037AE801EE6DC77EE97DD5862112116B04DA4EB70080000000000000000000000009502F9000139517D2";
+        execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data).unwrap())
+            .unwrap();
     }
 }

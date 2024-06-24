@@ -64,6 +64,8 @@ pub enum QueryMsg {
         validator_node_id: HexBinary,
         root_hash: HexBinary,
     },
+    #[returns(bool)]
+    NextValidatorUpdated {},
 }
 
 // We define a custom struct for each query response

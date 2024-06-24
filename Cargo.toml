@@ -34,12 +34,11 @@ cw-controllers = "1.0.1"
 cw-utils = "1.0.1"
 sha2 = "0.10.8"
 
-oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "daef7e664000a36214cc451a3965c398595be5e0" }
+oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "03f4955b" }
 cw20-ics20-msg = { git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev = "0a33b5ade31419b82617d0b3ab7958899d9598b7" }
 
 tonbridge-parser = { path = "./packages/parser" }
 tonbridge-validator = { path = "./packages/validator" }
-tonbridge-adapter = { path = "./packages/adapter" }
 tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./rust-contracts/tonbridge_validator" }
 tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "8efb9384acf219e9a27e010b65c507a574ff794f" }

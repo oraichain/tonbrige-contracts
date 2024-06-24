@@ -1,23 +1,45 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{HexBinary, Uint128};
+use cosmwasm_std::{Addr, HexBinary, Uint128};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
+use crate::state::TokenFee;
+
 #[cw_serde]
-pub struct InstantiateMsg {}
+pub struct InstantiateMsg {
+    pub bridge_adapter: String,
+    pub relayer_fee_token: AssetInfo,
+    pub token_fee_receiver: Addr,
+    pub relayer_fee_receiver: Addr,
+    pub relayer_fee: Option<Uint128>,
+    pub swap_router_contract: String,
+}
 
 #[cw_serde]
 pub enum ExecuteMsg {
     ReadTransaction {
         tx_proof: HexBinary,
         tx_boc: HexBinary, // in hex form
-        opcode: HexBinary, // in hex form
         validator_contract_addr: String,
     },
     UpdateMappingPair(UpdatePairMsg),
     BridgeToTon(BridgeToTonMsg),
     Receive(Cw20ReceiveMsg),
+    SubmitBridgeToTonInfo {
+        data: HexBinary,
+    },
+    UpdateOwner {
+        new_owner: Addr,
+    },
+    UpdateConfig {
+        relayer_fee_token: Option<AssetInfo>,
+        token_fee_receiver: Option<Addr>,
+        relayer_fee_receiver: Option<Addr>,
+        relayer_fee: Option<Uint128>,
+        swap_router_contract: Option<String>,
+        token_fee: Option<Vec<TokenFee>>,
+    },
 }
 
 #[cw_serde]
@@ -29,11 +51,15 @@ pub struct UpdatePairMsg {
     pub local_asset_info: AssetInfo,
     pub remote_decimals: u8,
     pub local_asset_info_decimals: u8,
+    pub opcode: HexBinary,
 }
 
 #[cw_serde]
 pub struct BridgeToTonMsg {
-    pub boc: HexBinary,
+    pub local_channel_id: String, // default channel-0
+    pub to: String,
+    pub denom: String,
+    pub crc_src: u32,
 }
 
 /// We currently take no arguments for migrations
@@ -101,4 +127,11 @@ pub struct ChannelResponse {
     /// The total number of tokens that have been sent over this channel
     /// (even if many have been returned, so balance is low)
     pub total_sent: Vec<Amount>,
+}
+
+#[cw_serde]
+pub struct FeeData {
+    pub deducted_amount: Uint128,
+    pub token_fee: Amount,
+    pub relayer_fee: Amount,
 }

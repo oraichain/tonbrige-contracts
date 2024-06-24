@@ -1,30 +1,46 @@
-use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Order};
+use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use cw_utils::{nonpayable, one_coin};
+use oraiswap::asset::AssetInfo;
+use oraiswap::router::RouterController;
 use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
     QueryMsg, UpdatePairMsg,
 };
-use tonbridge_bridge::parser::{
-    get_key_ics20_ibc_denom, parse_ibc_wasm_port_id, parse_packet_boc_to_ics_20,
-};
-use tonbridge_bridge::state::MappingMetadata;
+use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
+use tonbridge_bridge::state::{Config, MappingMetadata, SendPacket, TokenFee};
 use tonbridge_parser::bit_reader::to_bytes32;
+use tonlib::cell::Cell;
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
-use crate::state::{ics20_denoms, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE};
+use crate::state::{
+    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
+    TOKEN_FEE,
+};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    _msg: InstantiateMsg,
+    msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    CONFIG.save(
+        deps.storage,
+        &Config {
+            bridge_adapter: msg.bridge_adapter,
+            relayer_fee_token: msg.relayer_fee_token,
+            token_fee_receiver: msg.token_fee_receiver,
+            relayer_fee_receiver: msg.relayer_fee_receiver,
+            relayer_fee: msg.relayer_fee.unwrap_or_default(),
+            swap_router_contract: RouterController(msg.swap_router_contract),
+        },
+    )?;
     OWNER.set(deps, Some(info.sender))?;
+
     Ok(Response::new())
 }
 
@@ -36,16 +52,94 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        ExecuteMsg::UpdateOwner { new_owner } => execute_update_owner(deps, info, new_owner),
+        ExecuteMsg::UpdateConfig {
+            relayer_fee_token,
+            token_fee_receiver,
+            relayer_fee_receiver,
+            relayer_fee,
+            swap_router_contract,
+            token_fee,
+        } => execute_update_config(
+            deps,
+            info,
+            relayer_fee_token,
+            token_fee_receiver,
+            relayer_fee_receiver,
+            relayer_fee,
+            swap_router_contract,
+            token_fee,
+        ),
         ExecuteMsg::ReadTransaction {
             tx_proof,
             tx_boc,
-            opcode,
             validator_contract_addr,
-        } => read_transaction(deps, env, tx_proof, tx_boc, opcode, validator_contract_addr),
+        } => read_transaction(deps, env, tx_proof, tx_boc, validator_contract_addr),
         ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, env, &info.sender, msg),
-        ExecuteMsg::BridgeToTon(msg) => handle_bridge_to_ton_native(deps, info, msg.boc),
+        ExecuteMsg::BridgeToTon(msg) => {
+            let coin = one_coin(&info)?;
+            let amount = Amount::from_parts(coin.denom, coin.amount);
+            Bridge::handle_bridge_to_ton(deps, env, msg, amount, info.sender)
+        }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
+        ExecuteMsg::SubmitBridgeToTonInfo { data } => execute_submit_bridge_to_ton_info(deps, data),
     }
+}
+
+pub fn execute_update_owner(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_owner: Addr,
+) -> Result<Response, ContractError> {
+    OWNER
+        .execute_update_admin::<Empty, Empty>(deps, info, Some(new_owner.clone()))
+        .map_err(|error| StdError::generic_err(error.to_string()))?;
+
+    Ok(Response::new().add_attributes(vec![
+        ("action", "update_owner"),
+        ("new_owner", new_owner.as_str()),
+    ]))
+}
+
+pub fn execute_update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    relayer_fee_token: Option<AssetInfo>,
+    token_fee_receiver: Option<Addr>,
+    relayer_fee_receiver: Option<Addr>,
+    relayer_fee: Option<Uint128>,
+    swap_router_contract: Option<String>,
+    token_fee: Option<Vec<TokenFee>>,
+) -> Result<Response, ContractError> {
+    OWNER.assert_admin(deps.as_ref(), &info.sender)?;
+
+    if let Some(token_fee) = token_fee {
+        for fee in token_fee {
+            TOKEN_FEE.save(deps.storage, &fee.token_denom, &fee.ratio)?;
+        }
+    }
+
+    let mut config = CONFIG.load(deps.storage)?;
+
+    if let Some(relayer_fee_token) = relayer_fee_token {
+        config.relayer_fee_token = relayer_fee_token;
+    }
+    if let Some(token_fee_receiver) = token_fee_receiver {
+        config.token_fee_receiver = token_fee_receiver;
+    }
+    if let Some(relayer_fee_receiver) = relayer_fee_receiver {
+        config.relayer_fee_receiver = relayer_fee_receiver;
+    }
+    if let Some(relayer_fee) = relayer_fee {
+        config.relayer_fee = relayer_fee;
+    }
+    if let Some(swap_router_contract) = swap_router_contract {
+        config.swap_router_contract = RouterController(swap_router_contract);
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    Ok(Response::default().add_attribute("action", "update_config"))
 }
 
 pub fn read_transaction(
@@ -53,20 +147,19 @@ pub fn read_transaction(
     env: Env,
     tx_proof: HexBinary,
     tx_boc: HexBinary,
-    opcode: HexBinary,
     validator_contract_addr: String,
 ) -> Result<Response, ContractError> {
     let bridge = Bridge::new(deps.api.addr_validate(&validator_contract_addr)?);
-    let cosmos_msgs = bridge.read_transaction(
+    let res = bridge.read_transaction(
         deps,
         env.contract.address.as_str(),
         tx_proof.as_slice(),
         tx_boc.as_slice(),
-        to_bytes32(&opcode)?,
     )?;
     Ok(Response::new()
-        .add_messages(cosmos_msgs)
-        .add_attributes(vec![("action", "read_transaction")]))
+        .add_messages(res.0)
+        .add_attributes(vec![("action", "read_transaction")])
+        .add_attributes(res.1))
 }
 
 pub fn update_mapping_pair(
@@ -94,24 +187,15 @@ pub fn update_mapping_pair(
             asset_info: msg.local_asset_info.clone(),
             remote_decimals: msg.remote_decimals,
             asset_info_decimals: msg.local_asset_info_decimals,
+            opcode: to_bytes32(&msg.opcode)?,
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
 }
 
-pub fn handle_bridge_to_ton_native(
-    deps: DepsMut,
-    info: MessageInfo,
-    packet_boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let coin = one_coin(&info)?;
-    let sent_amount = Amount::native(coin.amount, coin.denom);
-    bridge_to_ton(deps, info.sender.into_string(), sent_amount, packet_boc)
-}
-
 pub fn execute_receive(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     wrapper: Cw20ReceiveMsg,
 ) -> Result<Response, ContractError> {
@@ -119,24 +203,45 @@ pub fn execute_receive(
 
     let amount = Amount::cw20(wrapper.amount, info.sender);
     let msg: BridgeToTonMsg = from_binary(&wrapper.msg)?;
-    bridge_to_ton(deps, wrapper.sender, amount, msg.boc)
+    let sender = deps.api.addr_validate(&wrapper.sender)?;
+    Bridge::handle_bridge_to_ton(deps, env, msg, amount, sender)
 }
 
-pub fn bridge_to_ton(
-    _deps: DepsMut,
-    sender: String,
-    sent_amount: Amount,
-    packet_boc: HexBinary,
+pub fn execute_submit_bridge_to_ton_info(
+    deps: DepsMut,
+    boc: HexBinary,
 ) -> Result<Response, ContractError> {
-    let ics20_packet = parse_packet_boc_to_ics_20(&packet_boc)?;
-    Bridge::validate_basic_ics20_packet(
-        &ics20_packet,
-        &sent_amount.amount(),
-        &sent_amount.denom(),
-        sender.as_str(),
-    )?;
-    // TODO: do something here to bridge to ton
-    Ok(Response::new().add_attributes(vec![("action", "bridge_to_ton")]))
+    let mut cell = Cell::default();
+    cell.data = boc.as_slice().to_vec();
+    cell.bit_len = cell.data.len() * 8;
+
+    let mut parser = cell.parser();
+
+    let seq = parser.load_u64(64)?;
+    let to = parser.load_address()?;
+    let denom = parser.load_address()?;
+    let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
+    let crc_src = parser.load_u32(32)?;
+
+    let send_packet = SEND_PACKET.load(deps.storage, seq)?;
+    if send_packet.ne(&SendPacket {
+        sequence: seq,
+        to: to.to_string(),
+        denom: denom.to_string(),
+        amount: Uint128::from(amount),
+        crc_src,
+    }) {
+        return Err(ContractError::Std(StdError::generic_err(
+            "Invalid send_packet",
+        )));
+    }
+
+    // after finished verifying the boc, we remove the packet to prevent replay attack
+    SEND_PACKET.remove(deps.storage, seq);
+
+    Ok(Response::new()
+        .add_attribute("action", "submit_bridge_to_ton_info")
+        .add_attribute("data", boc.to_hex()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
