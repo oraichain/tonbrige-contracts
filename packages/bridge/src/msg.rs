@@ -18,7 +18,6 @@ pub enum ExecuteMsg {
     ReadTransaction {
         tx_proof: HexBinary,
         tx_boc: HexBinary, // in hex form
-        opcode: HexBinary, // in hex form
         validator_contract_addr: String,
     },
     UpdateMappingPair(UpdatePairMsg),
@@ -48,6 +47,7 @@ pub struct UpdatePairMsg {
     pub local_asset_info: AssetInfo,
     pub remote_decimals: u8,
     pub local_asset_info_decimals: u8,
+    pub opcode: HexBinary,
 }
 
 #[cw_serde]

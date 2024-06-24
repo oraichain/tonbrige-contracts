@@ -22,7 +22,7 @@ use tonbridge_parser::{
     bit_reader::to_bytes32,
     transaction_parser::{ITransactionParser, TransactionParser},
     tree_of_cells_parser::{OPCODE_1, OPCODE_2},
-    types::{BridgePacketData, Bytes32},
+    types::BridgePacketData,
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
@@ -59,7 +59,6 @@ impl Bridge {
         contract_address: &str,
         tx_proof: &[u8],
         tx_boc: &[u8],
-        opcode: Bytes32,
     ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
         let mut attrs: Vec<Attribute> = vec![];
@@ -162,14 +161,8 @@ impl Bridge {
                 ),
             )?;
 
-            let mut res = Bridge::handle_packet_receive(
-                storage,
-                api,
-                &querier,
-                packet_data,
-                opcode,
-                mapping,
-            )?;
+            let mut res =
+                Bridge::handle_packet_receive(storage, api, &querier, packet_data, mapping)?;
             cosmos_msgs.append(&mut res.0);
             attrs.append(&mut res.1);
         }
@@ -181,7 +174,6 @@ impl Bridge {
         api: &dyn Api,
         querier: &QuerierWrapper,
         data: BridgePacketData,
-        opcode: Bytes32,
         mapping: MappingMetadata,
     ) -> StdResult<(Vec<CosmosMsg>, Vec<Attribute>)> {
         let config = CONFIG.load(storage)?;
@@ -234,7 +226,7 @@ impl Bridge {
             info: mapping.asset_info.clone(),
             amount: fee_data.deducted_amount,
         };
-        if opcode == OPCODE_1 {
+        if mapping.opcode == OPCODE_1 {
             let msg = match msg.info {
                 AssetInfo::NativeToken { denom: _ } => {
                     return Err(StdError::generic_err("Cannot mint a native token"))
@@ -247,7 +239,7 @@ impl Bridge {
                 }
             }?;
             cosmos_msgs.push(msg);
-        } else if opcode == OPCODE_2 {
+        } else if mapping.opcode == OPCODE_2 {
             cosmos_msgs.push(msg.into_msg(None, querier, recipient)?);
         }
 
@@ -663,6 +655,7 @@ mod tests {
                         },
                         remote_decimals: 6,
                         local_asset_info_decimals: 6,
+                        opcode,
                     },
                 ))
                 .unwrap(),
@@ -678,7 +671,6 @@ mod tests {
                 msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::ReadTransaction {
                     tx_proof,
                     tx_boc,
-                    opcode,
                     validator_contract_addr: validator_addr.to_string(),
                 })
                 .unwrap(),

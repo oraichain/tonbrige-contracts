@@ -70,9 +70,8 @@ pub fn execute(
         ExecuteMsg::ReadTransaction {
             tx_proof,
             tx_boc,
-            opcode,
             validator_contract_addr,
-        } => read_transaction(deps, env, tx_proof, tx_boc, opcode, validator_contract_addr),
+        } => read_transaction(deps, env, tx_proof, tx_boc, validator_contract_addr),
         ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, env, &info.sender, msg),
         ExecuteMsg::BridgeToTon(msg) => {
             let coin = one_coin(&info)?;
@@ -138,7 +137,6 @@ pub fn read_transaction(
     env: Env,
     tx_proof: HexBinary,
     tx_boc: HexBinary,
-    opcode: HexBinary,
     validator_contract_addr: String,
 ) -> Result<Response, ContractError> {
     let bridge = Bridge::new(deps.api.addr_validate(&validator_contract_addr)?);
@@ -147,7 +145,6 @@ pub fn read_transaction(
         env.contract.address.as_str(),
         tx_proof.as_slice(),
         tx_boc.as_slice(),
-        to_bytes32(&opcode)?,
     )?;
     Ok(Response::new()
         .add_messages(res.0)
@@ -180,6 +177,7 @@ pub fn update_mapping_pair(
             asset_info: msg.local_asset_info.clone(),
             remote_decimals: msg.remote_decimals,
             asset_info_decimals: msg.local_asset_info_decimals,
+            opcode: to_bytes32(&msg.opcode)?,
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))

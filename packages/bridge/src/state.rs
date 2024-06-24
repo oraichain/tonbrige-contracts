@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Uint128;
 use oraiswap::asset::AssetInfo;
+use tonbridge_parser::types::Bytes32;
 
 #[cw_serde]
 pub struct MappingMetadata {
@@ -8,6 +9,7 @@ pub struct MappingMetadata {
     pub asset_info: AssetInfo,
     pub remote_decimals: u8,
     pub asset_info_decimals: u8,
+    pub opcode: Bytes32,
 }
 
 #[cw_serde]
