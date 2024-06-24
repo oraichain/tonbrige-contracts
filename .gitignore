@@ -28,3 +28,6 @@ out
 # code analyzer
 .scannerwork/
 clippy-report.json
+
+# code coverage
+tarpaulin-report.html
