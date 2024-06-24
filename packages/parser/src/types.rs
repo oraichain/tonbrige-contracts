@@ -5,8 +5,6 @@ use cosmwasm_std::{HexBinary, StdResult, Uint128, Uint256};
 use tonlib::address::TonAddress as TonlibTonAddress;
 
 pub type Bytes32 = [u8; 32];
-pub type Bytes4 = [u8; 4];
-pub type Address = [u8; 20];
 pub type ValidatorSet = Vec<ValidatorDescription>;
 
 #[cw_serde]
