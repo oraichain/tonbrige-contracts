@@ -40,7 +40,7 @@ impl ITransactionParser for TransactionParser {
             dest_denom: des_denom,
             dest_channel: des_channel,
             dest_receiver: des_receiver,
-            orai_address: orai_address,
+            orai_address,
         })
     }
 }

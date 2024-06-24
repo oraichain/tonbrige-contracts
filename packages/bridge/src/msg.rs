@@ -8,6 +8,7 @@ use crate::state::TokenFee;
 
 #[cw_serde]
 pub struct InstantiateMsg {
+    pub bridge_adapter: String,
     pub relayer_fee_token: AssetInfo,
     pub token_fee_receiver: Addr,
     pub relayer_fee_receiver: Addr,

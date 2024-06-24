@@ -31,6 +31,7 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
+            bridge_adapter: msg.bridge_adapter,
             relayer_fee_token: msg.relayer_fee_token,
             token_fee_receiver: msg.token_fee_receiver,
             relayer_fee_receiver: msg.relayer_fee_receiver,

@@ -39,6 +39,7 @@ pub struct Ratio {
 
 #[cw_serde]
 pub struct Config {
+    pub bridge_adapter: String, // bridge adapter on TON
     pub relayer_fee_token: AssetInfo,
     pub relayer_fee: Uint128, // This fee depends on the network type, not token type decimals of relayer fee should always be 10^6
     pub token_fee_receiver: Addr,
