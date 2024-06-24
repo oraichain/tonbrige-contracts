@@ -1,8 +1,24 @@
 import {HexBinary, Boolean} from "./types";
-export interface InstantiateMsg {}
+export type Uint128 = string;
+export type Addr = string;
+export type AssetInfo = {
+  token: {
+    contract_addr: Addr;
+  };
+} | {
+  native_token: {
+    denom: string;
+  };
+};
+export interface InstantiateMsg {
+  relayer_fee?: Uint128 | null;
+  relayer_fee_receiver: Addr;
+  relayer_fee_token: AssetInfo;
+  swap_router_contract: string;
+  token_fee_receiver: Addr;
+}
 export type ExecuteMsg = {
   read_transaction: {
-    opcode: HexBinary;
     tx_boc: HexBinary;
     tx_proof: HexBinary;
     validator_contract_addr: string;
@@ -13,28 +29,37 @@ export type ExecuteMsg = {
   bridge_to_ton: BridgeToTonMsg;
 } | {
   receive: Cw20ReceiveMsg;
-};
-export type AssetInfo = {
-  token: {
-    contract_addr: Addr;
+} | {
+  submit_bridge_to_ton_info: {
+    data: HexBinary;
   };
 } | {
-  native_token: {
-    denom: string;
+  update_owner: {
+    new_owner: Addr;
+  };
+} | {
+  update_config: {
+    relayer_fee?: Uint128 | null;
+    relayer_fee_receiver?: Addr | null;
+    relayer_fee_token?: AssetInfo | null;
+    swap_router_contract?: string | null;
+    token_fee_receiver?: Addr | null;
   };
 };
-export type Addr = string;
-export type Uint128 = string;
 export type Binary = string;
 export interface UpdatePairMsg {
   denom: string;
   local_asset_info: AssetInfo;
   local_asset_info_decimals: number;
   local_channel_id: string;
+  opcode: HexBinary;
   remote_decimals: number;
 }
 export interface BridgeToTonMsg {
-  boc: HexBinary;
+  crc_src: number;
+  denom: string;
+  local_channel_id: string;
+  to: string;
 }
 export interface Cw20ReceiveMsg {
   amount: Uint128;

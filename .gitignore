@@ -21,9 +21,9 @@ out
 # Text file backups
 **/*.rs.bk
 
-# wasm file
-**/*.wasm
-!rust-contracts-sdk/packages/contracts-build/data/oraiswap-token.wasm
+# # wasm file
+# **/*.wasm
+# !rust-contracts-sdk/packages/contracts-build/data/oraiswap-token.wasm
 
 # code analyzer
 .scannerwork/
