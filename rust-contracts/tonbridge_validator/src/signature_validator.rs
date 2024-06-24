@@ -83,6 +83,9 @@ pub struct SignatureValidator {
     // sum of 100 largest weights of the candidates
     sum_largest_candidates_total_weights: u64,
     pub root_hash: Bytes32,
+    // check next validator updated
+    has_candidate_next: bool,
+    pub has_next: bool,
 }
 
 impl SignatureValidator {
@@ -143,6 +146,9 @@ impl SignatureValidator {
 
         // store candidate validator
         self.sum_largest_candidates_total_weights = sum_100_main_current;
+
+        // check  contain next_validator set
+        self.has_candidate_next = !validators.next.is_empty();
 
         for (i, candidate) in candidates_for_validator_set.iter().enumerate() {
             SIGNATURE_CANDIDATE_VALIDATOR.save(storage, i as u64, candidate)?;
@@ -300,6 +306,8 @@ impl ISignatureValidator for SignatureValidator {
         self.sum_largest_candidates_total_weights = 0;
         let rh = self.root_hash;
         self.root_hash = EMPTY_HASH;
+        self.has_next = self.has_candidate_next;
+        self.has_candidate_next = false;
 
         Ok(rh)
     }
