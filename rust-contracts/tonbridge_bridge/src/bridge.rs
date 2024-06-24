@@ -16,7 +16,7 @@ use std::ops::Mul;
 use tonbridge_bridge::{
     msg::{BridgeToTonMsg, FeeData, Ics20Packet},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
-    state::MappingMetadata,
+    state::{MappingMetadata, Ratio, SendPacket},
 };
 use tonbridge_parser::{
     bit_reader::to_bytes32,
@@ -33,10 +33,7 @@ use tonlib::{
 use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
-    state::{
-        ics20_denoms, Ratio, SendPacket, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET,
-        TOKEN_FEE,
-    },
+    state::{ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, TOKEN_FEE},
 };
 
 #[cw_serde]
@@ -513,14 +510,11 @@ mod tests {
     use cosmwasm_std::{testing::mock_dependencies, to_binary, Addr, Empty, HexBinary, Uint128};
     use cw20::{BalanceResponse, Cw20Coin};
     use oraiswap::asset::AssetInfo;
-    use tonbridge_bridge::msg::UpdatePairMsg;
+    use tonbridge_bridge::{msg::UpdatePairMsg, state::SendPacket};
 
     use cw_multi_test::{App, Contract, ContractWrapper, Executor};
 
-    use crate::{
-        contract::execute_submit_bridge_to_ton_info,
-        state::{SendPacket, SEND_PACKET},
-    };
+    use crate::{contract::execute_submit_bridge_to_ton_info, state::SEND_PACKET};
 
     fn validator_contract() -> Box<dyn Contract<Empty>> {
         let contract = ContractWrapper::new(

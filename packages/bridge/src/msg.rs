@@ -4,6 +4,8 @@ use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
+use crate::state::TokenFee;
+
 #[cw_serde]
 pub struct InstantiateMsg {
     pub relayer_fee_token: AssetInfo,
@@ -35,6 +37,7 @@ pub enum ExecuteMsg {
         relayer_fee_receiver: Option<Addr>,
         relayer_fee: Option<Uint128>,
         swap_router_contract: Option<String>,
+        token_fee: Option<Vec<TokenFee>>,
     },
 }
 

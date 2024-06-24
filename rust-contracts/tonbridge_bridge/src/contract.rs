@@ -10,15 +10,15 @@ use tonbridge_bridge::msg::{
     QueryMsg, UpdatePairMsg,
 };
 use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
-use tonbridge_bridge::state::MappingMetadata;
+use tonbridge_bridge::state::{Config, MappingMetadata, SendPacket, TokenFee};
 use tonbridge_parser::bit_reader::to_bytes32;
 use tonlib::cell::Cell;
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
 use crate::state::{
-    ics20_denoms, Config, SendPacket, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
-    SEND_PACKET,
+    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
+    TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -58,6 +58,7 @@ pub fn execute(
             relayer_fee_receiver,
             relayer_fee,
             swap_router_contract,
+            token_fee,
         } => execute_update_config(
             deps,
             info,
@@ -66,6 +67,7 @@ pub fn execute(
             relayer_fee_receiver,
             relayer_fee,
             swap_router_contract,
+            token_fee,
         ),
         ExecuteMsg::ReadTransaction {
             tx_proof,
@@ -106,8 +108,15 @@ pub fn execute_update_config(
     relayer_fee_receiver: Option<Addr>,
     relayer_fee: Option<Uint128>,
     swap_router_contract: Option<String>,
+    token_fee: Option<Vec<TokenFee>>,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), &info.sender)?;
+
+    if let Some(token_fee) = token_fee {
+        for fee in token_fee {
+            TOKEN_FEE.save(deps.storage, &fee.token_denom, &fee.ratio)?;
+        }
+    }
 
     let mut config = CONFIG.load(deps.storage)?;
 
@@ -201,9 +210,6 @@ pub fn execute_submit_bridge_to_ton_info(
     deps: DepsMut,
     boc: HexBinary,
 ) -> Result<Response, ContractError> {
-    // seq: 64 bit
-    // address:
-
     let mut cell = Cell::default();
     cell.data = boc.as_slice().to_vec();
     cell.bit_len = cell.data.len() * 8;
