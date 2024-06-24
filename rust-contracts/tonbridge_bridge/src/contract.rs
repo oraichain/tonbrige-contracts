@@ -210,13 +210,13 @@ pub fn execute_submit_bridge_to_ton_info(
     cell.data = boc.as_slice().to_vec();
     cell.bit_len = cell.data.len() * 8;
 
-    let mut parsers = cell.parser();
+    let mut parser = cell.parser();
 
-    let seq = parsers.load_u64(64)?;
-    let to = parsers.load_address()?;
-    let denom = parsers.load_address()?;
-    let amount = u128::from_be_bytes(parsers.load_bits(128)?.as_slice().try_into().unwrap());
-    let crc_src = parsers.load_u32(32)?;
+    let seq = parser.load_u64(64)?;
+    let to = parser.load_address()?;
+    let denom = parser.load_address()?;
+    let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
+    let crc_src = parser.load_u32(32)?;
 
     let send_packet = SEND_PACKET.load(deps.storage, seq)?;
     if send_packet.ne(&SendPacket {
@@ -231,9 +231,12 @@ pub fn execute_submit_bridge_to_ton_info(
         )));
     }
 
+    // after finished verifying the boc, we remove the packet to prevent replay attack
+    SEND_PACKET.remove(deps.storage, seq);
+
     Ok(Response::new()
         .add_attribute("action", "submit_bridge_to_ton_info")
-        .add_attribute("data", boc.to_string()))
+        .add_attribute("data", boc.to_hex()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

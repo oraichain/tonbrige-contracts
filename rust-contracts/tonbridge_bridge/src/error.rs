@@ -1,10 +1,12 @@
+use std::array::TryFromSliceError;
+
 use cosmwasm_std::{ConversionOverflowError, OverflowError, StdError};
 use cw_controllers::AdminError;
 use cw_utils::PaymentError;
 use thiserror::Error;
 use tonlib::cell::TonCellError;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
@@ -23,6 +25,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     ConversionOverflowError(#[from] ConversionOverflowError),
+
+    #[error("{0}")]
+    TryFromSliceError(#[from] TryFromSliceError),
 
     #[error("Unauthorized")]
     Unauthorized {},
