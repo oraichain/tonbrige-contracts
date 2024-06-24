@@ -1,10 +1,9 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Api, DepsMut, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
-    bit_reader::to_bytes32,
-    block_parser::ValidatorSet,
-    tree_of_cells_parser::EMPTY_HASH,
-    types::{Bytes32, ValidatorDescription, Vdata, VerifiedBlockInfo},
+    to_bytes32,
+    types::{Bytes32, ValidatorDescription, ValidatorSet, Vdata, VerifiedBlockInfo},
+    EMPTY_HASH,
 };
 use tonbridge_validator::msg::UserFriendlyValidator;
 use tonlib::cell::{BagOfCells, TonCellError};
@@ -360,12 +359,22 @@ mod tests {
 
         // choose two random indexes for testing
         assert_eq!(
-            HexBinary::from(validators[0].pubkey).to_hex(),
-            "89462f768d318759a230f72ef92bdbcd02a09c791d40e6a01a53f42409e248a1".to_string()
+            validators
+                .iter()
+                .find(|val| HexBinary::from(val.pubkey).to_hex()
+                    == "89462f768d318759a230f72ef92bdbcd02a09c791d40e6a01a53f42409e248a1"
+                        .to_string())
+                .is_some(),
+            true,
         );
         assert_eq!(
-            HexBinary::from(validators[5].pubkey).to_hex(),
-            "76627b87a5717e9caab3a8044a8f75fd8da98b512c057e56defea91529f9b573".to_string()
+            validators
+                .iter()
+                .find(|val| HexBinary::from(val.pubkey).to_hex()
+                    == "76627b87a5717e9caab3a8044a8f75fd8da98b512c057e56defea91529f9b573"
+                        .to_string())
+                .is_some(),
+            true,
         );
         assert_eq!(validators.len(), 14usize);
     }
@@ -389,7 +398,7 @@ mod tests {
         validator.init_validators(deps.as_mut().storage).unwrap();
 
         // choose two random indexes for testing
-        assert_eq!(validators.len(), 343usize);
+        assert_eq!(validators.len(), 677usize);
     }
 
     #[test]

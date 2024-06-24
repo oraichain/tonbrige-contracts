@@ -4,32 +4,10 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{HexBinary, StdResult, Uint128, Uint256};
 use tonlib::address::TonAddress as TonlibTonAddress;
 
-use crate::block_parser::ValidatorSet;
-
 pub type Bytes32 = [u8; 32];
 pub type Bytes4 = [u8; 4];
 pub type Address = [u8; 20];
-
-#[cw_serde]
-#[derive(Copy, Default)]
-pub struct BagOfCellsInfo {
-    pub magic: Bytes4,
-    pub root_count: usize,
-    pub cell_count: usize,
-    pub absent_count: usize,
-    pub ref_byte_size: usize,
-    pub offset_byte_size: usize,
-    pub has_index: bool,
-    pub has_roots: bool,
-    pub has_crc32c: bool,
-    pub has_cache_bits: bool,
-    pub roots_offset: usize,
-    pub index_offset: usize,
-    pub data_offset: usize,
-    pub data_size: usize,
-    pub total_size: usize,
-    pub root_idx: usize,
-}
+pub type ValidatorSet = Vec<ValidatorDescription>;
 
 #[cw_serde]
 #[derive(Copy, Default)]

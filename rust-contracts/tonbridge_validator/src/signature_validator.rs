@@ -1,9 +1,9 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
-    block_parser::{compute_node_id, ValidatorSet},
-    tree_of_cells_parser::EMPTY_HASH,
-    types::{Bytes32, KeyBlockValidators, ValidatorDescription, Vdata},
+    compute_node_id,
+    types::{Bytes32, KeyBlockValidators, ValidatorDescription, ValidatorSet, Vdata},
+    EMPTY_HASH,
 };
 use tonlib::{
     cell::{BagOfCells, Cell, TonCellError},
@@ -356,7 +356,9 @@ impl ISignatureValidator for SignatureValidator {
         key_block_vals.current =
             SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 34)?;
         key_block_vals.previous =
-            SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 32)?;
+            SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 32)
+                .ok()
+                .unwrap_or_default();
         key_block_vals.next =
             SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 36)
                 .ok()

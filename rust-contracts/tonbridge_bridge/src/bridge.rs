@@ -19,10 +19,10 @@ use tonbridge_bridge::{
     state::{MappingMetadata, Ratio, SendPacket},
 };
 use tonbridge_parser::{
-    bit_reader::to_bytes32,
+    to_bytes32,
     transaction_parser::{ITransactionParser, TransactionParser},
-    tree_of_cells_parser::{OPCODE_1, OPCODE_2},
     types::BridgePacketData,
+    OPCODE_1, OPCODE_2,
 };
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{

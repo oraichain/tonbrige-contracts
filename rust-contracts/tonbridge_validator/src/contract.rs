@@ -3,7 +3,7 @@ use std::array::TryFromSliceError;
 use cosmwasm_std::{entry_point, to_binary, Addr, HexBinary, Order, StdError};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw_storage_plus::Bound;
-use tonbridge_parser::bit_reader::to_bytes32;
+use tonbridge_parser::to_bytes32;
 use tonbridge_parser::types::{Vdata, VdataHex};
 use tonbridge_validator::msg::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, UserFriendlyValidator,

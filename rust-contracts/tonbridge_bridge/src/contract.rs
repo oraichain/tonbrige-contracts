@@ -11,7 +11,7 @@ use tonbridge_bridge::msg::{
 };
 use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
 use tonbridge_bridge::state::{Config, MappingMetadata, SendPacket, TokenFee};
-use tonbridge_parser::bit_reader::to_bytes32;
+use tonbridge_parser::to_bytes32;
 use tonlib::cell::Cell;
 
 use crate::bridge::Bridge;
