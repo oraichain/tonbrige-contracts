@@ -41,9 +41,12 @@ tonbridge-parser = { path = "./packages/parser" }
 tonbridge-validator = { path = "./packages/validator" }
 tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./contracts/tonbridge_validator" }
-tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "8efb9384acf219e9a27e010b65c507a574ff794f" }
+tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "f9f15c8" }
 cw-multi-test = "0.16.6"
 bech32 = "0.11.0"
+
+[patch.crates-io]
+curve25519-dalek = { git = 'https://github.com/dalek-cryptography/curve25519-dalek.git' }
 
 [profile.release]
 opt-level = 3
