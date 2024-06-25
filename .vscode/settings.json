@@ -1,6 +1,0 @@
-{
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": "explicit"
-    },
-    "typescript.tsdk": "rust-contracts-sdk/node_modules/typescript/lib",
-}
