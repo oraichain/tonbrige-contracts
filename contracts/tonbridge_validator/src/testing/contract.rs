@@ -4,9 +4,10 @@ mod tests {
     use cosmwasm_std::{
         from_binary,
         testing::{mock_dependencies, mock_env, mock_info},
-        Addr, HexBinary,
+        Addr, HexBinary, StdError,
     };
     use cw_controllers::AdminError;
+    use tonbridge_parser::EMPTY_HASH;
     use tonbridge_validator::msg::{ExecuteMsg, QueryMsg, UserFriendlyValidator};
 
     use crate::{
@@ -17,6 +18,7 @@ mod tests {
     };
 
     const BOCS: &str = include_str!("testdata/bocs.hex");
+    const BOCS_LARGE: &str = include_str!("testdata/bocs_large.hex");
 
     #[test]
     fn test_prepare_new_key_block() {
@@ -68,6 +70,59 @@ mod tests {
             true,
         );
         assert_eq!(validators.len(), 14usize);
+    }
+
+    #[test]
+    fn test_verify_key_block() {
+        let mut deps = mock_dependencies();
+        let boc = HexBinary::from_hex(BOCS).unwrap();
+
+        VALIDATOR
+            .save(deps.as_mut().storage, &Validator::default())
+            .unwrap();
+
+        // case 1: empty root hash
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("relayer", &vec![]),
+            ExecuteMsg::VerifyKeyBlock {
+                root_hash: EMPTY_HASH.as_slice().try_into().unwrap(),
+                file_hash: EMPTY_HASH.as_slice().try_into().unwrap(),
+                vdata: vec![],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            ContractError::Std(StdError::generic_err("wrong root_hash or file_hash")).to_string()
+        );
+
+        // prepare keyblock to populate new root hash
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("relayer", &vec![]),
+            ExecuteMsg::PrepareNewKeyBlock { keyblock_boc: boc },
+        )
+        .unwrap();
+
+        // case 2: even after preparing keyblock, if file hash is empty -> still return error
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("relayer", &vec![]),
+            ExecuteMsg::VerifyKeyBlock {
+                root_hash: EMPTY_HASH.as_slice().try_into().unwrap(),
+                file_hash: EMPTY_HASH.as_slice().try_into().unwrap(),
+                vdata: vec![],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            ContractError::Std(StdError::generic_err("wrong root_hash or file_hash")).to_string()
+        );
     }
 
     #[test]
