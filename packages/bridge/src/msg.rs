@@ -4,7 +4,7 @@ use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
-use crate::state::TokenFee;
+use crate::state::{Config, TokenFee};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -66,24 +66,28 @@ pub struct BridgeToTonMsg {
 
 /// We currently take no arguments for migrations
 #[cw_serde]
-pub struct MigrateMsg {}
+pub struct MigrateMsg {
+    pub validator_contract_addr: Addr,
+    pub bridge_adapter: String,
+    pub relayer_fee_token: AssetInfo,
+    pub token_fee_receiver: Addr,
+    pub relayer_fee_receiver: Addr,
+    pub relayer_fee: Option<Uint128>,
+    pub swap_router_contract: String,
+}
 
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    #[returns(ConfigResponse)]
+    #[returns(String)]
+    Owner {},
+    #[returns(Config)]
     Config {},
     #[returns(bool)]
     IsTxProcessed { tx_hash: HexBinary },
     /// Returns the details of the name channel, error if not created.
     #[returns(ChannelResponse)]
     ChannelStateData { channel_id: String },
-}
-
-// We define a custom struct for each query response
-#[cw_serde]
-pub struct ConfigResponse {
-    pub owner: Option<String>,
 }
 
 /// The format for sending an ics20 packet.

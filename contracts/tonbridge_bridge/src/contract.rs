@@ -6,8 +6,8 @@ use cw_utils::{nonpayable, one_coin};
 use oraiswap::asset::AssetInfo;
 use oraiswap::router::RouterController;
 use tonbridge_bridge::msg::{
-    BridgeToTonMsg, ChannelResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
-    QueryMsg, UpdatePairMsg,
+    BridgeToTonMsg, ChannelResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
+    UpdatePairMsg,
 };
 use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
 use tonbridge_bridge::state::{Config, MappingMetadata, SendPacket, TokenFee};
@@ -258,6 +258,7 @@ pub fn execute_submit_bridge_to_ton_info(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
+        QueryMsg::Owner {} => to_binary(&OWNER.query_admin(deps)?.admin),
         QueryMsg::Config {} => to_binary(&get_config(deps)?),
         QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
         QueryMsg::ChannelStateData { channel_id } => to_binary(&query_channel(deps, channel_id)?),
@@ -270,9 +271,9 @@ pub fn is_tx_processed(deps: Deps, tx_hash: HexBinary) -> StdResult<bool> {
         .map(|res| res.unwrap_or(false))
 }
 
-pub fn get_config(deps: Deps) -> StdResult<ConfigResponse> {
-    let owner = OWNER.query_admin(deps)?;
-    Ok(ConfigResponse { owner: owner.admin })
+pub fn get_config(deps: Deps) -> StdResult<Config> {
+    let config = CONFIG.load(deps.storage)?;
+    Ok(config)
 }
 
 // make public for ibc tests
@@ -299,6 +300,18 @@ pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelRespons
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
+    CONFIG.save(
+        deps.storage,
+        &Config {
+            validator_contract_addr: msg.validator_contract_addr,
+            bridge_adapter: msg.bridge_adapter,
+            relayer_fee_token: msg.relayer_fee_token,
+            token_fee_receiver: msg.token_fee_receiver,
+            relayer_fee_receiver: msg.relayer_fee_receiver,
+            relayer_fee: msg.relayer_fee.unwrap_or_default(),
+            swap_router_contract: RouterController(msg.swap_router_contract),
+        },
+    )?;
     Ok(Response::default())
 }
