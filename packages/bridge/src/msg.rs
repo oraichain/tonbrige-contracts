@@ -33,6 +33,7 @@ pub enum ExecuteMsg {
         new_owner: Addr,
     },
     UpdateConfig {
+        bridge_adapter: Option<String>,
         relayer_fee_token: Option<AssetInfo>,
         token_fee_receiver: Option<Addr>,
         relayer_fee_receiver: Option<Addr>,
