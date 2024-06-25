@@ -128,7 +128,7 @@ impl Bridge {
         let storage = deps.storage;
         let api = deps.api;
         let querier = deps.querier;
-        for (_, out_msg) in transaction.out_msgs.into_values().enumerate() {
+        for out_msg in transaction.out_msgs.into_values() {
             if out_msg.data.is_none() {
                 deps.api.debug("empty out_msg data");
                 continue;
@@ -217,15 +217,15 @@ impl Bridge {
 
         let attributes: Vec<Attribute> = vec![
             attr("action", "bridge_to_cosmos"),
-            attr("dest_receiver", &recipient.to_string()),
-            attr("local_amount", &fee_data.deducted_amount.to_string()),
-            attr("relayer_fee", &fee_data.relayer_fee.amount().to_string()),
-            attr("token_fee", &fee_data.token_fee.amount().to_string()),
+            attr("dest_receiver", recipient.as_str()),
+            attr("local_amount", fee_data.deducted_amount.to_string()),
+            attr("relayer_fee", fee_data.relayer_fee.amount().to_string()),
+            attr("token_fee", fee_data.token_fee.amount().to_string()),
         ];
 
         // if the fees have consumed all user funds, we send all the fees to our token fee receiver
         if fee_data.deducted_amount.is_zero() {
-            return Ok((cosmos_msgs, attributes.into()));
+            return Ok((cosmos_msgs, attributes));
         }
 
         let msg = Asset {

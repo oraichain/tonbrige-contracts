@@ -4,11 +4,9 @@ mod tests {
     use cosmwasm_std::{
         from_binary,
         testing::{mock_dependencies, mock_env, mock_info},
-        to_binary, Addr, Empty, HexBinary, Uint128,
+        Addr, HexBinary,
     };
-    use cw20::{BalanceResponse, Cw20Coin};
     use cw_controllers::AdminError;
-    use tonbridge_parser::types::ValidatorDescription;
     use tonbridge_validator::msg::{ExecuteMsg, QueryMsg, UserFriendlyValidator};
 
     use crate::{

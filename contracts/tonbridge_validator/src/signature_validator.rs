@@ -115,19 +115,19 @@ impl SignatureValidator {
         total_validators.extend(validators.current.to_vec());
         total_validators.extend(validators.next.to_vec());
 
-        for i in 0..total_validators.len() {
+        for mut total_validator in total_validators {
             // if the candidate is already in the list, we compare weight with the input
             if let Some(candidate) = candidates_for_validator_set.iter_mut().find(|val| {
                 HexBinary::from(val.pubkey)
                     .to_hex()
-                    .eq(&HexBinary::from(&total_validators[i].pubkey).to_string())
+                    .eq(&HexBinary::from(total_validator.pubkey).to_string())
             }) {
                 // old validator has less weight then new
-                if candidate.weight < total_validators[i].weight {
-                    self.candidates_total_weight += total_validators[i].weight;
+                if candidate.weight < total_validator.weight {
+                    self.candidates_total_weight += total_validator.weight;
                     self.candidates_total_weight -= candidate.weight;
 
-                    std::mem::swap(candidate, &mut total_validators[i]);
+                    std::mem::swap(candidate, &mut total_validator);
 
                     candidate.node_id = compute_node_id(candidate.pubkey);
                 }
@@ -135,8 +135,8 @@ impl SignatureValidator {
             // not found, we push a new default validator and update its info
             candidates_for_validator_set.push(ValidatorDescription::default());
 
-            self.candidates_total_weight += total_validators[i].weight;
-            candidates_for_validator_set[j] = total_validators[i];
+            self.candidates_total_weight += total_validator.weight;
+            candidates_for_validator_set[j] = total_validator;
             candidates_for_validator_set[j].node_id =
                 compute_node_id(candidates_for_validator_set[j].pubkey);
 

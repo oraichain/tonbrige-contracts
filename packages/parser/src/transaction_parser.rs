@@ -76,7 +76,7 @@ mod tests {
         let transaction = Cell::load_transaction(tx_root, &mut 0, &mut tx_root.parser()).unwrap();
         let tx_parser = TransactionParser::default();
 
-        for (_, out_msg) in transaction.out_msgs.into_values().enumerate() {
+        for out_msg in transaction.out_msgs.into_values() {
             if out_msg.data.is_none() {
                 continue;
             }
