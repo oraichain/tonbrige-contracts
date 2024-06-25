@@ -350,7 +350,8 @@ impl Bridge {
         if fee_data.deducted_amount.is_zero() {
             return Ok(Response::new()
                 .add_messages(cosmos_msgs)
-                .add_attributes(attributes));
+                .add_attributes(attributes)
+                .add_attributes(vec![("remote_amount", "0")]));
         }
 
         let remote_amount = convert_local_to_remote(
