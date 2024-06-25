@@ -576,6 +576,7 @@ mod tests {
                 bridge_id,
                 admin.clone(),
                 &tonbridge_bridge::msg::InstantiateMsg {
+                    validator_contract_addr: validator_addr.clone(),
                     bridge_adapter: "EQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
                     relayer_fee_token: AssetInfo::NativeToken {
                         denom: "orai".to_string(),
@@ -671,7 +672,6 @@ mod tests {
                 msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::ReadTransaction {
                     tx_proof,
                     tx_boc,
-                    validator_contract_addr: validator_addr.to_string(),
                 })
                 .unwrap(),
                 funds: vec![],

@@ -8,6 +8,7 @@ use crate::state::TokenFee;
 
 #[cw_serde]
 pub struct InstantiateMsg {
+    pub validator_contract_addr: Addr,
     pub bridge_adapter: String,
     pub relayer_fee_token: AssetInfo,
     pub token_fee_receiver: Addr,
@@ -21,7 +22,6 @@ pub enum ExecuteMsg {
     ReadTransaction {
         tx_proof: HexBinary,
         tx_boc: HexBinary, // in hex form
-        validator_contract_addr: String,
     },
     UpdateMappingPair(UpdatePairMsg),
     BridgeToTon(BridgeToTonMsg),
@@ -33,6 +33,7 @@ pub enum ExecuteMsg {
         new_owner: Addr,
     },
     UpdateConfig {
+        validator_contract_addr: Option<Addr>,
         bridge_adapter: Option<String>,
         relayer_fee_token: Option<AssetInfo>,
         token_fee_receiver: Option<Addr>,

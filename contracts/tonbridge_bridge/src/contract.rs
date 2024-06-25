@@ -31,6 +31,7 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
+            validator_contract_addr: msg.validator_contract_addr,
             bridge_adapter: msg.bridge_adapter,
             relayer_fee_token: msg.relayer_fee_token,
             token_fee_receiver: msg.token_fee_receiver,
@@ -54,6 +55,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::UpdateOwner { new_owner } => execute_update_owner(deps, info, new_owner),
         ExecuteMsg::UpdateConfig {
+            validator_contract_addr,
             bridge_adapter,
             relayer_fee_token,
             token_fee_receiver,
@@ -64,6 +66,7 @@ pub fn execute(
         } => execute_update_config(
             deps,
             info,
+            validator_contract_addr,
             bridge_adapter,
             relayer_fee_token,
             token_fee_receiver,
@@ -72,11 +75,9 @@ pub fn execute(
             swap_router_contract,
             token_fee,
         ),
-        ExecuteMsg::ReadTransaction {
-            tx_proof,
-            tx_boc,
-            validator_contract_addr,
-        } => read_transaction(deps, env, tx_proof, tx_boc, validator_contract_addr),
+        ExecuteMsg::ReadTransaction { tx_proof, tx_boc } => {
+            read_transaction(deps, env, tx_proof, tx_boc)
+        }
         ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, env, &info.sender, msg),
         ExecuteMsg::BridgeToTon(msg) => {
             let coin = one_coin(&info)?;
@@ -106,6 +107,7 @@ pub fn execute_update_owner(
 pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
+    validator_contract_addr: Option<Addr>,
     bridge_adapter: Option<String>,
     relayer_fee_token: Option<AssetInfo>,
     token_fee_receiver: Option<Addr>,
@@ -124,6 +126,9 @@ pub fn execute_update_config(
 
     let mut config = CONFIG.load(deps.storage)?;
 
+    if let Some(validator_contract_addr) = validator_contract_addr {
+        config.validator_contract_addr = validator_contract_addr;
+    }
     if let Some(bridge_adapter) = bridge_adapter {
         config.bridge_adapter = bridge_adapter;
     }
@@ -153,9 +158,9 @@ pub fn read_transaction(
     env: Env,
     tx_proof: HexBinary,
     tx_boc: HexBinary,
-    validator_contract_addr: String,
 ) -> Result<Response, ContractError> {
-    let bridge = Bridge::new(deps.api.addr_validate(&validator_contract_addr)?);
+    let config = CONFIG.load(deps.storage)?;
+    let bridge = Bridge::new(config.validator_contract_addr);
     let res = bridge.read_transaction(
         deps,
         env.contract.address.as_str(),
