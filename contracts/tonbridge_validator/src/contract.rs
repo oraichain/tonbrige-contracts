@@ -53,13 +53,11 @@ pub fn execute(
             vdata,
         } => verify_validators(deps, root_hash, file_hash, vdata),
         ExecuteMsg::VerifyMasterchainBlockByValidatorSignatures {
-            block_boc,
             block_header_proof,
             file_hash,
             vdata,
         } => verify_masterchain_block_by_validator_signatures(
             deps,
-            block_boc,
             block_header_proof,
             file_hash,
             vdata,
@@ -140,7 +138,6 @@ pub fn verify_validators(
 // should be called by relayers
 pub fn verify_masterchain_block_by_validator_signatures(
     deps: DepsMut,
-    block_boc: HexBinary,
     block_header_proof: HexBinary,
     file_hash: HexBinary,
     vdata: Vec<VdataHex>,
@@ -160,7 +157,6 @@ pub fn verify_masterchain_block_by_validator_signatures(
     validator.verify_masterchain_block_by_validator_signatures(
         deps.storage,
         deps.api,
-        block_boc,
         block_header_proof,
         to_bytes32(&file_hash)?,
         &vdata_bytes,

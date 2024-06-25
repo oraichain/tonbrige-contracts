@@ -21,7 +21,6 @@ pub enum ExecuteMsg {
         vdata: Vec<VdataHex>,
     },
     VerifyMasterchainBlockByValidatorSignatures {
-        block_boc: HexBinary, // in hex form
         block_header_proof: HexBinary,
         file_hash: HexBinary,
         vdata: Vec<VdataHex>,

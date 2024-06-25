@@ -6,7 +6,7 @@ use tonbridge_parser::{
     EMPTY_HASH,
 };
 use tonbridge_validator::msg::UserFriendlyValidator;
-use tonlib::cell::{BagOfCells, TonCellError};
+use tonlib::cell::BagOfCells;
 
 use crate::{
     error::ContractError,
@@ -109,28 +109,16 @@ impl Validator {
         &self,
         storage: &mut dyn Storage,
         api: &dyn Api,
-        boc: HexBinary,
         block_header_proof: HexBinary,
         file_hash: Bytes32,
         vdata: &[Vdata],
     ) -> Result<(), ContractError> {
-        let block = BagOfCells::parse(boc.as_slice())?;
-        let root = block.single_root()?;
         let block_header_proof = BagOfCells::parse(block_header_proof.as_slice())?;
         let root_hash_from_block_header = block_header_proof.root(0)?.reference(0)?.get_hash(0);
-        let root_hash_from_block = root.get_hash(0);
-        if root_hash_from_block.ne(&root_hash_from_block_header) {
-            return Err(ContractError::TonCellError(
-                TonCellError::cell_parser_error(
-                    "Block header root hash from header proof does not match the root hash.",
-                ),
-            ));
-        }
-
         let current_weight = self.signature_validator.verify_validators(
             storage,
             api,
-            root_hash_from_block.as_slice().try_into()?,
+            root_hash_from_block_header.as_slice().try_into()?,
             file_hash,
             vdata,
         )?;
@@ -149,7 +137,7 @@ impl Validator {
         };
         VERIFIED_BLOCKS.save(
             storage,
-            root_hash_from_block.as_slice().try_into()?,
+            root_hash_from_block_header.as_slice().try_into()?,
             &verified_block_info,
         )?;
         Ok(())
