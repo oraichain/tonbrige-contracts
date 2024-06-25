@@ -54,6 +54,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::UpdateOwner { new_owner } => execute_update_owner(deps, info, new_owner),
         ExecuteMsg::UpdateConfig {
+            bridge_adapter,
             relayer_fee_token,
             token_fee_receiver,
             relayer_fee_receiver,
@@ -63,6 +64,7 @@ pub fn execute(
         } => execute_update_config(
             deps,
             info,
+            bridge_adapter,
             relayer_fee_token,
             token_fee_receiver,
             relayer_fee_receiver,
@@ -104,6 +106,7 @@ pub fn execute_update_owner(
 pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
+    bridge_adapter: Option<String>,
     relayer_fee_token: Option<AssetInfo>,
     token_fee_receiver: Option<Addr>,
     relayer_fee_receiver: Option<Addr>,
@@ -121,6 +124,9 @@ pub fn execute_update_config(
 
     let mut config = CONFIG.load(deps.storage)?;
 
+    if let Some(bridge_adapter) = bridge_adapter {
+        config.bridge_adapter = bridge_adapter;
+    }
     if let Some(relayer_fee_token) = relayer_fee_token {
         config.relayer_fee_token = relayer_fee_token;
     }
