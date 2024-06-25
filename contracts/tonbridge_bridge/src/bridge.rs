@@ -345,15 +345,6 @@ impl Bridge {
             ("token_fee", token_fee_str),
         ];
 
-        // if our fees have drained the initial amount entirely, then we just get all the fees and that's it
-        //  // if our fees have drained the initial amount entirely, then we just get all the fees and that's it
-        if fee_data.deducted_amount.is_zero() {
-            return Ok(Response::new()
-                .add_messages(cosmos_msgs)
-                .add_attributes(attributes)
-                .add_attributes(vec![("remote_amount", "0")]));
-        }
-
         let remote_amount = convert_local_to_remote(
             fee_data.deducted_amount,
             mapping.remote_decimals,
@@ -369,24 +360,28 @@ impl Bridge {
 
         // store to pending packet transfer
 
-        let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default();
+        let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default() + 1;
 
         SEND_PACKET.save(
             deps.storage,
-            last_packet_seq + 1,
+            last_packet_seq,
             &SendPacket {
-                sequence: last_packet_seq + 1,
+                sequence: last_packet_seq,
                 to: msg.to.clone(),
                 denom: msg.denom.clone(),
                 amount: remote_amount,
                 crc_src: msg.crc_src,
             },
         )?;
-        LAST_PACKET_SEQ.save(deps.storage, &(last_packet_seq + 1))?;
+        LAST_PACKET_SEQ.save(deps.storage, &last_packet_seq)?;
 
         Ok(Response::new()
             .add_messages(cosmos_msgs)
-            .add_attributes(vec![("remote_amount", &remote_amount.to_string())]))
+            .add_attributes(attributes)
+            .add_attributes(vec![
+                ("remote_amount", &remote_amount.to_string()),
+                ("seq", &last_packet_seq.to_string()),
+            ]))
     }
 
     pub fn process_deduct_fee(
