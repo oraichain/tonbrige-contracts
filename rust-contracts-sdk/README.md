@@ -4,11 +4,11 @@
 
 ```bash
 # build code:
-cwtools build ./rust-contracts/* -o rust-contracts-sdk/packages/contracts-build/data
+cwtools build ./contracts/* -o rust-contracts-sdk/packages/contracts-build/data
 # build schema
-cwtools build ./rust-contracts/* -s
+cwtools build ./contracts/* -s
 # gen code:
-cwtools gents ./rust-contracts/* -o rust-contracts-sdk/packages/contracts-sdk/src
+cwtools gents ./contracts/* -o rust-contracts-sdk/packages/contracts-sdk/src
 # gen doc:
 yarn docs
 

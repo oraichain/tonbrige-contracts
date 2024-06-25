@@ -1,17 +1,17 @@
 [workspace]
 resolver = '2'
 
-members = ["packages/*", "rust-contracts/*"]
+members = ["packages/*", "contracts/*"]
 
 
 [workspace.package]
 version = "0.2.0"
-authors = ["Terraform Labs, PTE.", "Oraichain Labs"]
+authors = ["Oraichain Labs"]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/oraichain/tonbrige-contracts.git"
+repository = "https://github.com/oraichain/tonbridge-cw-contracts.git"
 homepage = "https://orai.io"
-documentation = "https://github.com/oraichain/tonbrige-contracts.git"
+documentation = "https://github.com/oraichain/tonbridge-cw-contracts.git"
 exclude = [
     # Those files are rust-optimizer artifacts. You might want to commit them for convenience but they should not be part of the source code publication.
     "contract.wasm",
@@ -40,7 +40,7 @@ cw20-ics20-msg = { git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev
 tonbridge-parser = { path = "./packages/parser" }
 tonbridge-validator = { path = "./packages/validator" }
 tonbridge-bridge = { path = "./packages/bridge" }
-cw-tonbridge-validator = { path = "./rust-contracts/tonbridge_validator" }
+cw-tonbridge-validator = { path = "./contracts/tonbridge_validator" }
 tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "8efb9384acf219e9a27e010b65c507a574ff794f" }
 cw-multi-test = "0.16.6"
 bech32 = "0.11.0"

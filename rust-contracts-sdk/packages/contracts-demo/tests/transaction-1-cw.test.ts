@@ -3,27 +3,28 @@ import { toAmount } from "@oraichain/oraidex-common";
 import { OraiswapTokenClient } from "@oraichain/oraidex-contracts-sdk";
 import {
   InstantiateMsg as Cw20InstantiateMsg,
-  MinterResponse
+  MinterResponse,
 } from "@oraichain/oraidex-contracts-sdk/build/OraiswapToken.types";
 import { deployContract } from "@oraichain/tonbridge-contracts-build";
-import { TonbridgeBridgeClient, TonbridgeValidatorClient } from "@oraichain/tonbridge-contracts-sdk";
+import {
+  TonbridgeBridgeClient,
+  TonbridgeValidatorClient,
+} from "@oraichain/tonbridge-contracts-sdk";
 import { Cell } from "@ton/core";
+import { queryAllValidatorCandidates, queryAllValidators } from "./common";
 import {
   data,
   findBoc,
-  findTxHash,
   initialValidatorsBlockRootHash,
   initialValidatorsList,
   updateValidators,
-  updateValidatorsRootHash
-} from "../../../../test/data/transaction-1";
-import { Amount } from "../../contracts-sdk/src/TonbridgeBridge.types";
-import { queryAllValidatorCandidates, queryAllValidators } from "./common";
+  updateValidatorsRootHash,
+} from "./data/transaction-1";
 
 describe("Tree of Cells parser tests 1", () => {
   const client = new SimulateCosmWasmClient({
     chainId: "Oraichain",
-    bech32Prefix: "orai"
+    bech32Prefix: "orai",
   });
   const sender = "orai12zyu8w93h0q2lcnt50g3fn0w3yqnhy4fvawaqz";
   let validator: TonbridgeValidatorClient;
@@ -42,26 +43,46 @@ describe("Tree of Cells parser tests 1", () => {
     const cells = Cell.fromBoc(findBoc("set-validators"));
     const firstCell = Uint8Array.from(cells[0].hash(0));
     console.log("first cell hash: ", firstCell);
-    const bridgeDeployResult = await deployContract(client, sender, {}, "bridge-bridge", "cw-tonbridge-bridge");
+    const bridgeDeployResult = await deployContract(
+      client,
+      sender,
+      {},
+      "bridge-bridge",
+      "cw-tonbridge-bridge"
+    );
     const dummyTokenDeployResult = await deployContract(
       client,
       sender,
       {
         decimals: 6,
-        initial_balances: [{ address: sender, amount: toAmount(10000).toString() }],
+        initial_balances: [
+          { address: sender, amount: toAmount(10000).toString() },
+        ],
         name: "Dummy Token",
         symbol: "DUMMY",
         mint: {
-          minter: bridgeDeployResult.contractAddress
-        } as MinterResponse
+          minter: bridgeDeployResult.contractAddress,
+        } as MinterResponse,
       } as Cw20InstantiateMsg,
       "dummy-token",
       "oraiswap-token"
     );
 
-    validator = new TonbridgeValidatorClient(client, sender, validatorDeployResult.contractAddress);
-    bridge = new TonbridgeBridgeClient(client, sender, bridgeDeployResult.contractAddress);
-    dummyToken = new OraiswapTokenClient(client, sender, dummyTokenDeployResult.contractAddress);
+    validator = new TonbridgeValidatorClient(
+      client,
+      sender,
+      validatorDeployResult.contractAddress
+    );
+    bridge = new TonbridgeBridgeClient(
+      client,
+      sender,
+      bridgeDeployResult.contractAddress
+    );
+    dummyToken = new OraiswapTokenClient(
+      client,
+      sender,
+      dummyTokenDeployResult.contractAddress
+    );
 
     // FIXME: change denom & channel id to correct denom and channel id
     await bridge.updateMappingPair({
@@ -69,7 +90,7 @@ describe("Tree of Cells parser tests 1", () => {
       localAssetInfo: { token: { contract_addr: dummyToken.contractAddress } },
       localChannelId: "",
       localAssetInfoDecimals: 6,
-      remoteDecimals: 6
+      remoteDecimals: 6,
     });
   });
 
@@ -84,18 +105,30 @@ describe("Tree of Cells parser tests 1", () => {
   });
 
   it("after init contract the initital block should be verified", async () => {
-    expect(await validator.isVerifiedBlock({ rootHash: initialValidatorsBlockRootHash })).toEqual(true);
+    expect(
+      await validator.isVerifiedBlock({
+        rootHash: initialValidatorsBlockRootHash,
+      })
+    ).toEqual(true);
     let validators = (await queryAllValidators(validator))
       .filter((validator) => validator.c_type !== 0)
-      .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
+      .map((validator) => ({
+        ...validator,
+        node_id: "0x" + validator.node_id,
+        pubkey: "0x" + validator.pubkey,
+      }));
 
     validators.forEach((validator) => {
-      const item = initialValidatorsList.find((v) => v.node_id === validator.node_id);
+      const item = initialValidatorsList.find(
+        (v) => v.node_id === validator.node_id
+      );
       expect(item).not.toBeUndefined();
       expect(validator.pubkey).toEqual(item?.pubkey);
     });
 
-    validators = (await queryAllValidatorCandidates(validator)).filter((validator) => validator.c_type !== 0);
+    validators = (await queryAllValidatorCandidates(validator)).filter(
+      (validator) => validator.c_type !== 0
+    );
     expect(validators.length).toEqual(0);
   });
 
@@ -105,46 +138,64 @@ describe("Tree of Cells parser tests 1", () => {
 
     let validators = (await queryAllValidatorCandidates(validator))
       .filter((validator) => validator.c_type !== 0)
-      .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
+      .map((validator) => ({
+        ...validator,
+        node_id: "0x" + validator.node_id,
+        pubkey: "0x" + validator.pubkey,
+      }));
 
     expect(validators.length).toEqual(14);
 
     validators.forEach((validator) => {
-      const item = updateValidators.find((v) => v.node_id === validator.node_id);
+      const item = updateValidators.find(
+        (v) => v.node_id === validator.node_id
+      );
       expect(item).not.toBeUndefined();
       expect(validator.pubkey).toEqual(item?.pubkey);
     });
 
-    const signatures = data.find((el) => el.type === "proof-validators")!.signatures!;
+    const signatures = data.find((el) => el.type === "proof-validators")!
+      .signatures!;
 
     await validator.verifyKeyBlock({
-      rootHash: "0000000000000000000000000000000000000000000000000000000000000000",
+      rootHash:
+        "0000000000000000000000000000000000000000000000000000000000000000",
       fileHash: data.find((el) => el.type === "proof-validators")!.id!.fileHash,
-      vdata: signatures
+      vdata: signatures,
     });
 
     for (let i = 0; i < signatures.length; i++) {
       expect(
         await validator.isSignedByValidator({
           validatorNodeId: signatures[i].node_id,
-          rootHash: updateValidatorsRootHash
+          rootHash: updateValidatorsRootHash,
         })
       ).toEqual(true);
     }
-    expect(await validator.isVerifiedBlock({ rootHash: updateValidatorsRootHash })).toEqual(true);
+    expect(
+      await validator.isVerifiedBlock({ rootHash: updateValidatorsRootHash })
+    ).toEqual(true);
 
     validators = (await queryAllValidators(validator))
       .filter((validator) => validator.c_type !== 0)
-      .map((validator) => ({ ...validator, node_id: "0x" + validator.node_id, pubkey: "0x" + validator.pubkey }));
+      .map((validator) => ({
+        ...validator,
+        node_id: "0x" + validator.node_id,
+        pubkey: "0x" + validator.pubkey,
+      }));
 
     validators.forEach((validator) => {
-      const item = updateValidators.find((v) => v.node_id === validator.node_id);
+      const item = updateValidators.find(
+        (v) => v.node_id === validator.node_id
+      );
       expect(item).not.toBeUndefined();
       expect(validator.pubkey).toEqual(item?.pubkey);
     });
 
     // candidates now should be empty because we the list has been verified
-    validators = (await queryAllValidatorCandidates(validator)).filter((validator) => validator.c_type !== 0);
+    validators = (await queryAllValidatorCandidates(validator)).filter(
+      (validator) => validator.c_type !== 0
+    );
 
     expect(validators.length).toEqual(0);
   });
