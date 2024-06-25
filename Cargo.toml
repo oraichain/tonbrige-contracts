@@ -22,7 +22,6 @@ exclude = [
 cosmwasm-std = { version = "=1.2" }
 cosmwasm-schema = { version = "=1.2" }
 cosmwasm-storage = { version = "=1.2" }
-cosmwasm-vm = { version = "=1.2" }
 
 thiserror = "1.0.26"
 
@@ -34,16 +33,15 @@ cw-controllers = "1.0.1"
 cw-utils = "1.0.1"
 sha2 = "0.10.8"
 
-oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "03f4955b" }
-cw20-ics20-msg = { git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev = "0a33b5ade31419b82617d0b3ab7958899d9598b7" }
-
 tonbridge-parser = { path = "./packages/parser" }
 tonbridge-validator = { path = "./packages/validator" }
 tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./contracts/tonbridge_validator" }
+
+oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "f2c1cec" }
+cw20-ics20-msg = { git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev = "0e0258c" }
 tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "f9f15c8" }
 cw-multi-test = "0.16.6"
-bech32 = "0.11.0"
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/dalek-cryptography/curve25519-dalek.git' }
