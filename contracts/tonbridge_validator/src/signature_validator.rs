@@ -243,8 +243,13 @@ impl ISignatureValidator for SignatureValidator {
         let candidates_for_validator_set = get_signature_candidate_validators(storage)?;
         // if current validator_set is empty, check caller
         // else check votes
-        if val_set[0].weight == 0 {
+        if val_set.len() == 0 {
             return Err(StdError::generic_err("current validator_set is empty"));
+        }
+        if val_set[0].weight == 0 {
+            return Err(StdError::generic_err(
+                "current validator_set has zero weight",
+            ));
         }
 
         let mut current_weight = 0;
@@ -393,7 +398,7 @@ impl ISignatureValidator for SignatureValidator {
 
 #[cfg(test)]
 mod tests {
-    use cosmwasm_std::{testing::mock_dependencies, Api, HexBinary};
+    use cosmwasm_std::{testing::mock_dependencies, Api, HexBinary, StdError};
     use tonbridge_parser::{
         to_bytes32,
         types::{Bytes32, KeyBlockValidators, ValidatorDescription, Vdata},
@@ -661,5 +666,86 @@ mod tests {
             )
             .unwrap();
         assert_eq!(current_weight, 2);
+    }
+
+    #[test]
+    fn test_set_validator_set() {
+        let mut deps = mock_dependencies();
+        let mut sig_val = SignatureValidator::default();
+        let deps_mut = deps.as_mut();
+
+        // case 1: empty valset
+        let err = sig_val
+            .set_validator_set(deps_mut.storage, deps_mut.api)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            StdError::generic_err("current validator_set is empty").to_string()
+        );
+
+        // case 2: empty weight
+        let mut first_val = ValidatorDescription::default();
+        first_val.weight = 0;
+        first_val.node_id =
+            convert_byte32("80de0302ef8970b077e702b227a1bae646530b6b3630d1dd0d81541971757ff3");
+        validator_set()
+            .save(deps_mut.storage, &first_val.node_id, &first_val)
+            .unwrap();
+
+        let err = sig_val
+            .set_validator_set(deps_mut.storage, deps_mut.api)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            StdError::generic_err("current validator_set has zero weight").to_string()
+        );
+
+        // case 3, not enough votes
+        first_val.weight = 3;
+        validator_set()
+            .save(deps_mut.storage, &first_val.node_id, &first_val)
+            .unwrap();
+        sig_val.sum_largest_total_weights = 3;
+        let err = sig_val
+            .set_validator_set(deps_mut.storage, deps_mut.api)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            StdError::generic_err(&format!(
+                "not enough votes. Wanted {:?}; has {:?}",
+                sig_val.sum_largest_total_weights * 2,
+                0,
+            ))
+            .to_string()
+        );
+
+        // case 4: happy case
+        let root_hash =
+            convert_byte32("292edb12dadb1b56db5c44687bf1311dcac38089f8b895b11bf0c8fbd605989e");
+        let total_weight = 4;
+        SIGNED_BLOCKS
+            .save(
+                deps_mut.storage,
+                &[first_val.node_id, root_hash].concat(),
+                &true,
+            )
+            .unwrap();
+
+        SIGNATURE_CANDIDATE_VALIDATOR
+            .save(deps_mut.storage, 0, &first_val)
+            .unwrap();
+
+        sig_val.root_hash = root_hash;
+        sig_val.candidates_total_weight = total_weight;
+        sig_val.sum_largest_candidates_total_weights = total_weight;
+        let rh = sig_val
+            .set_validator_set(deps_mut.storage, deps_mut.api)
+            .unwrap();
+        assert_eq!(rh, root_hash);
+        assert_eq!(sig_val.root_hash, EMPTY_HASH);
+        assert_eq!(sig_val.total_weight, total_weight);
+        assert_eq!(sig_val.sum_largest_total_weights, total_weight);
+        assert_eq!(sig_val.candidates_total_weight, 0);
+        assert_eq!(sig_val.sum_largest_candidates_total_weights, 0);
     }
 }
