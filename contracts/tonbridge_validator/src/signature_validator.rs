@@ -223,7 +223,9 @@ impl ISignatureValidator for SignatureValidator {
 
         self.total_weight = self.candidates_total_weight;
         self.sum_largest_total_weights = self.sum_largest_candidates_total_weights;
+        self.has_next = self.has_candidate_next;
 
+        self.has_candidate_next = false;
         self.candidates_total_weight = 0;
         self.sum_largest_candidates_total_weights = 0;
         let rh = self.root_hash;

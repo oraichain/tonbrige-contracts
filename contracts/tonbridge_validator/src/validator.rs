@@ -135,6 +135,7 @@ impl Validator {
             verified: true,
             ..Default::default()
         };
+
         VERIFIED_BLOCKS.save(
             storage,
             root_hash_from_block_header.as_slice().try_into()?,
@@ -286,13 +287,16 @@ impl IValidator for Validator {
 #[cfg(test)]
 mod tests {
 
+    use cosmwasm_schema::cw_serde;
     use cosmwasm_std::{testing::mock_dependencies, HexBinary};
-    use tonbridge_parser::types::{Bytes32, Vdata, VerifiedBlockInfo};
+    use tonbridge_parser::types::VerifiedBlockInfo;
 
     use super::Validator;
 
     const BLOCK_BOCS_SMALL: &str = include_str!("testing/testdata/bocs.hex");
     const BLOCK_BOCS_LARGE: &str = include_str!("testing/testdata/bocs_large.hex");
+    const KEY_BLOCK_WITH_NEXT_VAL: &str =
+        include_str!("testing/testdata/keyblock_with_next_val.hex");
 
     #[test]
     fn test_default_verified_blocks_info() {
@@ -357,9 +361,26 @@ mod tests {
             .into_iter()
             .filter(|c| c.c_type != 0)
             .collect();
+
         validator.init_validators(deps.as_mut().storage).unwrap();
 
         // choose two random indexes for testing
-        assert_eq!(validators.len(), 677usize);
+        assert_eq!(validators.len(), 732usize);
+    }
+
+    #[test]
+    fn test_candidate_root_block_large_with_next_validator() {
+        let mut deps = mock_dependencies();
+        let boc = HexBinary::from_hex(KEY_BLOCK_WITH_NEXT_VAL)
+            .unwrap()
+            .to_vec();
+
+        let mut validator = Validator::default();
+        validator
+            .parse_candidates_root_block(deps.as_mut().storage, &boc)
+            .unwrap();
+
+        validator.init_validators(deps.as_mut().storage).unwrap();
+        assert_eq!(validator.signature_validator.has_next, true)
     }
 }

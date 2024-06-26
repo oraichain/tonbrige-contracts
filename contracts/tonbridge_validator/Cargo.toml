@@ -29,3 +29,6 @@ tonbridge-parser = { workspace = true }
 tonbridge-validator = { workspace = true }
 thiserror = { workspace = true }
 tonlib = { workspace = true }
+
+[dev-dependencies]
+serde-json-wasm = "1.0.1"
