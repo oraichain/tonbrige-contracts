@@ -314,12 +314,6 @@ impl ISignatureValidator for SignatureValidator {
         let first_root = cells.single_root()?;
         // set root hash as the hash of the first root
         self.root_hash = first_root.get_hash(0).as_slice().try_into()?;
-        let mut parser = first_root.parser();
-
-        // magic number
-        parser.load_u32(32)?;
-        // global id
-        parser.load_i32(32)?;
         let block_extra = first_root
             .load_ref_if_exist(ref_index, Some(Cell::load_block_extra))?
             .0;
@@ -404,8 +398,17 @@ mod tests {
         types::{Bytes32, KeyBlockValidators, ValidatorDescription, Vdata},
         EMPTY_HASH,
     };
+    use tonlib::{
+        cell::TonCellError,
+        responses::{
+            ConfigParam, ConfigParams, ConfigParamsValidatorSet, ValidatorDescr, Validators,
+        },
+    };
 
-    use crate::state::{validator_set, SIGNATURE_CANDIDATE_VALIDATOR, SIGNED_BLOCKS};
+    use crate::{
+        error::ContractError,
+        state::{validator_set, SIGNATURE_CANDIDATE_VALIDATOR, SIGNED_BLOCKS},
+    };
 
     use super::{ISignatureValidator, SignatureValidator};
 
@@ -753,5 +756,44 @@ mod tests {
                 .pubkey,
             first_val.pubkey
         );
+    }
+
+    #[test]
+    fn test_load_validator_from_config_param() {
+        let mut config_params = ConfigParams::default();
+
+        // case 1: config param not found
+        let err =
+            SignatureValidator::load_validator_from_config_param(&config_params, 36).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            ContractError::TonCellError(TonCellError::cell_parser_error(
+                "Validation infos not found"
+            ))
+            .to_string()
+        );
+
+        // case 2: has param number 36
+        let mut validators = Validators::default();
+        let mut val_descr = ValidatorDescr::default();
+        val_descr.public_key =
+            convert_byte32("292edb12dadb1b56db5c44687bf1311dcac38089f8b895b11bf0c8fbd605989e")
+                .to_vec();
+        val_descr.adnl_addr = val_descr.public_key.clone();
+        validators.list.insert("0".to_string(), val_descr.clone());
+        config_params.config.insert(
+            "24".to_string(),
+            Some(ConfigParam::ConfigParams36(ConfigParamsValidatorSet {
+                number: 36,
+                validators,
+            })),
+        );
+
+        let validator_set =
+            SignatureValidator::load_validator_from_config_param(&config_params, 36).unwrap();
+
+        assert_eq!(validator_set.len(), 1);
+        assert_eq!(validator_set[0].pubkey.to_vec(), val_descr.public_key);
     }
 }

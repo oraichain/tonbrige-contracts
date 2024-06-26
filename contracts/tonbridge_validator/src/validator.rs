@@ -291,8 +291,8 @@ mod tests {
 
     use super::Validator;
 
-    const BOCS: &str = include_str!("testing/testdata/bocs.hex");
-    const BOCS_LARGE: &str = include_str!("testing/testdata/bocs_large.hex");
+    const BLOCK_BOCS_SMALL: &str = include_str!("testing/testdata/bocs.hex");
+    const BLOCK_BOCS_LARGE: &str = include_str!("testing/testdata/bocs_large.hex");
 
     #[test]
     fn test_default_verified_blocks_info() {
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn test_candidate_root_block() {
         let mut deps = mock_dependencies();
-        let boc = HexBinary::from_hex(BOCS).unwrap().to_vec();
+        let boc = HexBinary::from_hex(BLOCK_BOCS_SMALL).unwrap().to_vec();
 
         let mut validator = Validator::default();
         validator
@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn test_candidate_root_block_large() {
         let mut deps = mock_dependencies();
-        let boc = HexBinary::from_hex(BOCS_LARGE).unwrap().to_vec();
+        let boc = HexBinary::from_hex(BLOCK_BOCS_LARGE).unwrap().to_vec();
 
         let mut validator = Validator::default();
         validator

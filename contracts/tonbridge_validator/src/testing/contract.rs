@@ -17,13 +17,12 @@ mod tests {
         validator::Validator,
     };
 
-    const BOCS: &str = include_str!("testdata/bocs.hex");
-    const BOCS_LARGE: &str = include_str!("testdata/bocs_large.hex");
+    const BLOCK_BOCS_SMALL: &str = include_str!("testdata/bocs.hex");
 
     #[test]
     fn test_prepare_new_key_block() {
         let mut deps = mock_dependencies();
-        let boc = HexBinary::from_hex(BOCS).unwrap();
+        let boc = HexBinary::from_hex(BLOCK_BOCS_SMALL).unwrap();
 
         VALIDATOR
             .save(deps.as_mut().storage, &Validator::default())
@@ -75,7 +74,7 @@ mod tests {
     #[test]
     fn test_verify_key_block() {
         let mut deps = mock_dependencies();
-        let boc = HexBinary::from_hex(BOCS).unwrap();
+        let boc = HexBinary::from_hex(BLOCK_BOCS_SMALL).unwrap();
 
         VALIDATOR
             .save(deps.as_mut().storage, &Validator::default())
@@ -128,7 +127,7 @@ mod tests {
     #[test]
     fn test_reset_validator_set() {
         let mut deps = mock_dependencies();
-        let boc = HexBinary::from_hex(BOCS).unwrap();
+        let boc = HexBinary::from_hex(BLOCK_BOCS_SMALL).unwrap();
 
         VALIDATOR
             .save(deps.as_mut().storage, &Validator::default())
