@@ -347,7 +347,7 @@ impl ISignatureValidator for SignatureValidator {
         let config_param = config_params.config.get(&format!("{:02x}", param_number));
         if config_param.is_none() {
             return Err(ContractError::TonCellError(
-                TonCellError::cell_parser_error("Validation infos not found"),
+                TonCellError::cell_parser_error("config param not found"),
             ));
         }
         let config_param = config_param.unwrap();
@@ -768,13 +768,23 @@ mod tests {
 
         assert_eq!(
             err.to_string(),
+            ContractError::TonCellError(TonCellError::cell_parser_error("config param not found"))
+                .to_string()
+        );
+
+        // case 2: has param number 36 but no config param
+        config_params.config.insert("24".to_string(), None);
+        let err =
+            SignatureValidator::load_validator_from_config_param(&config_params, 36).unwrap_err();
+        assert_eq!(
+            err.to_string(),
             ContractError::TonCellError(TonCellError::cell_parser_error(
                 "Validation infos not found"
             ))
             .to_string()
         );
 
-        // case 2: has param number 36
+        // case 3: happy case
         let mut validators = Validators::default();
         let mut val_descr = ValidatorDescr::default();
         val_descr.public_key =
