@@ -550,6 +550,8 @@ mod tests {
             HexBinary::from_hex("5d5215c4dd5e2dc3e8b0640339303135cd7296c577e37d1f0e1781cde6fb9629")
                 .unwrap();
         let total_weight = 2;
+        let first_candidate_pubkey =
+            convert_byte32("3827e3ec4a5b93141efb9ced816d13248bf1fa1506f03b5a69e109657682e12c");
 
         SIGNATURE_CANDIDATE_VALIDATOR
             .save(
@@ -559,20 +561,8 @@ mod tests {
                     c_type: 1,
                     weight: total_weight,
                     adnl_addr: EMPTY_HASH,
-                    pubkey: to_bytes32(
-                        &HexBinary::from_hex(
-                            "3827e3ec4a5b93141efb9ced816d13248bf1fa1506f03b5a69e109657682e12c",
-                        )
-                        .unwrap(),
-                    )
-                    .unwrap(),
-                    node_id: to_bytes32(
-                        &HexBinary::from_hex(
-                            "3827e3ec4a5b93141efb9ced816d13248bf1fa1506f03b5a69e109657682e12c",
-                        )
-                        .unwrap(),
-                    )
-                    .unwrap(),
+                    pubkey: first_candidate_pubkey,
+                    node_id: first_candidate_pubkey,
                 },
             )
             .unwrap();
@@ -590,6 +580,14 @@ mod tests {
         assert_eq!(sig_val.total_weight, total_weight);
         assert_eq!(sig_val.sum_largest_total_weights, total_weight);
         assert_eq!(sig_val.sum_largest_candidates_total_weights, 0);
+
+        assert_eq!(
+            validator_set()
+                .load(deps.as_mut().storage, &first_candidate_pubkey)
+                .unwrap()
+                .pubkey,
+            first_candidate_pubkey
+        );
     }
 
     #[test]
@@ -747,5 +745,13 @@ mod tests {
         assert_eq!(sig_val.sum_largest_total_weights, total_weight);
         assert_eq!(sig_val.candidates_total_weight, 0);
         assert_eq!(sig_val.sum_largest_candidates_total_weights, 0);
+
+        assert_eq!(
+            validator_set()
+                .load(deps.as_mut().storage, &first_val.node_id)
+                .unwrap()
+                .pubkey,
+            first_val.pubkey
+        );
     }
 }
