@@ -4,7 +4,7 @@ use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
-use crate::state::TokenFee;
+use crate::state::{MappingMetadata, TokenFee};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -24,6 +24,7 @@ pub enum ExecuteMsg {
         tx_boc: HexBinary, // in hex form
     },
     UpdateMappingPair(UpdatePairMsg),
+    DeleteMappingPair(DeletePairMsg),
     BridgeToTon(BridgeToTonMsg),
     Receive(Cw20ReceiveMsg),
     SubmitBridgeToTonInfo {
@@ -57,6 +58,13 @@ pub struct UpdatePairMsg {
 }
 
 #[cw_serde]
+pub struct DeletePairMsg {
+    pub local_channel_id: String,
+    /// native denom of the remote chain. Eg: orai
+    pub denom: String,
+}
+
+#[cw_serde]
 pub struct BridgeToTonMsg {
     pub local_channel_id: String, // default channel-0
     pub to: String,
@@ -67,15 +75,7 @@ pub struct BridgeToTonMsg {
 
 /// We currently take no arguments for migrations
 #[cw_serde]
-pub struct MigrateMsg {
-    pub validator_contract_addr: Addr,
-    pub bridge_adapter: String,
-    pub relayer_fee_token: AssetInfo,
-    pub token_fee_receiver: Addr,
-    pub relayer_fee_receiver: Addr,
-    pub relayer_fee: Option<Uint128>,
-    pub swap_router_contract: String,
-}
+pub struct MigrateMsg {}
 
 #[cw_serde]
 #[derive(QueryResponses)]
@@ -89,6 +89,16 @@ pub enum QueryMsg {
     /// Returns the details of the name channel, error if not created.
     #[returns(ChannelResponse)]
     ChannelStateData { channel_id: String },
+    #[returns(crate::state::Ratio)]
+    TokenFee { remote_token_denom: String },
+    #[returns(PairQuery)]
+    PairMapping { key: String },
+}
+
+#[cw_serde]
+pub struct PairQuery {
+    pub key: String,
+    pub pair_mapping: MappingMetadata,
 }
 
 /// The format for sending an ics20 packet.

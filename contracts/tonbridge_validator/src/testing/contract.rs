@@ -446,6 +446,76 @@ mod tests {
     }
 
     #[test]
+    fn test_set_verified_block() {
+        let mut deps = mock_dependencies();
+
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InstantiateMsg { boc: None },
+        )
+        .unwrap();
+
+        let root_hash =
+            HexBinary::from_hex("f7a9db0094cdcb49e027f44e85ce4af164d8acaef2c0c2feaba1577a1d0091d1")
+                .unwrap();
+        // set failed, no admin
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("relayer", &vec![]),
+            ExecuteMsg::SetVerifiedBlock {
+                root_hash: root_hash.clone(),
+                seq_no: 100,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Generic error: Caller is not admin".to_string()
+        );
+
+        // set success
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &vec![]),
+            ExecuteMsg::SetVerifiedBlock {
+                root_hash: root_hash.clone(),
+                seq_no: 100,
+            },
+        )
+        .unwrap();
+        let verified_block_info = VerifiedBlockInfo {
+            verified: true,
+            seq_no: 100,
+            ..Default::default()
+        };
+        assert_eq!(
+            VERIFIED_BLOCKS
+                .load(deps.as_mut().storage, &to_bytes32(&root_hash).unwrap())
+                .unwrap(),
+            verified_block_info
+        );
+
+        // set failed, block already verified
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &vec![]),
+            ExecuteMsg::SetVerifiedBlock {
+                root_hash: root_hash.clone(),
+                seq_no: 100,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Generic error: block already verified".to_string()
+        );
+    }
+    #[test]
     fn test_verify_master_chain_block() {
         // https://scan.orai.io/txs/87D34F1686292B1B34EEDD36EA0D6345035C5EC2D5BA2219AA5292ECA03351DB
         let mut deps = mock_dependencies();
@@ -487,6 +557,21 @@ mod tests {
             HexBinary::from_hex("36f5e7b74e779744135fa533b18da8a7649786eaf43be6b770d211e28b6493e8")
                 .unwrap();
 
+        // case 1: verify false, not enough vote
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &vec![]),
+            ExecuteMsg::VerifyMasterchainBlockByValidatorSignatures {
+                block_header_proof: block_header.clone(),
+                file_hash: file_hash.clone(),
+                vdata: v_data_hex[0..v_data_hex.len() / 3].to_vec(),
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("not enough votes to verify block"));
+
+        // case 2: verify success
         execute(
             deps.as_mut(),
             mock_env(),

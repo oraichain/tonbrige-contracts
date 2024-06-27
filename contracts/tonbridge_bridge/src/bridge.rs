@@ -255,33 +255,6 @@ impl Bridge {
         Ok((cosmos_msgs, attributes))
     }
 
-    pub fn validate_basic_ics20_packet(
-        packet: &Ics20Packet,
-        amount: &Uint128,
-        denom: &str,
-        sender: &str,
-    ) -> StdResult<()> {
-        if packet.amount.ne(amount) {
-            return Err(StdError::generic_err(format!(
-                "Sent amount {:?} is not equal to amount given in boc, which is {:?}",
-                amount, packet.amount
-            )));
-        }
-        if packet.denom.ne(denom) {
-            return Err(StdError::generic_err(format!(
-                "Denom {:?} is not equal to denom given in boc, which is {:?}",
-                denom, packet.denom
-            )));
-        }
-        if packet.sender.ne(sender) {
-            return Err(StdError::generic_err(format!(
-                "Sender {:?} is not equal to sender given in boc, which is {:?}",
-                sender, packet.sender
-            )));
-        }
-        Ok(())
-    }
-
     pub fn handle_bridge_to_ton(
         deps: DepsMut,
         env: Env,

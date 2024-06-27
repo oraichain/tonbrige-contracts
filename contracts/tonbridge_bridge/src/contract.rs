@@ -8,8 +8,8 @@ use cw_utils::{nonpayable, one_coin};
 use oraiswap::asset::AssetInfo;
 use oraiswap::router::RouterController;
 use tonbridge_bridge::msg::{
-    BridgeToTonMsg, ChannelResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
-    UpdatePairMsg,
+    BridgeToTonMsg, ChannelResponse, DeletePairMsg, ExecuteMsg, InstantiateMsg, MigrateMsg,
+    PairQuery, QueryMsg, UpdatePairMsg,
 };
 use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
 use tonbridge_bridge::state::{Config, MappingMetadata, SendPacket, TokenFee};
@@ -81,6 +81,7 @@ pub fn execute(
             read_transaction(deps, env, tx_proof, tx_boc)
         }
         ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, env, &info.sender, msg),
+        ExecuteMsg::DeleteMappingPair(msg) => execute_delete_mapping_pair(deps, env, info, msg),
         ExecuteMsg::BridgeToTon(msg) => {
             let coin = one_coin(&info)?;
             let amount = Amount::from_parts(coin.denom, coin.amount);
@@ -206,6 +207,29 @@ pub fn update_mapping_pair(
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
 }
 
+pub fn execute_delete_mapping_pair(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    mapping_pair_msg: DeletePairMsg,
+) -> Result<Response, ContractError> {
+    OWNER.assert_admin(deps.as_ref(), &info.sender)?;
+
+    let ibc_denom = get_key_ics20_ibc_denom(
+        &parse_ibc_wasm_port_id(env.contract.address.as_str()),
+        &mapping_pair_msg.local_channel_id,
+        &mapping_pair_msg.denom,
+    );
+
+    ics20_denoms().remove(deps.storage, &ibc_denom)?;
+
+    let res = Response::new()
+        .add_attribute("action", "execute_delete_mapping_pair")
+        .add_attribute("local_channel_id", mapping_pair_msg.local_channel_id)
+        .add_attribute("original_denom", mapping_pair_msg.denom);
+    Ok(res)
+}
+
 pub fn execute_receive(
     deps: DepsMut,
     env: Env,
@@ -262,8 +286,12 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Owner {} => to_binary(&OWNER.query_admin(deps)?.admin),
         QueryMsg::Config {} => to_binary(&get_config(deps)?),
+        QueryMsg::TokenFee { remote_token_denom } => {
+            to_binary(&TOKEN_FEE.load(deps.storage, &remote_token_denom)?)
+        }
         QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
         QueryMsg::ChannelStateData { channel_id } => to_binary(&query_channel(deps, channel_id)?),
+        QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
     }
 }
 
@@ -301,19 +329,15 @@ pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelRespons
     })
 }
 
+fn get_mapping_from_key(deps: Deps, ibc_denom: String) -> StdResult<PairQuery> {
+    let result = ics20_denoms().load(deps.storage, &ibc_denom)?;
+    Ok(PairQuery {
+        key: ibc_denom,
+        pair_mapping: result,
+    })
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
-    CONFIG.save(
-        deps.storage,
-        &Config {
-            validator_contract_addr: msg.validator_contract_addr,
-            bridge_adapter: msg.bridge_adapter,
-            relayer_fee_token: msg.relayer_fee_token,
-            token_fee_receiver: msg.token_fee_receiver,
-            relayer_fee_receiver: msg.relayer_fee_receiver,
-            relayer_fee: msg.relayer_fee.unwrap_or_default(),
-            swap_router_contract: RouterController(msg.swap_router_contract),
-        },
-    )?;
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     Ok(Response::default())
 }
