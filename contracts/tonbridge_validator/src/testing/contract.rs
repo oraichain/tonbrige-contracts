@@ -10,6 +10,7 @@ mod tests {
     use cw_controllers::AdminError;
     use std::{fs::File, io::Read};
     use tonbridge_parser::{
+        to_bytes32,
         types::{Bytes32, VdataHex, VerifiedBlockInfo},
         EMPTY_HASH,
     };
@@ -471,7 +472,10 @@ mod tests {
 
     #[test]
     fn test_verify_shard_block() {
-        //https://scan.orai.io/txs/CBAF849259540943A1744125A170A40E811CDDAC7CB37E33459089D24808159A
+        // seqno: 43884169,
+        // shard: "2000000000000000",
+        // workchain: 0,
+
         let mut deps = mock_dependencies();
         VALIDATOR
             .save(deps.as_mut().storage, &Validator::default())
@@ -481,7 +485,9 @@ mod tests {
             .set(deps.as_mut(), Some(Addr::unchecked("admin")))
             .unwrap();
 
-        let shard_proof_links =  vec![HexBinary::from_hex("b5ee9c720102100100021f00094603f7a9db0094cdcb49e027f44e85ce4af164d8acaef2c0c2feaba1577a1d0091d1001601241011ef55aaffffff110203040528480101905221fe224f53b5280218e04d4bff53580cda37eef65cb6552f23f120feb3a7000128480101ddd42acf06126e1d8942bdb8080fdd97a7dae4d6df7880ee9625d69da1502a7d000328480101c06d83c70ff5d12aaa77b27af0393eab021f23560233752485aa27f3f0f89b34001524894a33f6fd06e1c1b9977c7e4d70cee9d1f03b0296ee9eed2fa5ae53b6af013110e3ba7142f6b51f5af132fb679b880f948118527384b5c963eb79ed712b7393f075da3c5ec00607080928480101e5c2351f39f162b4ed171487762bfa80fdcb0b97ed56bc32b3f70a45e6648a2d000400010228480101e5bd1283a2f8b22826ac42d96d13fe42f9c1564158733312ce62d5db62ae033300062317cca568e933962a43b9aca0040a0b0c0103d0400d003fb000000000400000000000000023a4ce58a90ee6b28008e933962a43b9aca0042101500f01db5015172c101268c718000158733090f400000158733090f50810d87a0df0b9c369b6aff857495a5734b96abb63dcd160992cc28c770fdbcc88f51460eaf31c824e2e4a685576d8a4a44775d38bd02b81892e6e9ff32b340f78000046d9ec00000000000000001268c6fb33dc5a1a0e001347499cb1521dcd65002028480101a06136b8165a8c76a521df114d69b8f17af3dfb6bed0f0cc7e66dff1ace379750003").unwrap()];
+        let shard_proof_links =  vec![
+        HexBinary::from_hex("b5ee9c720102140100027a000946039b12663e48d24513dbf303d547e6e6e10b2d637cd11600e78420bf0aed1aad2d001601241011ef55aaffffff110203040528480101a61819c2bcd15aa09958881e6cca7f84ca04aa7d118b237c96519a09446d7b8f00012848010138bf381cf9b9df9f314f1b4dc74127d398814111003bf484502ff419c414a40a0003284801015728228d3059dc5da4c5c0f6a54f8cb0d5a3d15a289d3ea9f4a8810f366be367001524894a33f6fd21a7dee602fb675d6f1144f565e364ae3db6bada5187e98275f39be72b9577bb247071c3e769233d398adc88fdedb2dba7208da38330c4cc0d0a6af3bac2a8a7c00607080928480101b43ef3d7c8e55e1f1510c1855e91323fb3521e63f851300cb3f214261be602eb0004000102284801010f8995cdfdd409bb3d03426397ec1ffc59a4931674ab7b66928dbcfe80b030b600062319cca56a03355600fa49502f90040a0b0c2103d0400d28480101f9ab2fd8292b1eda69d5a9ff670a50bc453989f2c3f746934941e7af5c26ec6a0003210150132201c00e0f2201c010112848010195f2c2c66de2c0ab069b146a5d965907a1cb41e627fb83e6517914dd3ec61e5e000301db5014ecf450123906980001555f0c75a0000001555f0c75a1faea90ae26eaf16e1f45832019c98189ae6b94b62bbf1be8f870bc0e6f37dcb14baf84c282d346327a7fc7b6a54deb707ced7b13a97c939954871045b78e7a51f0000045f8d900000000000000001239068b33061a3a1228480101f4f492b7fed135c3515e810152abc0b0473d4a98f405e79c210b2e21b54ced4100010013468c16d6020ee6b2802028480101c8e6b152e6d84bd2e285d365b1e282838d323e0d6ec730175937d6e4a5de0a2e0003").unwrap(),
+        HexBinary::from_hex("b5ee9c7201020801000196000946035d5215c4dd5e2dc3e8b0640339303135cd7296c577e37d1f0e1781cde6fb9629002401241011ef55aaffffff110203040502a09bc7a987000000008001029d9e8a00000001020000000000000000000000006660c34700002aabe18eb40000002aabe18eb43f6f2862d90008bf1b024720d1024711a2c400000007000000000000002e060728480101faf730fbb08aaab8721ee97b13cf7485ddae96d85c8b452606235b7b217e13110002284801010ecfb0afaa56b64afbfcc02bb61b265b54ca24160fffc027a284a08fbf65b9930023284801012505df179b67dc3f8aeeaaa30e6c84776a1970a2bc66005740391d237bb17951001c009800002aabe17f71c4024720d121f89a9e980239acda21facfd549b6fe51a3017be24968197ead7010b301e4a7ef87287d5a3664e7959973a88d6c1913d7dba36ec68e2992b43acbc2f10b91ea009800002aabe17f71fa029d9e890299328dbd84b0ece362aec8cb04f89f7f21b1908dd55542ae9983914d81b7d1e2c3fa09a489788cb156f769cd52eec583817e37752a86e53f042e2ee8782158").unwrap()];
         let mc_block_root_hash =
             HexBinary::from_hex("f7a9db0094cdcb49e027f44e85ce4af164d8acaef2c0c2feaba1577a1d0091d1")
                 .unwrap();
@@ -492,7 +498,7 @@ mod tests {
             ..Default::default()
         };
         // case 1, mc_block_root_hash not verify
-        execute(
+        let err = execute(
             deps.as_mut(),
             mock_env(),
             mock_info("admin", &vec![]),
@@ -502,11 +508,39 @@ mod tests {
             },
         )
         .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Generic error: masterchain block root hash is not verified".to_string()
+        );
 
-        // case 2: success
+        // case 2: merkle proof not verified
         VERIFIED_BLOCKS
             .save(deps.as_mut().storage, &root_hash, &verified_block_info)
             .unwrap();
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &vec![]),
+            ExecuteMsg::VerifyShardBlocks {
+                shard_proof_links: shard_proof_links.clone(),
+                mc_block_root_hash: mc_block_root_hash.clone(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Generic error: merkle proof not verified".to_string()
+        );
+
+        // case 3: verify success
+        let mc_block_root_hash =
+            HexBinary::from_hex("9b12663e48d24513dbf303d547e6e6e10b2d637cd11600e78420bf0aed1aad2d")
+                .unwrap();
+        let root_hash: Bytes32 = mc_block_root_hash.as_slice().try_into().unwrap();
+        VERIFIED_BLOCKS
+            .save(deps.as_mut().storage, &root_hash, &verified_block_info)
+            .unwrap();
+
         execute(
             deps.as_mut(),
             mock_env(),
@@ -517,5 +551,28 @@ mod tests {
             },
         )
         .unwrap();
+
+        let verified_block_info = VerifiedBlockInfo {
+            verified: true,
+            seq_no: 43884169,
+            start_lt: 0,
+            end_lt: 46917711000058,
+            ..Default::default()
+        };
+        assert_eq!(
+            VERIFIED_BLOCKS
+                .load(
+                    deps.as_mut().storage,
+                    &to_bytes32(
+                        &HexBinary::from_hex(
+                            "0299328dbd84b0ece362aec8cb04f89f7f21b1908dd55542ae9983914d81b7d1"
+                        )
+                        .unwrap()
+                    )
+                    .unwrap()
+                )
+                .unwrap(),
+            verified_block_info
+        );
     }
 }
