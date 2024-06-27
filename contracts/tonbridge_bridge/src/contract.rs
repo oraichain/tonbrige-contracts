@@ -1,4 +1,6 @@
-use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
+#[cfg(not(feature = "library"))]
+use cosmwasm_std::entry_point;
+use cosmwasm_std::{from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;

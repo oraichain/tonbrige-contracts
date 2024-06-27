@@ -1,6 +1,9 @@
+#[cfg(not(feature = "library"))]
+use cosmwasm_std::entry_point;
+
 use std::array::TryFromSliceError;
 
-use cosmwasm_std::{entry_point, to_binary, Addr, HexBinary, Order, StdError};
+use cosmwasm_std::{to_binary, Addr, HexBinary, Order, StdError};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw_storage_plus::Bound;
 use tonbridge_parser::to_bytes32;

@@ -4,7 +4,7 @@ use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
-use crate::state::{Config, TokenFee};
+use crate::state::TokenFee;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -82,7 +82,7 @@ pub struct MigrateMsg {
 pub enum QueryMsg {
     #[returns(String)]
     Owner {},
-    #[returns(Config)]
+    #[returns(crate::state::Config)]
     Config {},
     #[returns(bool)]
     IsTxProcessed { tx_hash: HexBinary },
