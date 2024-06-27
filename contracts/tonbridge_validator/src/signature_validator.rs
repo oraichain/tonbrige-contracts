@@ -629,7 +629,7 @@ mod tests {
             convert_byte32("dfd3c0f265e62f340cb8020a0a3b5d0503d71ca84d5f40b2372e858147c03ba1");
 
         let mut deps = mock_dependencies();
-        let mut validator = SignatureValidator::default();
+        let validator = SignatureValidator::default();
 
         // case 1: current weight should be 0 since there's no validator set stored yet matching these signatures
         let current_weight = validator

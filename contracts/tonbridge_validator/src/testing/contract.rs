@@ -13,10 +13,12 @@ mod tests {
         types::{Bytes32, VdataHex, VerifiedBlockInfo},
         EMPTY_HASH,
     };
-    use tonbridge_validator::msg::{ExecuteMsg, QueryMsg, UserFriendlyValidator};
+    use tonbridge_validator::msg::{
+        ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, UserFriendlyValidator,
+    };
 
     use crate::{
-        contract::{execute, query},
+        contract::{execute, instantiate, query},
         error::ContractError,
         state::{OWNER, VALIDATOR, VERIFIED_BLOCKS},
         validator::Validator,
@@ -25,12 +27,70 @@ mod tests {
     const BLOCK_BOCS_SMALL: &str = include_str!("testdata/bocs.hex");
     const BLOCK_BOCS_LARGE: &str = include_str!("testdata/bocs_large.hex");
     const KEY_BLOCK_WITH_NEXT_VAL: &str = include_str!("testdata/keyblock_with_next_val.hex");
+    const NEW_KEYBLOCK_BOCS: &str = include_str!("testdata/new_keyblock_bocs.hex");
 
     #[cw_serde]
     pub struct VdataSring {
         node_id: String,
         r: String,
         s: String,
+    }
+
+    #[test]
+    fn test_instantiate_contract() {
+        let mut deps = mock_dependencies();
+        let boc = HexBinary::from_hex(BLOCK_BOCS_SMALL).unwrap();
+
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InstantiateMsg { boc: Some(boc) },
+        )
+        .unwrap();
+
+        let validators_bin = query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::GetValidators {
+                start_after: None,
+                limit: Some(30),
+                order: None,
+            },
+        )
+        .unwrap();
+
+        let validators: Vec<UserFriendlyValidator> = from_binary(&validators_bin).unwrap();
+
+        // choose two random indexes for testing
+        assert_eq!(
+            validators
+                .iter()
+                .find(|val| val.pubkey.to_hex()
+                    == "89462f768d318759a230f72ef92bdbcd02a09c791d40e6a01a53f42409e248a1"
+                        .to_string())
+                .is_some(),
+            true,
+        );
+        assert_eq!(
+            validators
+                .iter()
+                .find(|val| val.pubkey.to_hex()
+                    == "76627b87a5717e9caab3a8044a8f75fd8da98b512c057e56defea91529f9b573"
+                        .to_string())
+                .is_some(),
+            true,
+        );
+        assert_eq!(validators.len(), 14usize);
+
+        let config: ConfigResponse =
+            from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+        assert_eq!(
+            config,
+            ConfigResponse {
+                owner: Some("admin".to_string())
+            }
+        )
     }
 
     #[test]
@@ -89,6 +149,7 @@ mod tests {
     fn test_verify_key_block() {
         let mut deps = mock_dependencies();
         let boc = HexBinary::from_hex(BLOCK_BOCS_SMALL).unwrap();
+        let next_boc = HexBinary::from_hex(NEW_KEYBLOCK_BOCS).unwrap();
 
         VALIDATOR
             .save(deps.as_mut().storage, &Validator::default())
@@ -116,7 +177,9 @@ mod tests {
             deps.as_mut(),
             mock_env(),
             mock_info("relayer", &vec![]),
-            ExecuteMsg::PrepareNewKeyBlock { keyblock_boc: boc },
+            ExecuteMsg::PrepareNewKeyBlock {
+                keyblock_boc: boc.clone(),
+            },
         )
         .unwrap();
 
@@ -136,6 +199,114 @@ mod tests {
             err.to_string(),
             ContractError::Std(StdError::generic_err("wrong root_hash or file_hash")).to_string()
         );
+
+        // -----case3: happy case-----
+
+        // first init validator
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InstantiateMsg { boc: Some(boc) },
+        )
+        .unwrap();
+        // prepare new key_block
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("relayer", &vec![]),
+            ExecuteMsg::PrepareNewKeyBlock {
+                keyblock_boc: next_boc,
+            },
+        )
+        .unwrap();
+
+        let mut file = File::open("src/testing/testdata/new_keyblock_sig.json").unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        let v_data_string: Vec<VdataSring> = serde_json_wasm::from_str(&contents).unwrap();
+        let root_hash =
+            HexBinary::from_hex("292edb12dadb1b56db5c44687bf1311dcac38089f8b895b11bf0c8fbd605989e")
+                .unwrap();
+        let file_hash =
+            HexBinary::from_hex("dfd3c0f265e62f340cb8020a0a3b5d0503d71ca84d5f40b2372e858147c03ba1")
+                .unwrap();
+
+        //parse vdata string to vdata hex
+        let v_data_hex: Vec<VdataHex> = v_data_string
+            .iter()
+            .map(|item| VdataHex {
+                node_id: HexBinary::from_hex(&item.node_id).unwrap(),
+                r: HexBinary::from_hex(&item.r).unwrap(),
+                s: HexBinary::from_hex(&item.s).unwrap(),
+            })
+            .collect();
+
+        // verify failed, not enough voting power
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("relayer", &vec![]),
+            ExecuteMsg::VerifyKeyBlock {
+                root_hash: root_hash.clone(),
+                file_hash: file_hash.clone(),
+                vdata: v_data_hex[0..v_data_hex.len() / 3].to_vec(),
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("not enough votes"));
+        // before verify success, query  failed
+        let is_verified_block: bool = from_binary(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::IsVerifiedBlock {
+                    root_hash: root_hash.clone(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(is_verified_block, false);
+
+        // verify success
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("relayer", &vec![]),
+            ExecuteMsg::VerifyKeyBlock {
+                root_hash: root_hash.clone(),
+                file_hash,
+                vdata: v_data_hex.clone(),
+            },
+        )
+        .unwrap();
+
+        // pick random validator and ensure they are signed
+        let is_signed_by_validator: bool = from_binary(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::IsSignedByValidator {
+                    validator_node_id: v_data_hex[0].node_id.clone(),
+                    root_hash: root_hash.clone(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(is_signed_by_validator, true);
+
+        let is_verified_block: bool = from_binary(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::IsVerifiedBlock { root_hash },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(is_verified_block, true);
     }
 
     #[test]

@@ -287,7 +287,6 @@ impl IValidator for Validator {
 #[cfg(test)]
 mod tests {
 
-    use cosmwasm_schema::cw_serde;
     use cosmwasm_std::{testing::mock_dependencies, HexBinary};
     use tonbridge_parser::types::VerifiedBlockInfo;
 
@@ -381,6 +380,6 @@ mod tests {
             .unwrap();
 
         validator.init_validators(deps.as_mut().storage).unwrap();
-        assert_eq!(validator.signature_validator.has_next, true)
+        assert_eq!(validator.next_validator_updated(), true)
     }
 }
