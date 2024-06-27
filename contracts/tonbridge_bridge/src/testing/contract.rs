@@ -1,12 +1,22 @@
-use cosmwasm_std::{to_binary, Addr, HexBinary, Uint128};
+use cosmwasm_std::{
+    coin, from_binary,
+    testing::{mock_dependencies, mock_env},
+    to_binary, Addr, HexBinary, Uint128,
+};
+use cw20_ics20_msg::amount::Amount;
 use cw_multi_test::Executor;
 use oraiswap::{asset::AssetInfo, router::RouterController};
 use tonbridge_bridge::{
-    msg::{DeletePairMsg, PairQuery, QueryMsg as BridgeQueryMsg, UpdatePairMsg},
+    msg::{ChannelResponse, DeletePairMsg, PairQuery, QueryMsg as BridgeQueryMsg, UpdatePairMsg},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
     state::{Config, MappingMetadata, Ratio, TokenFee},
 };
 use tonbridge_parser::to_bytes32;
+
+use crate::{
+    channel::{decrease_channel_balance, increase_channel_balance},
+    contract::query,
+};
 
 use super::mock::{new_mock_app, MockApp};
 
@@ -321,4 +331,79 @@ fn test_register_mapping_pair() {
         }),
     )
     .unwrap();
+}
+
+#[test]
+fn test_update_channel_balance() {
+    let mut deps = mock_dependencies();
+    let channel_id = "channel-0";
+    let denom = "ton";
+    // try increase
+    increase_channel_balance(
+        deps.as_mut().storage,
+        channel_id,
+        denom,
+        Uint128::from(1000000u128),
+    )
+    .unwrap();
+
+    // after increase, query channel balance
+    let state: ChannelResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            BridgeQueryMsg::ChannelStateData {
+                channel_id: channel_id.to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        state,
+        ChannelResponse {
+            balances: vec![Amount::Native(coin(1000000, denom))],
+            total_sent: vec![Amount::Native(coin(1000000, denom))],
+        }
+    );
+
+    // try decrease channel balance
+    decrease_channel_balance(
+        deps.as_mut().storage,
+        channel_id,
+        denom,
+        Uint128::from(500000u128),
+    )
+    .unwrap();
+
+    // after decrease, query channel balance
+    let state: ChannelResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            BridgeQueryMsg::ChannelStateData {
+                channel_id: channel_id.to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        state,
+        ChannelResponse {
+            balances: vec![Amount::Native(coin(500000, denom))],
+            total_sent: vec![Amount::Native(coin(1000000, denom))],
+        }
+    );
+
+    // cannot decrease channel balance because not enough balances
+    decrease_channel_balance(
+        deps.as_mut().storage,
+        channel_id,
+        denom,
+        Uint128::from(600000u128),
+    )
+    .unwrap_err();
 }

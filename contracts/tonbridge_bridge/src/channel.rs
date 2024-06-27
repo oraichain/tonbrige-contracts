@@ -13,6 +13,7 @@ pub fn increase_channel_balance(
     let mut state = store.load(storage).unwrap_or_default();
     state.outstanding += amount;
     state.total_sent += amount;
+
     store.save(storage, &state)
 }
 

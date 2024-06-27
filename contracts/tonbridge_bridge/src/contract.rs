@@ -320,6 +320,7 @@ pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelRespons
             })
         })
         .collect::<StdResult<Vec<_>>>()?;
+
     // we want (Vec<outstanding>, Vec<total>)
     let (balances, total_sent): (Vec<Amount>, Vec<Amount>) = state.into_iter().unzip();
 
