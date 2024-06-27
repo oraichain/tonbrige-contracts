@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 
 use std::array::TryFromSliceError;
 
-use cosmwasm_std::{to_binary, Addr, HexBinary, Order, StdError};
+use cosmwasm_std::{to_binary, Addr, Empty, HexBinary, Order, StdError};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw_storage_plus::Bound;
 use tonbridge_parser::to_bytes32;
@@ -45,6 +45,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        ExecuteMsg::UpdateOwner { new_owner } => execute_update_owner(deps, info, new_owner),
         ExecuteMsg::PrepareNewKeyBlock { keyblock_boc } => {
             parse_candidates_root_block(deps, keyblock_boc)
         }
@@ -73,6 +74,19 @@ pub fn execute(
             set_verified_block(deps, &info.sender, root_hash, seq_no)
         }
     }
+}
+
+fn execute_update_owner(
+    deps: DepsMut,
+    info: MessageInfo,
+    new_owner: Addr,
+) -> Result<Response, ContractError> {
+    OWNER.execute_update_admin::<Empty, Empty>(deps, info, Some(new_owner.clone()))?;
+
+    Ok(Response::new().add_attributes(vec![
+        ("action", "update_owner"),
+        ("new_owner", new_owner.as_str()),
+    ]))
 }
 
 pub fn parse_candidates_root_block(

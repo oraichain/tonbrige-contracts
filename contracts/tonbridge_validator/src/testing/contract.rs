@@ -95,6 +95,53 @@ mod tests {
     }
 
     #[test]
+    fn test_change_owner() {
+        let mut deps = mock_dependencies();
+
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InstantiateMsg { boc: None },
+        )
+        .unwrap();
+
+        // case1: failed, unauthorized
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("relayer", &vec![]),
+            ExecuteMsg::UpdateOwner {
+                new_owner: Addr::unchecked("new_owner"),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            ContractError::AdminError(AdminError::NotAdmin {}).to_string()
+        );
+
+        // case 2: success
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &vec![]),
+            ExecuteMsg::UpdateOwner {
+                new_owner: Addr::unchecked("new_owner"),
+            },
+        )
+        .unwrap();
+
+        let config: ConfigResponse =
+            from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+        assert_eq!(
+            config,
+            ConfigResponse {
+                owner: Some("new_owner".to_string())
+            }
+        )
+    }
+    #[test]
     fn test_prepare_new_key_block() {
         let mut deps = mock_dependencies();
         let boc = HexBinary::from_hex(BLOCK_BOCS_SMALL).unwrap();
