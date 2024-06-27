@@ -33,8 +33,11 @@ use tonlib::{
 use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
+    helper::is_expired,
     state::{ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, TOKEN_FEE},
 };
+
+const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
 
 #[cw_serde]
 pub struct Bridge {
@@ -290,6 +293,13 @@ impl Bridge {
             return Err(ContractError::NoFunds {});
         }
 
+        let timeout = msg
+            .timeout
+            .unwrap_or(env.block.time.seconds() + DEFAULT_TIMEOUT);
+        if is_expired(&env, timeout) {
+            return Err(ContractError::Expired {});
+        }
+
         let config = CONFIG.load(deps.storage)?;
         let denom_key = get_key_ics20_ibc_denom(
             &parse_ibc_wasm_port_id(env.contract.address.as_str()),
@@ -330,21 +340,6 @@ impl Bridge {
             )
         }
 
-        let token_fee_str = &fee_data.token_fee.amount().to_string();
-        let relayer_fee_str = &fee_data.relayer_fee.amount().to_string();
-        let denom_str = &msg.denom;
-        let local_amount_str = &fee_data.deducted_amount.to_string();
-        let crc_str = &msg.crc_src.to_string();
-        let attributes = vec![
-            ("action", "bridge_to_ton"),
-            ("dest_receiver", &msg.to),
-            ("dest_denom", denom_str),
-            ("local_amount", local_amount_str),
-            ("crc_src", crc_str),
-            ("relayer_fee", relayer_fee_str),
-            ("token_fee", token_fee_str),
-        ];
-
         let remote_amount = convert_local_to_remote(
             fee_data.deducted_amount,
             mapping.remote_decimals,
@@ -362,6 +357,7 @@ impl Bridge {
 
         let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default() + 1;
 
+        //FIXME: store timeout to send_packet
         SEND_PACKET.save(
             deps.storage,
             last_packet_seq,
@@ -377,8 +373,15 @@ impl Bridge {
 
         Ok(Response::new()
             .add_messages(cosmos_msgs)
-            .add_attributes(attributes)
             .add_attributes(vec![
+                ("action", "bridge_to_ton"),
+                ("dest_receiver", &msg.to),
+                ("dest_denom", &msg.denom),
+                ("local_amount", &fee_data.deducted_amount.to_string()),
+                ("crc_src", &msg.crc_src.to_string()),
+                ("relayer_fee", &fee_data.relayer_fee.amount().to_string()),
+                ("token_fee", &fee_data.token_fee.amount().to_string()),
+                ("timeout", &timeout.to_owned().to_string()),
                 ("remote_amount", &remote_amount.to_string()),
                 ("seq", &last_packet_seq.to_string()),
             ]))

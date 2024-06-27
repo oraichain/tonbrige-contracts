@@ -62,6 +62,7 @@ pub struct BridgeToTonMsg {
     pub to: String,
     pub denom: String,
     pub crc_src: u32,
+    pub timeout: Option<u64>,
 }
 
 /// We currently take no arguments for migrations

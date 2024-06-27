@@ -37,4 +37,7 @@ pub enum ContractError {
 
     #[error("Invalid funds")]
     InvalidFund {},
+
+    #[error("Packet timeout period has expired")]
+    Expired {},
 }
