@@ -287,7 +287,6 @@ impl IValidator for Validator {
 #[cfg(test)]
 mod tests {
 
-    use cosmwasm_schema::cw_serde;
     use cosmwasm_std::{testing::mock_dependencies, HexBinary};
     use tonbridge_parser::types::VerifiedBlockInfo;
 

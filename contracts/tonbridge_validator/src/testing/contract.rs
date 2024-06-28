@@ -5,7 +5,7 @@ mod tests {
     use cosmwasm_std::{
         from_binary,
         testing::{mock_dependencies, mock_env, mock_info},
-        Addr, DepsMut, HexBinary, StdError,
+        Addr, HexBinary, StdError,
     };
     use cw_controllers::AdminError;
     use std::{fs::File, io::Read};
@@ -24,7 +24,7 @@ mod tests {
 
     const BLOCK_BOCS_SMALL: &str = include_str!("testdata/bocs.hex");
     const BLOCK_BOCS_LARGE: &str = include_str!("testdata/bocs_large.hex");
-    const KEY_BLOCK_WITH_NEXT_VAL: &str = include_str!("testdata/keyblock_with_next_val.hex");
+    const _KEY_BLOCK_WITH_NEXT_VAL: &str = include_str!("testdata/keyblock_with_next_val.hex");
 
     #[cw_serde]
     pub struct VdataSring {

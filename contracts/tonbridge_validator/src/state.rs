@@ -43,14 +43,14 @@ pub fn get_signature_candidate_validators(
     storage: &dyn Storage,
 ) -> StdResult<Vec<ValidatorDescription>> {
     SIGNATURE_CANDIDATE_VALIDATOR
-        .range(storage, None, None, Order::Ascending)
+        .range_raw(storage, None, None, Order::Ascending)
         .map(|item| item.map(|item| item.1))
         .collect()
 }
 
 pub fn get_signature_validator_set(storage: &dyn Storage) -> StdResult<Vec<ValidatorDescription>> {
     validator_set()
-        .range(storage, None, None, Order::Ascending)
+        .range_raw(storage, None, None, Order::Ascending)
         .map(|item| item.map(|item| item.1))
         .collect()
 }

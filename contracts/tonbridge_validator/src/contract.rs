@@ -235,11 +235,11 @@ pub fn get_candidates_for_validators(
 ) -> StdResult<Vec<UserFriendlyValidator>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let mut allow_range =
-        SIGNATURE_CANDIDATE_VALIDATOR.range(deps.storage, None, None, map_order(order));
+        SIGNATURE_CANDIDATE_VALIDATOR.range_raw(deps.storage, None, None, map_order(order));
     if let Some(start_after) = start_after {
         let start = Some(Bound::exclusive::<u64>(start_after));
         allow_range =
-            SIGNATURE_CANDIDATE_VALIDATOR.range(deps.storage, start, None, map_order(order));
+            SIGNATURE_CANDIDATE_VALIDATOR.range_raw(deps.storage, start, None, map_order(order));
     }
     let candidates = allow_range
         .take(limit)
@@ -258,7 +258,7 @@ pub fn get_validators(
     let range_start =
         start_after.map(|start| HexBinary::from_hex(&start).unwrap_or_default().to_vec());
     let start = calc_range_start(range_start).map(Bound::ExclusiveRaw);
-    let allow_range = validator_set().range(deps.storage, start, None, map_order(order));
+    let allow_range = validator_set().range_raw(deps.storage, start, None, map_order(order));
     let validators = allow_range
         .take(limit)
         .map(|item| item.map(|(_, mapping)| Validator::parse_user_friendly_validator(mapping)))
