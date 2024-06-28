@@ -14,7 +14,7 @@ use oraiswap::{
 };
 use std::ops::Mul;
 use tonbridge_bridge::{
-    msg::{BridgeToTonMsg, FeeData, Ics20Packet},
+    msg::{BridgeToTonMsg, FeeData},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
     state::{MappingMetadata, Ratio, SendPacket},
 };
@@ -56,6 +56,7 @@ impl Bridge {
     pub fn read_transaction(
         &self,
         deps: DepsMut,
+        env: &Env,
         contract_address: &str,
         tx_proof: &[u8],
         tx_boc: &[u8],
@@ -171,7 +172,7 @@ impl Bridge {
             )?;
 
             let mut res =
-                Bridge::handle_packet_receive(storage, api, &querier, packet_data, mapping)?;
+                Bridge::handle_packet_receive(env, storage, api, &querier, packet_data, mapping)?;
             cosmos_msgs.append(&mut res.0);
             attrs.append(&mut res.1);
         }
@@ -179,13 +180,18 @@ impl Bridge {
     }
 
     pub fn handle_packet_receive(
+        env: &Env,
         storage: &mut dyn Storage,
         api: &dyn Api,
         querier: &QuerierWrapper,
         data: BridgePacketData,
         mapping: MappingMetadata,
-    ) -> StdResult<(Vec<CosmosMsg>, Vec<Attribute>)> {
+    ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let config = CONFIG.load(storage)?;
+        // check  packet timeout
+        if is_expired(env, data.timeout) {
+            return Err(ContractError::Expired {});
+        }
         // increase first
         increase_channel_balance(storage, &data.src_channel, &data.src_denom, data.amount)?;
 
@@ -238,7 +244,9 @@ impl Bridge {
         if mapping.opcode == OPCODE_1 {
             let msg = match msg.info {
                 AssetInfo::NativeToken { denom: _ } => {
-                    return Err(StdError::generic_err("Cannot mint a native token"))
+                    return Err(ContractError::Std(StdError::generic_err(
+                        "Cannot mint a native token",
+                    )))
                 }
                 AssetInfo::Token { contract_addr } => {
                     Cw20Contract(contract_addr).call(Cw20ExecuteMsg::Mint {

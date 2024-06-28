@@ -166,6 +166,7 @@ pub fn read_transaction(
     let bridge = Bridge::new(config.validator_contract_addr);
     let res = bridge.read_transaction(
         deps,
+        &env,
         env.contract.address.as_str(),
         tx_proof.as_slice(),
         tx_boc.as_slice(),
