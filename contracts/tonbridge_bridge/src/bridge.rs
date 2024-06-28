@@ -16,7 +16,7 @@ use std::ops::Mul;
 use tonbridge_bridge::{
     msg::{BridgeToTonMsg, FeeData},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
-    state::{MappingMetadata, Ratio, SendPacket},
+    state::{MappingMetadata, PacketReceive, Ratio, SendPacket, Status},
 };
 use tonbridge_parser::{
     to_bytes32,
@@ -34,7 +34,10 @@ use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
     helper::is_expired,
-    state::{ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, TOKEN_FEE},
+    state::{
+        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PACKET_RECEIVE, PROCESSED_TXS, SEND_PACKET,
+        TOKEN_FEE,
+    },
 };
 
 const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
@@ -188,9 +191,31 @@ impl Bridge {
         mapping: MappingMetadata,
     ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let config = CONFIG.load(storage)?;
+
+        let mut packet_receive = PacketReceive {
+            seq: data.seq,
+            timeout: data.timeout,
+            src_denom: data.src_denom.clone(),
+            src_channel: data.src_channel.clone(),
+            amount: data.amount,
+            dest_denom: data.dest_denom.clone(),
+            dest_channel: data.dest_channel.clone(),
+            dest_receiver: data.dest_receiver.clone(),
+            orai_address: data.orai_address.clone(),
+            status: Status::Success,
+        };
         // check  packet timeout
         if is_expired(env, data.timeout) {
-            return Err(ContractError::Expired {});
+            packet_receive.status = Status::Timeout;
+            PACKET_RECEIVE.save(storage, packet_receive.seq, &packet_receive)?;
+            return Ok((
+                vec![],
+                vec![
+                    attr("action", "bridge_to_cosmos"),
+                    attr("status", "timeout"),
+                    attr("packet_receive", format!("{:?}", packet_receive)),
+                ],
+            ));
         }
         // increase first
         increase_channel_balance(storage, &data.src_channel, &data.src_denom, data.amount)?;
@@ -226,6 +251,8 @@ impl Bridge {
 
         let attributes: Vec<Attribute> = vec![
             attr("action", "bridge_to_cosmos"),
+            attr("status", "success"),
+            attr("packet_receive", format!("{:?}", packet_receive)),
             attr("dest_receiver", recipient.as_str()),
             attr("local_amount", fee_data.deducted_amount.to_string()),
             attr("relayer_fee", fee_data.relayer_fee.amount().to_string()),

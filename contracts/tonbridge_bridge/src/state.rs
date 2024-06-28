@@ -1,7 +1,9 @@
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 
 use cw_controllers::Admin;
-use tonbridge_bridge::state::{ChannelState, Config, MappingMetadata, Ratio, SendPacket};
+use tonbridge_bridge::state::{
+    ChannelState, Config, MappingMetadata, PacketReceive, Ratio, SendPacket,
+};
 use tonbridge_parser::types::Bytes32;
 
 /// Owner admin
@@ -17,6 +19,8 @@ pub const CONFIG: Item<Config> = Item::new("config");
 pub const SEND_PACKET: Map<u64, SendPacket> = Map::new("send_packet");
 
 pub const LAST_PACKET_SEQ: Item<u64> = Item::new("last_packet_seq");
+
+pub const PACKET_RECEIVE: Map<u64, PacketReceive> = Map::new("packet_receive");
 
 // =============================== Reference from: https://github.com/oraichain/ibc-bridge-wasm.git
 /// This channel state is used when a REMOTE chain initiates ibc transfer to LOCAL chain
