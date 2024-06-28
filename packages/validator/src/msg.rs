@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::HexBinary;
+use cosmwasm_std::{Addr, HexBinary};
 use tonbridge_parser::types::VdataHex;
 
 #[cw_serde]
@@ -9,6 +9,9 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
+    UpdateOwner {
+        new_owner: Addr,
+    },
     PrepareNewKeyBlock {
         keyblock_boc: HexBinary, // in hex form
     },

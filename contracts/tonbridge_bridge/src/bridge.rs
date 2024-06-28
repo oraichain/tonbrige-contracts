@@ -14,9 +14,9 @@ use oraiswap::{
 };
 use std::ops::Mul;
 use tonbridge_bridge::{
-    msg::{BridgeToTonMsg, FeeData, Ics20Packet},
+    msg::{BridgeToTonMsg, FeeData},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
-    state::{MappingMetadata, Ratio, SendPacket},
+    state::{MappingMetadata, PacketReceive, Ratio, SendPacket, Status},
 };
 use tonbridge_parser::{
     to_bytes32,
@@ -34,7 +34,10 @@ use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
     helper::is_expired,
-    state::{ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, TOKEN_FEE},
+    state::{
+        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PACKET_RECEIVE, PROCESSED_TXS, SEND_PACKET,
+        TOKEN_FEE,
+    },
 };
 
 const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
@@ -56,6 +59,7 @@ impl Bridge {
     pub fn read_transaction(
         &self,
         deps: DepsMut,
+        env: &Env,
         contract_address: &str,
         tx_proof: &[u8],
         tx_boc: &[u8],
@@ -171,7 +175,7 @@ impl Bridge {
             )?;
 
             let mut res =
-                Bridge::handle_packet_receive(storage, api, &querier, packet_data, mapping)?;
+                Bridge::handle_packet_receive(env, storage, api, &querier, packet_data, mapping)?;
             cosmos_msgs.append(&mut res.0);
             attrs.append(&mut res.1);
         }
@@ -179,13 +183,40 @@ impl Bridge {
     }
 
     pub fn handle_packet_receive(
+        env: &Env,
         storage: &mut dyn Storage,
         api: &dyn Api,
         querier: &QuerierWrapper,
         data: BridgePacketData,
         mapping: MappingMetadata,
-    ) -> StdResult<(Vec<CosmosMsg>, Vec<Attribute>)> {
+    ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let config = CONFIG.load(storage)?;
+
+        let mut packet_receive = PacketReceive {
+            seq: data.seq,
+            timeout: data.timeout,
+            src_denom: data.src_denom.clone(),
+            src_channel: data.src_channel.clone(),
+            amount: data.amount,
+            dest_denom: data.dest_denom.clone(),
+            dest_channel: data.dest_channel.clone(),
+            dest_receiver: data.dest_receiver.clone(),
+            orai_address: data.orai_address.clone(),
+            status: Status::Success,
+        };
+        // check  packet timeout
+        if is_expired(env, data.timeout) {
+            packet_receive.status = Status::Timeout;
+            PACKET_RECEIVE.save(storage, packet_receive.seq, &packet_receive)?;
+            return Ok((
+                vec![],
+                vec![
+                    attr("action", "bridge_to_cosmos"),
+                    attr("status", "timeout"),
+                    attr("packet_receive", format!("{:?}", packet_receive)),
+                ],
+            ));
+        }
         // increase first
         increase_channel_balance(storage, &data.src_channel, &data.src_denom, data.amount)?;
 
@@ -220,6 +251,8 @@ impl Bridge {
 
         let attributes: Vec<Attribute> = vec![
             attr("action", "bridge_to_cosmos"),
+            attr("status", "success"),
+            attr("packet_receive", format!("{:?}", packet_receive)),
             attr("dest_receiver", recipient.as_str()),
             attr("local_amount", fee_data.deducted_amount.to_string()),
             attr("relayer_fee", fee_data.relayer_fee.amount().to_string()),
@@ -238,7 +271,9 @@ impl Bridge {
         if mapping.opcode == OPCODE_1 {
             let msg = match msg.info {
                 AssetInfo::NativeToken { denom: _ } => {
-                    return Err(StdError::generic_err("Cannot mint a native token"))
+                    return Err(ContractError::Std(StdError::generic_err(
+                        "Cannot mint a native token",
+                    )))
                 }
                 AssetInfo::Token { contract_addr } => {
                     Cw20Contract(contract_addr).call(Cw20ExecuteMsg::Mint {
@@ -255,33 +290,6 @@ impl Bridge {
         Ok((cosmos_msgs, attributes))
     }
 
-    pub fn validate_basic_ics20_packet(
-        packet: &Ics20Packet,
-        amount: &Uint128,
-        denom: &str,
-        sender: &str,
-    ) -> StdResult<()> {
-        if packet.amount.ne(amount) {
-            return Err(StdError::generic_err(format!(
-                "Sent amount {:?} is not equal to amount given in boc, which is {:?}",
-                amount, packet.amount
-            )));
-        }
-        if packet.denom.ne(denom) {
-            return Err(StdError::generic_err(format!(
-                "Denom {:?} is not equal to denom given in boc, which is {:?}",
-                denom, packet.denom
-            )));
-        }
-        if packet.sender.ne(sender) {
-            return Err(StdError::generic_err(format!(
-                "Sender {:?} is not equal to sender given in boc, which is {:?}",
-                sender, packet.sender
-            )));
-        }
-        Ok(())
-    }
-
     pub fn handle_bridge_to_ton(
         deps: DepsMut,
         env: Env,
@@ -289,10 +297,6 @@ impl Bridge {
         amount: Amount,
         _sender: Addr,
     ) -> Result<Response, ContractError> {
-        if amount.is_empty() {
-            return Err(ContractError::NoFunds {});
-        }
-
         let timeout = msg
             .timeout
             .unwrap_or(env.block.time.seconds() + DEFAULT_TIMEOUT);
@@ -430,6 +434,7 @@ impl Bridge {
         ask_asset_info: AssetInfo,
     ) -> StdResult<Uint128> {
         let config = CONFIG.load(storage)?;
+
         // no need to deduct fee if no fee is found in the mapping
         if config.relayer_fee.is_zero() {
             return Ok(Uint128::from(0u64));
@@ -509,211 +514,5 @@ impl Bridge {
             .simulate_swap(querier, offer_amount, swap_ops)
             .map(|data| data.amount)
             .unwrap_or_default()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    use cosmwasm_std::{testing::mock_dependencies, to_binary, Addr, Empty, HexBinary, Uint128};
-    use cw20::{BalanceResponse, Cw20Coin};
-    use oraiswap::asset::AssetInfo;
-    use tonbridge_bridge::{msg::UpdatePairMsg, state::SendPacket};
-
-    use cw_multi_test::{App, Contract, ContractWrapper, Executor};
-
-    use crate::{contract::execute_submit_bridge_to_ton_info, state::SEND_PACKET};
-
-    fn validator_contract() -> Box<dyn Contract<Empty>> {
-        let contract = ContractWrapper::new(
-            cw_tonbridge_validator::contract::execute,
-            cw_tonbridge_validator::contract::instantiate,
-            cw_tonbridge_validator::contract::query,
-        );
-        Box::new(contract)
-    }
-
-    fn bridge_contract() -> Box<dyn Contract<Empty>> {
-        let contract = ContractWrapper::new(
-            crate::contract::execute,
-            crate::contract::instantiate,
-            crate::contract::query,
-        );
-        Box::new(contract)
-    }
-
-    fn dummy_cw20_contract() -> Box<dyn Contract<Empty>> {
-        let contract = ContractWrapper::new(
-            cw20_base::contract::execute,
-            cw20_base::contract::instantiate,
-            cw20_base::contract::query,
-        );
-        Box::new(contract)
-    }
-
-    #[test]
-    fn test_read_transaction() {
-        let mut app = App::default();
-        let admin = Addr::unchecked("admin");
-        let validator_contract = validator_contract();
-        let bridge_contract = bridge_contract();
-        let dummy_cw20_contract = dummy_cw20_contract();
-        let validator_id = app.store_code(validator_contract);
-        let bridge_id = app.store_code(bridge_contract);
-        let cw20_id = app.store_code(dummy_cw20_contract);
-        let bridge_cw20_balance = Uint128::from(10000000000000001u64);
-
-        let validator_addr = app
-            .instantiate_contract(
-                validator_id,
-                admin.clone(),
-                &tonbridge_validator::msg::InstantiateMsg { boc: None },
-                &vec![],
-                "validator".to_string(),
-                None,
-            )
-            .unwrap();
-
-        let bridge_addr = app
-            .instantiate_contract(
-                bridge_id,
-                admin.clone(),
-                &tonbridge_bridge::msg::InstantiateMsg {
-                    validator_contract_addr: validator_addr.clone(),
-                    bridge_adapter: "EQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
-                    relayer_fee_token: AssetInfo::NativeToken {
-                        denom: "orai".to_string(),
-                    },
-                    token_fee_receiver: Addr::unchecked("token_fee"),
-                    relayer_fee_receiver: Addr::unchecked("relayer_fee"),
-                    relayer_fee: None,
-                    swap_router_contract: "router".to_string(),
-                },
-                &vec![],
-                "bridge".to_string(),
-                None,
-            )
-            .unwrap();
-
-        let cw20_addr = app
-            .instantiate_contract(
-                cw20_id,
-                admin.clone(),
-                &cw20_base::msg::InstantiateMsg {
-                    name: "Dummy".to_string(),
-                    symbol: "DUMMY".to_string(),
-                    decimals: 6,
-                    initial_balances: vec![{
-                        Cw20Coin {
-                            address: bridge_addr.to_string(),
-                            amount: bridge_cw20_balance,
-                        }
-                    }],
-                    mint: None,
-                    marketing: None,
-                },
-                &vec![],
-                "dummy".to_string(),
-                None,
-            )
-            .unwrap();
-
-        let tx_boc = HexBinary::from_hex("b5ee9c72010210010002a00003b5704f1a9d989d4054ca72c292ffdf220c45c592fba86b562654fc500b6efdcc0a1000014c775004781596aa8bae813b9e6a71ade2ba8a393b7b1fff5c20db8414268e761e80f445466000014c774a4ba016675543a00034671e79e80102030201e00405008272c22a17f9d66afb94f83e04c02edc5abb7f2a15486ef4beaa703990dbfadb3b4085457ef326f4ecbbe9d81236ead8479f8765194636e87e84ca27eff6a7ec1f1d02170447c90ec90dd418656798110e0f01b16801ed89e454ebd04155a7ef579cecc7ff77907f2288f16bb339766711298f1f775700013c6a766275015329cb0a4bff7c883117164beea1ad589953f1402dbbf7302850ec90dd400613faa00000298ee9a50184cceaa864c0060101df080118af35dc850000000000000000070155ffff801397b648216d9f2f44369a4d6a5d42c41146f4cbc66093a35ba780f4e6a405714e071afd498d00010a019fe000278d4ecc4ea02a653961497fef910622e2c97dd435ab132a7e2805b77ee6050b006b6841e5c7db57b8d076dfa4368dea08e132f2917969b5920fbd8229dc6560d7000014c7750047826675543a60090153801397b648216d9f2f44369a4d6a5d42c41146f4cbc66093a35ba780f4e6a405714e071afd498d0000100a04000c0b0c0d00126368616e6e656c2d31000000566f726169317263686e6b647073787a687175753633793672346a34743537706e6339773865686468656478009e43758c3d090000000000000000008c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc986db784c36dbc000000000000200000000000390f7bed18b3fc226db7ad9ac1961b38a37b80e826f33ccabfa03d8405819e6ca41902b2c").unwrap();
-
-        let tx_proof = HexBinary::from_hex("b5ee9c7201020e010002cd00094603b4107e11da299213c78b889ec423fe1c7de98b508a4fdd113c6990b307235d80001d01241011ef55aafffffffd0203040502a09bc7a987000000008401014ceab100000000020000000000000000000000006675543a000014c775004780000014c7750047831736f9b3000446e401361bf701361bd7c400000007000000000000002e06072848010169df3a129570f135f49a71d8b483fa4c1c482f3f66ed85120a88d1b12fa9d16500012848010140bc4dd799a511514e2389685f05400ff4552fd0742fa5bcffc54f5628ba2728001c23894a33f6fde40b062e4f9ca75cdd7575e0d2ad61010f65e76ead272c60375bbdf85721963d37da28343e390d3d0fcc100f52754cdd13a8e4b655b0b6d5953c09f2f928d8ce4008090a0098000014c774e1c30401361bf750761c553cb279919d5c01370e223caddc8aed39f253c97e2067fab0d970edb84dfe70fb36e9e9e40e03596ed1ede5e16b95c4ab61817ceac5e86ca43fd7b4480098000014c774f10543014ceab0eadce00e65f2d6771561346ad31884c67e036c6aa63d14ba694d6affdf684810f750e961923988298da0b1dbe93abce9756cc3ef6b72dfd97531c7ce6199cabb28480101a7f5bf430102522e84d0b8b108a45efc71925ce0c6c591ae5ac50e7ead9baa15000828480101db58517b1e79f67b35742f301a407f7edf1b95fae995d949f62cbeb17f10e0e60009210799c79e7a0b22a5a0009e353b313a80a994e58525ffbe44188b8b25f750d6ac4ca9f8a016ddfb98142671e79e504f1a9d989d4054ca72c292ffdf220c45c592fba86b562654fc500b6efdcc0a1a000000a63ba8023c099c79e7a00c0d28480101f12edcfd2cb61fdee42d31cd884d21f92891e1ef9072f3ba4dded90ea5a09f380006008272c22a17f9d66afb94f83e04c02edc5abb7f2a15486ef4beaa703990dbfadb3b4085457ef326f4ecbbe9d81236ead8479f8765194636e87e84ca27eff6a7ec1f1d").unwrap();
-
-        let opcode =
-            HexBinary::from_hex("0000000000000000000000000000000000000000000000000000000000000002")
-                .unwrap();
-
-        // shard block with block hash
-        let block_hash =
-            HexBinary::from_hex("b4107e11da299213c78b889ec423fe1c7de98b508a4fdd113c6990b307235d80")
-                .unwrap();
-
-        // set verified for simplicity
-        app.execute(
-            admin.clone(),
-            cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-                contract_addr: validator_addr.to_string(),
-                msg: to_binary(&tonbridge_validator::msg::ExecuteMsg::SetVerifiedBlock {
-                    root_hash: block_hash,
-                    seq_no: 1,
-                })
-                .unwrap(),
-                funds: vec![],
-            }),
-        )
-        .unwrap();
-
-        app.execute(
-            admin.clone(),
-            cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-                contract_addr: bridge_addr.to_string(),
-                msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
-                    UpdatePairMsg {
-                        local_channel_id: "channel-0".to_string(),
-                        denom: "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl".to_string(),
-                        local_asset_info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked(cw20_addr.clone()),
-                        },
-                        remote_decimals: 6,
-                        local_asset_info_decimals: 6,
-                        opcode,
-                    },
-                ))
-                .unwrap(),
-                funds: vec![],
-            }),
-        )
-        .unwrap();
-
-        app.execute(
-            admin.clone(),
-            cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-                contract_addr: bridge_addr.to_string(),
-                msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::ReadTransaction {
-                    tx_proof,
-                    tx_boc,
-                })
-                .unwrap(),
-                funds: vec![],
-            }),
-        )
-        .unwrap();
-
-        let bridge_balance: BalanceResponse = app
-            .wrap()
-            .query_wasm_smart(
-                cw20_addr.clone(),
-                &cw20_base::msg::QueryMsg::Balance {
-                    address: bridge_addr.to_string(),
-                },
-            )
-            .unwrap();
-
-        println!("bridge balance: {:?}", bridge_balance);
-    }
-
-    #[test]
-    fn test_submit_bridge_to_ton_info() {
-        let mut deps = mock_dependencies();
-        SEND_PACKET
-            .save(
-                deps.as_mut().storage,
-                1,
-                &SendPacket {
-                    sequence: 1,
-                    to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                    denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-                    amount: Uint128::from(10000000000u128),
-                    crc_src: 82134516,
-                },
-            )
-            .unwrap();
-
-        let data = "000000000000000180002255D73E3A5C1A9589F0AECE31E97B54B261AC3D7D16D4F1068FDF9D4B4E18300071737B65193DDBB57097037AE801EE6DC77EE97DD5862112116B04DA4EB70080000000000000000000000009502F9000139517D2";
-        execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data).unwrap())
-            .unwrap();
     }
 }

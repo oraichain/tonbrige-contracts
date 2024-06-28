@@ -380,6 +380,9 @@ mod tests {
             .unwrap();
 
         validator.init_validators(deps.as_mut().storage).unwrap();
-        assert_eq!(validator.signature_validator.has_next, true)
+        assert_eq!(validator.next_validator_updated(), true);
+
+        let list_vals = validator.get_validators(deps.as_ref().storage).unwrap();
+        assert_eq!(list_vals.len(), 1079);
     }
 }
