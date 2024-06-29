@@ -38,6 +38,12 @@ pub enum ContractError {
     #[error("Invalid funds")]
     InvalidFund {},
 
-    #[error("Packet timeout period has expired")]
+    #[error("Packet has expired due to timeout")]
     Expired {},
+
+    #[error("Packet has not expired yet")]
+    NotExpired {},
+
+    #[error("The BOC does not match with the send packet")]
+    InvalidSendPacketBoc {},
 }

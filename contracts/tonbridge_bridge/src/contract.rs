@@ -1,6 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
+use cosmwasm_std::{
+    from_binary, to_binary, Addr, Attribute, CosmosMsg, Empty, Order, StdError, Uint128,
+};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
@@ -12,15 +14,17 @@ use tonbridge_bridge::msg::{
     PairQuery, QueryMsg, UpdatePairMsg,
 };
 use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
-use tonbridge_bridge::state::{Config, MappingMetadata, SendPacket, TokenFee};
+use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, SendPacket, TokenFee};
 use tonbridge_parser::to_bytes32;
+use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
 use tonlib::cell::Cell;
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
+use crate::helper::is_expired;
 use crate::state::{
     ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
-    TOKEN_FEE,
+    TIMEOUT_RECEIVE_PACKET, TIMEOUT_SEND_PACKET, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -89,6 +93,13 @@ pub fn execute(
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
         ExecuteMsg::SubmitBridgeToTonInfo { data } => execute_submit_bridge_to_ton_info(deps, data),
+        ExecuteMsg::ProcessTimeoutSendPacket {
+            tx_boc,
+            tx_proof_unreceived,
+        } => process_timeout_send_packet(deps, env, tx_proof_unreceived, tx_boc),
+        ExecuteMsg::ProcessTimeoutRecievePacket { receive_packet } => {
+            execute_submit_bridge_to_ton_info(deps, receive_packet)
+        }
     }
 }
 
@@ -164,17 +175,49 @@ pub fn read_transaction(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let bridge = Bridge::new(config.validator_contract_addr);
-    let res = bridge.read_transaction(
-        deps,
-        &env,
-        env.contract.address.as_str(),
+    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    let mut attrs: Vec<Attribute> = vec![];
+    let transaction = bridge.read_transaction(
+        deps.storage,
+        &deps.querier,
         tx_proof.as_slice(),
         tx_boc.as_slice(),
     )?;
+    let tx_parser = TransactionParser::default();
+    for out_msg in transaction.out_msgs.into_values() {
+        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
+        if cell.is_none() {
+            continue;
+        }
+        let cell = cell.unwrap();
+        let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
+        let mapping = ics20_denoms().load(
+            deps.storage,
+            &get_key_ics20_ibc_denom(
+                &parse_ibc_wasm_port_id(env.contract.address.as_str()),
+                &packet_data.src_channel,
+                &packet_data.src_denom,
+            ),
+        )?;
+
+        let mut res = Bridge::handle_packet_receive(
+            deps.storage,
+            deps.api,
+            &deps.querier,
+            env.block.time.seconds(),
+            packet_data,
+            mapping,
+        )?;
+        cosmos_msgs.append(&mut res.0);
+        attrs.append(&mut res.1);
+
+        // we assume that one transaction only has one matching external out msg. After handling it -> we stop reading
+        break;
+    }
     Ok(Response::new()
-        .add_messages(res.0)
-        .add_attributes(vec![("action", "read_transaction")])
-        .add_attributes(res.1))
+        .add_messages(cosmos_msgs)
+        .add_attributes(vec![("action", "bridge_to_cosmos")])
+        .add_attributes(attrs))
 }
 
 pub fn update_mapping_pair(
@@ -260,7 +303,7 @@ pub fn execute_submit_bridge_to_ton_info(
     let denom = parser.load_address()?;
     let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
     let crc_src = parser.load_u32(32)?;
-
+    let timeout_timestamp = parser.load_u64(64)?;
     let send_packet = SEND_PACKET.load(deps.storage, seq)?;
     if send_packet.ne(&SendPacket {
         sequence: seq,
@@ -268,10 +311,9 @@ pub fn execute_submit_bridge_to_ton_info(
         denom: denom.to_string(),
         amount: Uint128::from(amount),
         crc_src,
+        timeout_timestamp,
     }) {
-        return Err(ContractError::Std(StdError::generic_err(
-            "Invalid send_packet",
-        )));
+        return Err(ContractError::InvalidSendPacketBoc {});
     }
 
     // after finished verifying the boc, we remove the packet to prevent replay attack
@@ -280,6 +322,83 @@ pub fn execute_submit_bridge_to_ton_info(
     Ok(Response::new()
         .add_attribute("action", "submit_bridge_to_ton_info")
         .add_attribute("data", boc.to_hex()))
+}
+
+pub fn process_timeout_send_packet(
+    deps: DepsMut,
+    env: Env,
+    tx_proof_unreceived: HexBinary,
+    tx_boc: HexBinary,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let bridge = Bridge::new(config.validator_contract_addr);
+
+    let transaction = bridge.read_transaction(
+        deps.storage,
+        &deps.querier,
+        tx_proof_unreceived.as_slice(),
+        tx_boc.as_slice(),
+    )?;
+
+    let tx_parser = TransactionParser::default();
+    for out_msg in transaction.out_msgs.into_values() {
+        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
+        if cell.is_none() {
+            continue;
+        }
+        let cell = cell.unwrap();
+        let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
+        let timeout_packet = TIMEOUT_SEND_PACKET.load(deps.storage, packet_seq_timeout)?;
+
+        if !is_expired(env.block.time.seconds(), timeout_packet.timeout_timestamp) {
+            return Err(ContractError::NotExpired {});
+        }
+        let refund_msg = timeout_packet.local_refund_asset.into_msg(
+            None,
+            &deps.querier,
+            deps.api.addr_validate(&timeout_packet.sender)?,
+        )?;
+        TIMEOUT_SEND_PACKET.remove(deps.storage, packet_seq_timeout);
+        return Ok(Response::new()
+            .add_message(refund_msg)
+            .add_attribute("action", "process_timeout_packet"));
+    }
+    return Err(ContractError::Std(StdError::generic_err(
+        "The given transaction has no timeout message",
+    )));
+}
+
+pub fn process_timeout_receive_packet(
+    deps: DepsMut,
+    data: HexBinary,
+) -> Result<Response, ContractError> {
+    panic!("not implemented");
+    // let mut cell = Cell::default();
+    // cell.data = data.as_slice().to_vec();
+    // cell.bit_len = cell.data.len() * 8;
+
+    // let mut parser = cell.parser();
+
+    // let seq = parser.load_u64(64)?;
+    // // FIXME: parse remaining timeout receive packet
+    // let send_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
+    // if send_packet.ne(&ReceivePacket {
+    //     sequence: seq,
+    //     to: "".to_string(),
+    //     denom: "".to_string(),
+    //     amount: Uint128::from(0),
+    //     crc_src,
+    //     timeout_timestamp,
+    // }) {
+    //     return Err(ContractError::InvalidSendPacketBoc {});
+    // }
+
+    // // after finished verifying the boc, we remove the packet to prevent replay attack
+    // TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
+
+    // Ok(Response::new()
+    //     .add_attribute("action", "process_timeout_recv_packet")
+    //     .add_attribute("data", boc.to_hex()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

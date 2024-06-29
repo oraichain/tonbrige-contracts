@@ -1,5 +1,3 @@
-use cosmwasm_std::Env;
-
-pub fn is_expired(env: &Env, timestamp: u64) -> bool {
-    env.block.time.seconds() > timestamp
+pub fn is_expired(now: u64, timestamp: u64) -> bool {
+    now > timestamp
 }

@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use cosmwasm_std::{
     attr, coin,
     testing::{mock_dependencies, mock_env, mock_info},
@@ -19,6 +17,7 @@ use tonbridge_bridge::{
 };
 
 use crate::{
+    bridge::DEFAULT_TIMEOUT,
     channel::increase_channel_balance,
     contract::{execute, execute_submit_bridge_to_ton_info, instantiate},
     error::ContractError,
@@ -412,6 +411,7 @@ fn test_bridge_cw20_to_ton() {
 #[test]
 fn test_submit_bridge_to_ton_info() {
     let mut deps = mock_dependencies();
+    let env = mock_env();
     SEND_PACKET
         .save(
             deps.as_mut().storage,
@@ -422,6 +422,7 @@ fn test_submit_bridge_to_ton_info() {
                 denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
                 amount: Uint128::from(10000000000u128),
                 crc_src: 82134516,
+                timeout_timestamp: env.block.time.seconds() + DEFAULT_TIMEOUT,
             },
         )
         .unwrap();

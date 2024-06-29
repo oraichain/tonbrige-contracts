@@ -5,6 +5,7 @@ use crate::types::BridgePacketDataRaw;
 
 pub trait ITransactionParser {
     fn parse_packet_data(&self, cell: &Cell) -> Result<BridgePacketDataRaw, TonCellError>;
+    fn parse_send_packet_timeout_data(&self, cell: &Cell) -> Result<u64, TonCellError>;
 }
 
 #[cw_serde]
@@ -16,7 +17,7 @@ impl ITransactionParser for TransactionParser {
         let mut parser = cell.parser();
 
         let packet_seq = parser.load_u64(64)?;
-        let timeout = parser.load_u64(64)?;
+        let timeout_timestamp = parser.load_u64(64)?;
         let source_denom = parser.load_address()?;
         let amount = parser.load_coins()?;
 
@@ -37,7 +38,7 @@ impl ITransactionParser for TransactionParser {
 
         Ok(BridgePacketDataRaw {
             seq: packet_seq,
-            timeout: timeout,
+            timeout_timestamp,
             src_denom: source_denom,
             src_channel: "channel-0".as_bytes().to_vec(), // FIXME: get src_channel from body data
             amount: amount.to_str_radix(10),
@@ -46,6 +47,12 @@ impl ITransactionParser for TransactionParser {
             dest_receiver: des_receiver,
             orai_address,
         })
+    }
+
+    fn parse_send_packet_timeout_data(&self, cell: &Cell) -> Result<u64, TonCellError> {
+        let mut parser = cell.parser();
+        let packet_seq = parser.load_u64(64)?;
+        Ok(packet_seq)
     }
 }
 
@@ -97,7 +104,7 @@ mod tests {
                 packet_data.to_pretty().unwrap(),
                 BridgePacketData {
                     seq: 0,
-                    timeout: 0,
+                    timeout_timestamp: 0,
                     src_denom: "EQB76ac6w5o4fyBzzpGcJeMPOfltDqpBbKWSoXU0w0ygCYVs".to_string(),
                     src_channel: "channel-0".to_string(),
                     amount: Uint128::from_str("333000000000").unwrap(),

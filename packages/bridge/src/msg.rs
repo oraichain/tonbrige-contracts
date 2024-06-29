@@ -43,6 +43,13 @@ pub enum ExecuteMsg {
         swap_router_contract: Option<String>,
         token_fee: Option<Vec<TokenFee>>,
     },
+    ProcessTimeoutSendPacket {
+        tx_proof_unreceived: HexBinary,
+        tx_boc: HexBinary, // in hex form
+    },
+    ProcessTimeoutRecievePacket {
+        receive_packet: HexBinary,
+    },
 }
 
 #[cw_serde]
