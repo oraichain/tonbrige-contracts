@@ -8,6 +8,8 @@ pub trait ITransactionParser {
     fn parse_send_packet_timeout_data(&self, cell: &Cell) -> Result<u64, TonCellError>;
 }
 
+pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x540CE379; // crc32("src::timeout_send_packet")
+
 #[cw_serde]
 #[derive(Default)]
 pub struct TransactionParser {}
@@ -16,6 +18,7 @@ impl ITransactionParser for TransactionParser {
     fn parse_packet_data(&self, cell: &Cell) -> Result<BridgePacketDataRaw, TonCellError> {
         let mut parser = cell.parser();
 
+        // TODO: add a magic number here to filter packet data
         let packet_seq = parser.load_u64(64)?;
         let timeout_timestamp = parser.load_u64(64)?;
         let source_denom = parser.load_address()?;
@@ -51,6 +54,10 @@ impl ITransactionParser for TransactionParser {
 
     fn parse_send_packet_timeout_data(&self, cell: &Cell) -> Result<u64, TonCellError> {
         let mut parser = cell.parser();
+        let magic_number = parser.load_u32(32)?;
+        if magic_number != SEND_PACKET_TIMEOUT_MAGIC_NUMBER {
+            return Err(TonCellError::cell_parser_error("Not a send packet timeout"));
+        }
         let packet_seq = parser.load_u64(64)?;
         Ok(packet_seq)
     }

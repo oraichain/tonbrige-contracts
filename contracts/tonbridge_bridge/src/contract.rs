@@ -17,9 +17,9 @@ use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
 use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, SendPacket, TokenFee};
 use tonbridge_parser::to_bytes32;
 use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
-use tonlib::cell::{BagOfCells, Cell};
+use tonlib::cell::{BagOfCells, Cell, TonCellError};
 
-use crate::bridge::Bridge;
+use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER};
 use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{
@@ -101,7 +101,7 @@ pub fn execute(
             process_timeout_send_packet(deps, masterchain_header_proof, tx_proof_unreceived, tx_boc)
         }
         ExecuteMsg::ProcessTimeoutRecievePacket { receive_packet } => {
-            execute_submit_bridge_to_ton_info(deps, receive_packet)
+            process_timeout_receive_packet(deps, receive_packet)
         }
     }
 }
@@ -306,6 +306,11 @@ pub fn execute_submit_bridge_to_ton_info(
     let denom = parser.load_address()?;
     let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
     let crc_src = parser.load_u32(32)?;
+    if crc_src != SEND_TO_TON_MAGIC_NUMBER {
+        return Err(ContractError::TonCellError(
+            TonCellError::cell_parser_error("Not a bridge to ton info data"),
+        ));
+    }
     let timeout_timestamp = parser.load_u64(64)?;
     let send_packet = SEND_PACKET.load(deps.storage, seq)?;
     if send_packet.ne(&SendPacket {
@@ -358,8 +363,13 @@ pub fn process_timeout_send_packet(
         }
         let cell = cell.unwrap();
         let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
-        let timeout_packet = TIMEOUT_SEND_PACKET.load(deps.storage, packet_seq_timeout)?;
+        let send_packet = SEND_PACKET.may_load(deps.storage, packet_seq_timeout)?;
 
+        // only continue processing timeout if the SEND_PACKET has been already processed & removed by the relayer to prevent double spending
+        if send_packet.is_some() {
+            return Err(ContractError::SendPacketExists {});
+        }
+        let timeout_packet = TIMEOUT_SEND_PACKET.load(deps.storage, packet_seq_timeout)?;
         if !is_expired(
             block_info.info.unwrap_or_default().gen_utime as u64,
             timeout_packet.timeout_timestamp,
@@ -385,16 +395,23 @@ pub fn process_timeout_receive_packet(
     deps: DepsMut,
     data: HexBinary,
 ) -> Result<Response, ContractError> {
+    let mut cell = Cell::default();
+    cell.data = data.as_slice().to_vec();
+    cell.bit_len = cell.data.len() * 8;
+
+    let mut parser = cell.parser();
+
+    let magic_number = parser.load_u32(32)?;
+    if magic_number != RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER {
+        return Err(ContractError::TonCellError(
+            TonCellError::cell_parser_error("Not a receive packet timeout"),
+        ));
+    }
+    let seq = parser.load_u64(64)?;
+    // FIXME: parse remaining timeout receive packet
+    let send_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
+
     panic!("not implemented");
-    // let mut cell = Cell::default();
-    // cell.data = data.as_slice().to_vec();
-    // cell.bit_len = cell.data.len() * 8;
-
-    // let mut parser = cell.parser();
-
-    // let seq = parser.load_u64(64)?;
-    // // FIXME: parse remaining timeout receive packet
-    // let send_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
     // if send_packet.ne(&ReceivePacket {
     //     sequence: seq,
     //     to: "".to_string(),

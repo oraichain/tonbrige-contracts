@@ -69,6 +69,7 @@ pub struct TimeoutSendPacket {
 }
 #[cw_serde]
 pub struct ReceivePacket {
+    pub magic: u32, // crc32
     pub seq: u64,
     pub timeout_timestamp: u64,
     pub src_denom: String,

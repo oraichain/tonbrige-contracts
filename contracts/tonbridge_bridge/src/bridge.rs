@@ -36,6 +36,8 @@ use crate::{
 };
 
 pub const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
+pub const RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x64060175; // crc32("recv::timeout_recv_packet")
+pub const SEND_TO_TON_MAGIC_NUMBER: u32 = 0x4E545F4; // crc32("src::cosmos")
 
 #[cw_serde]
 pub struct Bridge {
@@ -162,7 +164,8 @@ impl Bridge {
     ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let config = CONFIG.load(storage)?;
 
-        let receive_packet = ReceivePacket {
+        let receive_packet: ReceivePacket = ReceivePacket {
+            magic: RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER,
             seq: data.seq,
             timeout_timestamp: data.timeout_timestamp,
             src_denom: data.src_denom.clone(),
@@ -173,7 +176,7 @@ impl Bridge {
             dest_receiver: data.dest_receiver.clone(),
             orai_address: data.orai_address.clone(),
         };
-        // check  packet timeout
+        // check packet timeout
         if is_expired(current_timestamp, data.timeout_timestamp) {
             TIMEOUT_RECEIVE_PACKET.save(storage, receive_packet.seq, &receive_packet)?;
             return Ok((vec![], vec![attr("status", "timeout")]));

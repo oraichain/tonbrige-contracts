@@ -44,6 +44,9 @@ pub enum ContractError {
     #[error("Packet timeout has not been reached for timestamp")]
     NotExpired {},
 
+    #[error("The send packet still exists. Cannot process timeout")]
+    SendPacketExists {},
+
     #[error("The BOC does not match with the send packet")]
     InvalidSendPacketBoc {},
 }

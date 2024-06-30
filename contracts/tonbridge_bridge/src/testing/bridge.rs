@@ -17,7 +17,7 @@ use tonbridge_bridge::{
 };
 
 use crate::{
-    bridge::DEFAULT_TIMEOUT,
+    bridge::{DEFAULT_TIMEOUT, SEND_TO_TON_MAGIC_NUMBER},
     channel::increase_channel_balance,
     contract::{execute, execute_submit_bridge_to_ton_info, instantiate},
     error::ContractError,
@@ -172,7 +172,7 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-            crc_src: 82134516,
+            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -188,7 +188,7 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-            crc_src: 82134516,
+            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: Some(100),
         }),
     )
@@ -204,7 +204,7 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-            crc_src: 82134516,
+            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -239,7 +239,7 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: "orai_ton".to_string(),
-            crc_src: 82134516,
+            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -255,7 +255,7 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: "orai_ton".to_string(),
-            crc_src: 82134516,
+            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -278,7 +278,7 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: "orai_ton".to_string(),
-            crc_src: 82134516,
+            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -294,7 +294,7 @@ fn test_bridge_native_to_ton() {
             ),
             ("dest_denom", "orai_ton"),
             ("local_amount", "10000"),
-            ("crc_src", "82134516"),
+            ("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
             ("relayer_fee", "0"),
             ("token_fee", "0"),
             (
@@ -372,7 +372,7 @@ fn test_bridge_cw20_to_ton() {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "orai_ton".to_string(),
-                crc_src: 82134516,
+                crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
             .unwrap(),
@@ -390,7 +390,7 @@ fn test_bridge_cw20_to_ton() {
             ),
             attr("dest_denom", "orai_ton"),
             attr("local_amount", "10000"),
-            attr("crc_src", "82134516"),
+            attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
             attr("relayer_fee", "0"),
             attr("token_fee", "0"),
             attr(
@@ -421,7 +421,7 @@ fn test_submit_bridge_to_ton_info() {
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
                 amount: Uint128::from(10000000000u128),
-                crc_src: 82134516,
+                crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout_timestamp: env.block.time.seconds() + DEFAULT_TIMEOUT,
             },
         )
@@ -535,7 +535,7 @@ fn test_bridge_to_ton_with_fee() {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "orai_ton".to_string(),
-                crc_src: 82134516,
+                crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
             .unwrap(),
@@ -575,7 +575,7 @@ fn test_bridge_to_ton_with_fee() {
             ),
             attr("dest_denom", "orai_ton"),
             attr("local_amount", "8990"),
-            attr("crc_src", "82134516"),
+            attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
             attr("relayer_fee", "1000"),
             attr("token_fee", "10"),
             attr(
@@ -624,7 +624,7 @@ fn test_bridge_to_ton_with_fee() {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "orai_ton".to_string(),
-                crc_src: 82134516,
+                crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
             .unwrap(),
@@ -653,7 +653,7 @@ fn test_bridge_to_ton_with_fee() {
             ),
             attr("dest_denom", "orai_ton"),
             attr("local_amount", "9990"),
-            attr("crc_src", "82134516"),
+            attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
             attr("relayer_fee", "0"),
             attr("token_fee", "10"),
             attr(
