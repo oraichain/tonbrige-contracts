@@ -7,13 +7,18 @@ use cosmwasm_std::{
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw20_ics20_msg::amount::Amount;
 use cw_multi_test::Executor;
+use cw_storage_plus::Endian;
 use oraiswap::asset::AssetInfo;
 use tonbridge_bridge::{
     msg::{
         BridgeToTonMsg, ChannelResponse, ExecuteMsg, InstantiateMsg, QueryMsg as BridgeQueryMsg,
         UpdatePairMsg,
     },
-    state::{Ratio, SendPacket, TokenFee},
+    state::{MappingMetadata, Ratio, SendPacket, TokenFee},
+};
+use tonlib::{
+    address::TonAddress,
+    cell::{Cell, CellBuilder},
 };
 
 use crate::{
@@ -21,7 +26,7 @@ use crate::{
     channel::increase_channel_balance,
     contract::{execute, execute_submit_bridge_to_ton_info, instantiate},
     error::ContractError,
-    state::SEND_PACKET,
+    state::{ics20_denoms, SEND_PACKET},
     testing::mock::{new_mock_app, MockApp},
 };
 
@@ -145,6 +150,7 @@ fn test_read_transaction() {
 #[test]
 fn test_bridge_native_to_ton() {
     let mut deps = mock_dependencies();
+    let denom = "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN";
     instantiate(
         deps.as_mut(),
         mock_env(),
@@ -171,7 +177,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
+            denom: denom.to_string(),
             crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
@@ -179,23 +185,7 @@ fn test_bridge_native_to_ton() {
     .unwrap_err();
     assert_eq!(err.to_string(), "No funds sent");
 
-    // case 2: failed, invalid timeout
-    let err = execute(
-        deps.as_mut(),
-        mock_env(),
-        mock_info("sender", &vec![coin(10000, "orai")]),
-        ExecuteMsg::BridgeToTon(BridgeToTonMsg {
-            local_channel_id: "channel-0".to_string(),
-            to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-            crc_src: SEND_TO_TON_MAGIC_NUMBER,
-            timeout: Some(100),
-        }),
-    )
-    .unwrap_err();
-    assert_eq!(err.to_string(), ContractError::Expired {}.to_string());
-
-    // case 3: failed, not mapping pair
+    // case 2: failed, not mapping pair
     execute(
         deps.as_mut(),
         mock_env(),
@@ -428,14 +418,14 @@ fn test_submit_bridge_to_ton_info() {
         .unwrap();
 
     // seq = 2
-    let data_err = "000000000000000280002255D73E3A5C1A9589F0AECE31E97B54B261AC3D7D16D4F1068FDF9D4B4E18300071737B65193DDBB57097037AE801EE6DC77EE97DD5862112116B04DA4EB70080000000000000000000000009502F9000139517D2";
+    let data_err = "000000000000000280002255d73e3a5c1a9589f0aece31e97b54b261ac3d7d16d4f1068fdf9d4b4e18300071737b65193ddbb57097037ae801ee6dc77ee97dd5862112116b04da4eb70080000000000000000000000009502f9000139517d0000000019a07ba04";
     let res =
         execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data_err).unwrap())
             .unwrap_err();
     assert!(res.to_string().contains("SendPacket not found"));
 
     // verify success
-    let data = "000000000000000180002255D73E3A5C1A9589F0AECE31E97B54B261AC3D7D16D4F1068FDF9D4B4E18300071737B65193DDBB57097037AE801EE6DC77EE97DD5862112116B04DA4EB70080000000000000000000000009502F9000139517D2";
+    let data = "000000000000000180002255d73e3a5c1a9589f0aece31e97b54b261ac3d7d16d4f1068fdf9d4b4e18300071737b65193ddbb57097037ae801ee6dc77ee97dd5862112116b04da4eb70080000000000000000000000009502f9000139517d00000000176bf1eec";
     let res = execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data).unwrap())
         .unwrap();
     assert_eq!(

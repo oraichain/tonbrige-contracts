@@ -311,6 +311,11 @@ pub fn execute_submit_bridge_to_ton_info(
             TonCellError::cell_parser_error("Not a bridge to ton info data"),
         ));
     }
+    println!("seq: {:?}", seq);
+    println!("to: {:?}", to);
+    println!("denom: {:?}", denom);
+    println!("amount: {:?}", amount);
+    println!("crc: {:?}", crc_src);
     let timeout_timestamp = parser.load_u64(64)?;
     let send_packet = SEND_PACKET.load(deps.storage, seq)?;
     if send_packet.ne(&SendPacket {
