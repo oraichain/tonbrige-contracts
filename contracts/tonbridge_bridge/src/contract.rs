@@ -17,7 +17,7 @@ use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
 use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, SendPacket, TokenFee};
 use tonbridge_parser::to_bytes32;
 use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
-use tonlib::cell::Cell;
+use tonlib::cell::{BagOfCells, Cell};
 
 use crate::bridge::Bridge;
 use crate::error::ContractError;
@@ -94,9 +94,12 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
         ExecuteMsg::SubmitBridgeToTonInfo { data } => execute_submit_bridge_to_ton_info(deps, data),
         ExecuteMsg::ProcessTimeoutSendPacket {
+            masterchain_header_proof,
             tx_boc,
             tx_proof_unreceived,
-        } => process_timeout_send_packet(deps, env, tx_proof_unreceived, tx_boc),
+        } => {
+            process_timeout_send_packet(deps, masterchain_header_proof, tx_proof_unreceived, tx_boc)
+        }
         ExecuteMsg::ProcessTimeoutRecievePacket { receive_packet } => {
             execute_submit_bridge_to_ton_info(deps, receive_packet)
         }
@@ -326,12 +329,19 @@ pub fn execute_submit_bridge_to_ton_info(
 
 pub fn process_timeout_send_packet(
     deps: DepsMut,
-    env: Env,
+    latest_masterchain_header_proof: HexBinary,
     tx_proof_unreceived: HexBinary,
     tx_boc: HexBinary,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let bridge = Bridge::new(config.validator_contract_addr);
+
+    let header_cells = BagOfCells::parse_hex(&latest_masterchain_header_proof.to_hex())?;
+    let block_cell = header_cells.single_root()?.reference(0)?;
+
+    // TODO: need to update latest client state of TON every time we have a new incoming tx
+    // so that we can verify the logical time against the latest_masterchain_header_proof
+    let block_info = Cell::load_block(&block_cell)?;
 
     let transaction = bridge.read_transaction(
         deps.storage,
@@ -350,7 +360,10 @@ pub fn process_timeout_send_packet(
         let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
         let timeout_packet = TIMEOUT_SEND_PACKET.load(deps.storage, packet_seq_timeout)?;
 
-        if !is_expired(env.block.time.seconds(), timeout_packet.timeout_timestamp) {
+        if !is_expired(
+            block_info.info.unwrap_or_default().gen_utime as u64,
+            timeout_packet.timeout_timestamp,
+        ) {
             return Err(ContractError::NotExpired {});
         }
         let refund_msg = timeout_packet.local_refund_asset.into_msg(

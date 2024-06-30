@@ -41,7 +41,7 @@ pub enum ContractError {
     #[error("Packet has expired due to timeout")]
     Expired {},
 
-    #[error("Packet has not expired yet")]
+    #[error("Packet timeout has not been reached for timestamp")]
     NotExpired {},
 
     #[error("The BOC does not match with the send packet")]

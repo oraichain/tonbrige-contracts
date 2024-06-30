@@ -44,6 +44,7 @@ pub enum ExecuteMsg {
         token_fee: Option<Vec<TokenFee>>,
     },
     ProcessTimeoutSendPacket {
+        masterchain_header_proof: HexBinary,
         tx_proof_unreceived: HexBinary,
         tx_boc: HexBinary, // in hex form
     },
