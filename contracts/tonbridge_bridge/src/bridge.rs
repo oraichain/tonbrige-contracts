@@ -167,13 +167,10 @@ impl Bridge {
             magic: RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER,
             seq: data.seq,
             timeout_timestamp: data.timeout_timestamp,
+            src_sender: data.src_sender.clone(),
             src_denom: data.src_denom.clone(),
             src_channel: data.src_channel.clone(),
             amount: data.amount,
-            dest_denom: data.dest_denom.clone(),
-            dest_channel: data.dest_channel.clone(),
-            dest_receiver: data.dest_receiver.clone(),
-            orai_address: data.orai_address.clone(),
         };
         // check packet timeout
         if is_expired(current_timestamp, data.timeout_timestamp) {

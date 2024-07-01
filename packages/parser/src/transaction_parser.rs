@@ -11,6 +11,10 @@ pub trait ITransactionParser {
 pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x540CE379; // crc32("src::timeout_send_packet")
 pub const RECEIVE_PACKET_MAGIC_NUMBER: u32 = 2129059940; // crc32("src::receive_packet")
 
+pub fn get_channel_id(channel_num: u16) -> String {
+    format!("channel-{:?}", channel_num)
+}
+
 #[cw_serde]
 #[derive(Default)]
 pub struct TransactionParser {}
@@ -28,6 +32,9 @@ impl ITransactionParser for TransactionParser {
         let packet_seq = parser.load_u64(64)?;
         let timeout_timestamp = parser.load_u64(64)?;
         let source_denom = parser.load_address()?;
+        let src_sender = parser.load_address()?;
+        // assume that the largest channel id is 65536 = 2^16
+        let src_channel_num = parser.load_u16(16)?;
         let amount = parser.load_coins()?;
 
         let mut des_denom: Vec<u8> = vec![];
@@ -49,7 +56,8 @@ impl ITransactionParser for TransactionParser {
             seq: packet_seq,
             timeout_timestamp,
             src_denom: source_denom,
-            src_channel: "channel-0".as_bytes().to_vec(), // FIXME: get src_channel from body data
+            src_sender,
+            src_channel: get_channel_id(src_channel_num).into_bytes(), // FIXME: get src_channel from body data
             amount: amount.to_str_radix(10),
             dest_denom: des_denom,
             dest_channel: des_channel,
@@ -118,6 +126,7 @@ mod tests {
                 BridgePacketData {
                     seq: 0,
                     timeout_timestamp: 0,
+                    src_sender: "EQB76ac6w5o4fyBzzpGcJeMPOfltDqpBbKWSoXU0w0ygCYVs".to_string(),
                     src_denom: "EQB76ac6w5o4fyBzzpGcJeMPOfltDqpBbKWSoXU0w0ygCYVs".to_string(),
                     src_channel: "channel-0".to_string(),
                     amount: Uint128::from_str("333000000000").unwrap(),

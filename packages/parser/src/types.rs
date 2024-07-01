@@ -159,6 +159,7 @@ pub struct KeyBlockValidators {
 pub struct BridgePacketDataRaw {
     pub seq: u64,
     pub timeout_timestamp: u64,
+    pub src_sender: TonlibTonAddress,
     pub src_denom: TonlibTonAddress,
     pub src_channel: Vec<u8>,
     pub amount: String,
@@ -173,6 +174,7 @@ impl BridgePacketDataRaw {
         Ok(BridgePacketData {
             seq: self.seq,
             timeout_timestamp: self.timeout_timestamp,
+            src_sender: self.src_sender.to_base64_url(),
             src_denom: self.src_denom.to_string(),
             src_channel: String::from_utf8(self.src_channel)?,
             amount: Uint128::from_str(&self.amount)?,
@@ -189,6 +191,7 @@ impl BridgePacketDataRaw {
 pub struct BridgePacketData {
     pub seq: u64,
     pub timeout_timestamp: u64,
+    pub src_sender: String,
     pub src_denom: String,
     pub src_channel: String,
     pub amount: Uint128,

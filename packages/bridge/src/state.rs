@@ -72,11 +72,8 @@ pub struct ReceivePacket {
     pub magic: u32, // crc32
     pub seq: u64,
     pub timeout_timestamp: u64,
+    pub src_sender: String,
     pub src_denom: String,
     pub src_channel: String,
     pub amount: Uint128,
-    pub dest_denom: String,
-    pub dest_channel: String,
-    pub dest_receiver: String,
-    pub orai_address: String,
 }

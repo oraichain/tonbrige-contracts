@@ -16,7 +16,7 @@ use tonbridge_bridge::msg::{
 use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
 use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, SendPacket, TokenFee};
 use tonbridge_parser::to_bytes32;
-use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
+use tonbridge_parser::transaction_parser::{get_channel_id, ITransactionParser, TransactionParser};
 use tonlib::cell::{BagOfCells, Cell, TonCellError};
 
 use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER};
@@ -311,11 +311,6 @@ pub fn execute_submit_bridge_to_ton_info(
             TonCellError::cell_parser_error("Not a bridge to ton info data"),
         ));
     }
-    println!("seq: {:?}", seq);
-    println!("to: {:?}", to);
-    println!("denom: {:?}", denom);
-    println!("amount: {:?}", amount);
-    println!("crc: {:?}", crc_src);
     let timeout_timestamp = parser.load_u64(64)?;
     let send_packet = SEND_PACKET.load(deps.storage, seq)?;
     if send_packet.ne(&SendPacket {
@@ -413,27 +408,31 @@ pub fn process_timeout_receive_packet(
         ));
     }
     let seq = parser.load_u64(64)?;
-    // FIXME: parse remaining timeout receive packet
-    let send_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
+    let src_sender = parser.load_address()?;
+    let src_denom = parser.load_address()?;
+    // assume that the largest channel id is 65536 = 2^16
+    let src_channel_num = parser.load_u16(16)?;
+    let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
+    let timeout_timestamp = parser.load_u64(64)?;
 
-    panic!("not implemented");
-    // if send_packet.ne(&ReceivePacket {
-    //     sequence: seq,
-    //     to: "".to_string(),
-    //     denom: "".to_string(),
-    //     amount: Uint128::from(0),
-    //     crc_src,
-    //     timeout_timestamp,
-    // }) {
-    //     return Err(ContractError::InvalidSendPacketBoc {});
-    // }
+    let timeout_receive_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
 
-    // // after finished verifying the boc, we remove the packet to prevent replay attack
-    // TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
+    if timeout_receive_packet.ne(&ReceivePacket {
+        magic: magic_number,
+        seq,
+        timeout_timestamp,
+        src_sender: src_sender.to_base64_url(),
+        src_denom: src_denom.to_base64_url(),
+        src_channel: get_channel_id(src_channel_num),
+        amount: Uint128::from(amount),
+    }) {
+        return Err(ContractError::InvalidSendPacketBoc {});
+    }
 
-    // Ok(Response::new()
-    //     .add_attribute("action", "process_timeout_recv_packet")
-    //     .add_attribute("data", boc.to_hex()))
+    // after finished verifying the boc, we remove the packet to prevent replay attack
+    TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
+
+    Ok(Response::new().add_attribute("action", "process_timeout_recv_packet"))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
