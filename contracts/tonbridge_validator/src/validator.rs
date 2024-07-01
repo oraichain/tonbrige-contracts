@@ -124,7 +124,7 @@ impl Validator {
         )?;
 
         if current_weight * 3 <= self.signature_validator.sum_largest_total_weights * 2 {
-            return Err(ContractError::Std(StdError::generic_err(&format!(
+            return Err(ContractError::Std(StdError::generic_err(format!(
                 "not enough votes to verify block. Wanted {:?}; has {:?}",
                 self.signature_validator.sum_largest_total_weights * 2,
                 current_weight * 3,
@@ -176,11 +176,14 @@ impl Validator {
                 let extra = block.extra.unwrap().custom.shards;
                 for shards in extra.values() {
                     for shard in shards {
-                        let mut verified_block = VerifiedBlockInfo::default();
-                        verified_block.verified = true;
-                        verified_block.seq_no = shard.seqno;
-                        verified_block.start_lt = shard.start_lt;
-                        verified_block.end_lt = shard.end_lt;
+                        let verified_block = VerifiedBlockInfo {
+                            verified: true,
+                            seq_no: shard.seqno,
+                            start_lt: shard.start_lt,
+                            end_lt: shard.end_lt,
+                            ..Default::default()
+                        };
+
                         VERIFIED_BLOCKS.save(
                             storage,
                             shard.root_hash.as_slice().try_into()?,
@@ -203,10 +206,13 @@ impl Validator {
                 }
                 let prev_ref = block.info.unwrap().prev_ref;
                 if let Some(prev_blk) = prev_ref.first_prev {
-                    let mut verified_block = VerifiedBlockInfo::default();
-                    verified_block.verified = true;
-                    verified_block.seq_no = prev_blk.seqno;
-                    verified_block.end_lt = prev_blk.end_lt;
+                    let verified_block = VerifiedBlockInfo {
+                        verified: true,
+                        seq_no: prev_blk.seqno,
+                        end_lt: prev_blk.end_lt,
+                        ..Default::default()
+                    };
+
                     VERIFIED_BLOCKS.save(
                         storage,
                         prev_blk.root_hash.as_slice().try_into()?,
@@ -214,10 +220,13 @@ impl Validator {
                     )?;
                 }
                 if let Some(prev_blk) = prev_ref.second_prev {
-                    let mut verified_block = VerifiedBlockInfo::default();
-                    verified_block.verified = true;
-                    verified_block.seq_no = prev_blk.seqno;
-                    verified_block.end_lt = prev_blk.end_lt;
+                    let verified_block = VerifiedBlockInfo {
+                        verified: true,
+                        seq_no: prev_blk.seqno,
+                        end_lt: prev_blk.end_lt,
+                        ..Default::default()
+                    };
+
                     VERIFIED_BLOCKS.save(
                         storage,
                         prev_blk.root_hash.as_slice().try_into()?,

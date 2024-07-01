@@ -121,6 +121,7 @@ pub fn execute_update_owner(
     ]))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
@@ -346,7 +347,7 @@ pub fn process_timeout_send_packet(
 
     // TODO: need to update latest client state of TON every time we have a new incoming tx
     // so that we can verify the logical time against the latest_masterchain_header_proof
-    let block_info = Cell::load_block(&block_cell)?;
+    let block_info = Cell::load_block(block_cell)?;
 
     let transaction = bridge.read_transaction(
         deps.storage,
@@ -386,9 +387,9 @@ pub fn process_timeout_send_packet(
             .add_message(refund_msg)
             .add_attribute("action", "process_timeout_packet"));
     }
-    return Err(ContractError::Std(StdError::generic_err(
+    Err(ContractError::Std(StdError::generic_err(
         "The given transaction has no timeout message",
-    )));
+    )))
 }
 
 pub fn process_timeout_receive_packet(
