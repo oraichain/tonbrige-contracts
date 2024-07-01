@@ -1,7 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    from_binary, to_binary, Addr, Attribute, CosmosMsg, Empty, Order, StdError, Uint128,
+    from_binary, to_binary, Addr, Api, Attribute, CosmosMsg, Empty, Order, QuerierWrapper,
+    StdError, Storage, Uint128,
 };
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
@@ -18,6 +19,7 @@ use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, SendPacket
 use tonbridge_parser::to_bytes32;
 use tonbridge_parser::transaction_parser::{get_channel_id, ITransactionParser, TransactionParser};
 use tonlib::cell::{BagOfCells, Cell, TonCellError};
+use tonlib::responses::{MaybeRefData, TransactionMessage};
 
 use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER};
 use crate::error::ContractError;
@@ -349,6 +351,8 @@ pub fn process_timeout_send_packet(
     // TODO: need to update latest client state of TON every time we have a new incoming tx
     // so that we can verify the logical time against the latest_masterchain_header_proof
     let block_info = Cell::load_block(block_cell)?;
+    let masterchain_block_latest_timestamp =
+        block_info.info.to_owned().unwrap_or_default().gen_utime;
 
     let transaction = bridge.read_transaction(
         deps.storage,
@@ -357,48 +361,29 @@ pub fn process_timeout_send_packet(
         tx_boc.as_slice(),
     )?;
 
-    let tx_parser = TransactionParser::default();
     for out_msg in transaction.out_msgs.into_values() {
-        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
-        if cell.is_none() {
+        let refund_msgs = build_timeout_send_packet_refund_msgs(
+            deps.storage,
+            deps.api,
+            &deps.querier,
+            out_msg,
+            config.bridge_adapter.clone(),
+            masterchain_block_latest_timestamp,
+        )?;
+        if refund_msgs.len() == 0 {
             continue;
         }
-        let cell = cell.unwrap();
-        let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
-        let send_packet = SEND_PACKET.may_load(deps.storage, packet_seq_timeout)?;
-
-        // only continue processing timeout if the SEND_PACKET has been already processed & removed by the relayer to prevent double spending
-        if send_packet.is_some() {
-            return Err(ContractError::SendPacketExists {});
-        }
-        let timeout_packet = TIMEOUT_SEND_PACKET.may_load(deps.storage, packet_seq_timeout)?;
-
-        // no-op to prevent error spamming from the relayer
-        if timeout_packet.is_none() {
-            return Ok(Response::new());
-        }
-        let timeout_packet = timeout_packet.unwrap();
-        if !is_expired(
-            block_info.info.unwrap_or_default().gen_utime as u64,
-            timeout_packet.timeout_timestamp,
-        ) {
-            return Err(ContractError::NotExpired {});
-        }
-        let refund_msg = timeout_packet.local_refund_asset.into_msg(
-            None,
-            &deps.querier,
-            deps.api.addr_validate(&timeout_packet.sender)?,
-        )?;
-        TIMEOUT_SEND_PACKET.remove(deps.storage, packet_seq_timeout);
         return Ok(Response::new()
-            .add_message(refund_msg)
-            .add_attribute("action", "process_timeout_packet"));
+            .add_attribute("action", "process_timeout_send_packet")
+            .add_messages(refund_msgs));
     }
     Err(ContractError::Std(StdError::generic_err(
         "The given transaction has no timeout message",
     )))
 }
 
+// called when there is a TON bridge transaction to CW, but it has expired
+// -> relayer triggers this function for the TON side to refund to the sender.
 pub fn process_timeout_receive_packet(
     deps: DepsMut,
     data: HexBinary,
@@ -441,6 +426,49 @@ pub fn process_timeout_receive_packet(
     TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
 
     Ok(Response::new().add_attribute("action", "process_timeout_recv_packet"))
+}
+
+pub fn build_timeout_send_packet_refund_msgs(
+    storage: &mut dyn Storage,
+    api: &dyn Api,
+    querier: &QuerierWrapper,
+    out_msg: MaybeRefData<TransactionMessage>,
+    bridge_adapter: String,
+    latest_masterchain_block_timestamp: u32,
+) -> Result<Vec<CosmosMsg>, ContractError> {
+    let tx_parser = TransactionParser::default();
+    let cell = Bridge::validate_transaction_out_msg(out_msg, bridge_adapter);
+    if cell.is_none() {
+        return Ok(vec![]);
+    }
+    let cell = cell.unwrap();
+    let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
+    let send_packet = SEND_PACKET.may_load(storage, packet_seq_timeout)?;
+
+    // only continue processing timeout if the SEND_PACKET has been already processed & removed by the relayer to prevent double spending
+    if send_packet.is_some() {
+        return Err(ContractError::SendPacketExists {});
+    }
+    let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, packet_seq_timeout)?;
+
+    // no-op to prevent error spamming from the relayer
+    if timeout_packet.is_none() {
+        return Ok(vec![]);
+    }
+    let timeout_packet = timeout_packet.unwrap();
+    if !is_expired(
+        latest_masterchain_block_timestamp as u64,
+        timeout_packet.timeout_timestamp,
+    ) {
+        return Err(ContractError::NotExpired {});
+    }
+    let refund_msg = timeout_packet.local_refund_asset.into_msg(
+        None,
+        &querier,
+        api.addr_validate(&timeout_packet.sender)?,
+    )?;
+    TIMEOUT_SEND_PACKET.remove(storage, packet_seq_timeout);
+    Ok(vec![refund_msg])
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

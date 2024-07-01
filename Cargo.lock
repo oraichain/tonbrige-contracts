@@ -2474,7 +2474,7 @@ dependencies = [
 [[package]]
 name = "tonlib"
 version = "0.15.0"
-source = "git+https://github.com/oraichain/tonlib-rs.git?rev=7cd54f4d56081ebe5593fe8254c557717a5b04c0#7cd54f4d56081ebe5593fe8254c557717a5b04c0"
+source = "git+https://github.com/oraichain/tonlib-rs.git?rev=4fcd1b14da565109f00488220f50030b71b43a92#4fcd1b14da565109f00488220f50030b71b43a92"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2508,7 +2508,7 @@ dependencies = [
 [[package]]
 name = "tonlib-sys"
 version = "2024.6.0"
-source = "git+https://github.com/oraichain/tonlib-rs.git?rev=7cd54f4d56081ebe5593fe8254c557717a5b04c0#7cd54f4d56081ebe5593fe8254c557717a5b04c0"
+source = "git+https://github.com/oraichain/tonlib-rs.git?rev=4fcd1b14da565109f00488220f50030b71b43a92#4fcd1b14da565109f00488220f50030b71b43a92"
 dependencies = [
  "cmake",
 ]
