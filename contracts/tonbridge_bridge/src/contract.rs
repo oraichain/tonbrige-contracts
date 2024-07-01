@@ -369,7 +369,13 @@ pub fn process_timeout_send_packet(
         if send_packet.is_some() {
             return Err(ContractError::SendPacketExists {});
         }
-        let timeout_packet = TIMEOUT_SEND_PACKET.load(deps.storage, packet_seq_timeout)?;
+        let timeout_packet = TIMEOUT_SEND_PACKET.may_load(deps.storage, packet_seq_timeout)?;
+
+        // no-op to prevent error spamming from the relayer
+        if timeout_packet.is_none() {
+            return Ok(Response::new());
+        }
+        let timeout_packet = timeout_packet.unwrap();
         if !is_expired(
             block_info.info.unwrap_or_default().gen_utime as u64,
             timeout_packet.timeout_timestamp,
