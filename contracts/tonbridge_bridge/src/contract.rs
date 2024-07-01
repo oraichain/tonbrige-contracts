@@ -195,6 +195,7 @@ pub fn read_transaction(
         }
         let cell = cell.unwrap();
         let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
+
         let mapping = ics20_denoms().load(
             deps.storage,
             &get_key_ics20_ibc_denom(
