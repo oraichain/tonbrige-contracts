@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use cosmwasm_std::{
     attr, coin,
     testing::{mock_dependencies, mock_env, mock_info},
@@ -9,7 +7,7 @@ use cosmwasm_std::{
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw20_ics20_msg::amount::Amount;
 use cw_multi_test::Executor;
-use cw_storage_plus::Endian;
+
 use oraiswap::{asset::AssetInfo, router::RouterController};
 use tonbridge_bridge::{
     msg::{
@@ -21,7 +19,6 @@ use tonbridge_bridge::{
 use tonbridge_parser::{types::BridgePacketData, OPCODE_2};
 use tonlib::{
     address::TonAddress,
-    cell::{Cell, CellBuilder},
     responses::{AnyCell, MaybeRefData, MessageType, TransactionMessage},
 };
 
@@ -30,7 +27,7 @@ use crate::{
     channel::increase_channel_balance,
     contract::{execute, execute_submit_bridge_to_ton_info, instantiate},
     error::ContractError,
-    state::{ics20_denoms, CONFIG, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET, TOKEN_FEE},
+    state::{CONFIG, SEND_PACKET, TOKEN_FEE},
     testing::mock::{new_mock_app, MockApp},
 };
 
@@ -80,7 +77,7 @@ fn test_handle_packet_receive() {
     bridge_packet_data.src_denom = "orai".to_string();
     bridge_packet_data.dest_denom = "orai".to_string();
     bridge_packet_data.orai_address = "orai_address".to_string();
-    let mut mapping = MappingMetadata {
+    let mapping = MappingMetadata {
         asset_info: AssetInfo::NativeToken {
             denom: "orai".to_string(),
         },

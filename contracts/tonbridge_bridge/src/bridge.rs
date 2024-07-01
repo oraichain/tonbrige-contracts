@@ -78,7 +78,7 @@ impl Bridge {
         }
 
         // body cell
-        return Some(cell.unwrap().cell);
+        Some(cell.unwrap().cell)
     }
 
     pub fn read_transaction(
@@ -99,7 +99,7 @@ impl Bridge {
 
         let is_root_hash_verified = self
             .validator
-            .is_verified_block(&querier, HexBinary::from(root_hash))?;
+            .is_verified_block(querier, HexBinary::from(root_hash))?;
 
         if !is_root_hash_verified {
             return Err(ContractError::Std(StdError::generic_err(
