@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use cosmwasm_std::{
     attr, coin,
     testing::{mock_dependencies, mock_env, mock_info},
@@ -8,27 +10,138 @@ use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw20_ics20_msg::amount::Amount;
 use cw_multi_test::Executor;
 use cw_storage_plus::Endian;
-use oraiswap::asset::AssetInfo;
+use oraiswap::{asset::AssetInfo, router::RouterController};
 use tonbridge_bridge::{
     msg::{
         BridgeToTonMsg, ChannelResponse, ExecuteMsg, InstantiateMsg, QueryMsg as BridgeQueryMsg,
         UpdatePairMsg,
     },
-    state::{MappingMetadata, Ratio, SendPacket, TokenFee},
+    state::{Config, MappingMetadata, Ratio, SendPacket, TokenFee},
 };
+use tonbridge_parser::{types::BridgePacketData, OPCODE_2};
 use tonlib::{
     address::TonAddress,
     cell::{Cell, CellBuilder},
+    responses::{AnyCell, MaybeRefData, MessageType, TransactionMessage},
 };
 
 use crate::{
-    bridge::{DEFAULT_TIMEOUT, SEND_TO_TON_MAGIC_NUMBER},
+    bridge::{Bridge, DEFAULT_TIMEOUT, SEND_TO_TON_MAGIC_NUMBER},
     channel::increase_channel_balance,
     contract::{execute, execute_submit_bridge_to_ton_info, instantiate},
     error::ContractError,
-    state::{ics20_denoms, SEND_PACKET},
+    state::{ics20_denoms, CONFIG, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET, TOKEN_FEE},
     testing::mock::{new_mock_app, MockApp},
 };
+
+#[test]
+fn test_validate_transaction_out_msg() {
+    let mut maybe_ref = MaybeRefData::default();
+    let bridge_addr = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string();
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+    let mut transaction_message = TransactionMessage::default();
+    transaction_message.info.msg_type = MessageType::ExternalIn as u8;
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+    transaction_message.info.msg_type = MessageType::ExternalOut as u8;
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+    transaction_message.info.src = TonAddress::from_base64_url(&bridge_addr.clone()).unwrap();
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+
+    transaction_message.body.cell_ref = Some((None, None));
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+
+    let any_cell = AnyCell::default();
+    transaction_message.body.cell_ref = Some((Some(any_cell.clone()), None));
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res.unwrap(), any_cell.cell);
+}
+
+#[test]
+fn test_handle_packet_receive() {
+    let mut deps = mock_dependencies();
+    let deps_mut = deps.as_mut();
+    let storage = deps_mut.storage;
+    let api = deps_mut.api;
+    let querier = deps_mut.querier;
+    let env = mock_env();
+    let current_timestamp = env.block.time.seconds() + DEFAULT_TIMEOUT;
+    let mut bridge_packet_data = BridgePacketData::default();
+    bridge_packet_data.amount = Uint128::from(1000000000u128);
+    bridge_packet_data.src_denom = "orai".to_string();
+    bridge_packet_data.dest_denom = "orai".to_string();
+    bridge_packet_data.orai_address = "orai_address".to_string();
+    let mut mapping = MappingMetadata {
+        asset_info: AssetInfo::NativeToken {
+            denom: "orai".to_string(),
+        },
+        remote_decimals: 6,
+        asset_info_decimals: 6,
+        opcode: OPCODE_2,
+    };
+    CONFIG
+        .save(
+            storage,
+            &Config {
+                validator_contract_addr: Addr::unchecked("validator"),
+                bridge_adapter: "bridge_adapter".to_string(),
+                relayer_fee_token: AssetInfo::NativeToken {
+                    denom: "orai".to_string(),
+                },
+                relayer_fee: Uint128::from(100000u128),
+                token_fee_receiver: Addr::unchecked("token_fee_receiver"),
+                relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
+                swap_router_contract: RouterController("router".to_string()),
+            },
+        )
+        .unwrap();
+    TOKEN_FEE
+        .save(
+            storage,
+            "orai",
+            &Ratio {
+                nominator: 1,
+                denominator: 1000,
+            },
+        )
+        .unwrap();
+
+    // case 1: timeout
+    let res = Bridge::handle_packet_receive(
+        storage,
+        api,
+        &querier,
+        current_timestamp,
+        bridge_packet_data.clone(),
+        mapping.clone(),
+    )
+    .unwrap();
+
+    assert_eq!(res.0.len(), 0);
+    assert_eq!(res.1[0].value, "timeout".to_string());
+
+    // case 2: happy case
+    bridge_packet_data.timeout_timestamp = current_timestamp;
+    let res = Bridge::handle_packet_receive(
+        storage,
+        api,
+        &querier,
+        current_timestamp,
+        bridge_packet_data.clone(),
+        mapping,
+    )
+    .unwrap();
+    println!("res: {:?}", res);
+}
 
 #[test]
 fn test_read_transaction() {

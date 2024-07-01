@@ -64,17 +64,16 @@ impl Bridge {
         if out_msg.info.msg_type != MessageType::ExternalOut as u8 {
             return None;
         }
+        // verify source of tx is bridge adapter contract
+        if out_msg.info.src.to_string() != bridge_adapter_addr {
+            return None;
+        }
 
         if out_msg.body.cell_ref.is_none() {
             return None;
         }
         let cell = out_msg.body.cell_ref.unwrap().0;
         if cell.is_none() {
-            return None;
-        }
-
-        // verify source of tx is bridge adapter contract
-        if out_msg.info.src.to_string() != bridge_adapter_addr {
             return None;
         }
 
