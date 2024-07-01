@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Binary, Uint128};
+use cosmwasm_std::{Addr, Uint128};
 use oraiswap::{
     asset::{Asset, AssetInfo},
     router::RouterController,
