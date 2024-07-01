@@ -9,6 +9,7 @@ pub trait ITransactionParser {
 }
 
 pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x540CE379; // crc32("src::timeout_send_packet")
+pub const RECEIVE_PACKET_MAGIC_NUMBER: u32 = 2129059940; // crc32("src::receive_packet")
 
 #[cw_serde]
 #[derive(Default)]
@@ -18,7 +19,12 @@ impl ITransactionParser for TransactionParser {
     fn parse_packet_data(&self, cell: &Cell) -> Result<BridgePacketDataRaw, TonCellError> {
         let mut parser = cell.parser();
 
-        // TODO: add a magic number here to filter packet data
+        let magic_number = parser.load_u32(32)?;
+        if magic_number != RECEIVE_PACKET_MAGIC_NUMBER {
+            return Err(TonCellError::cell_parser_error(
+                "Not a receive packet from TON to CW",
+            ));
+        }
         let packet_seq = parser.load_u64(64)?;
         let timeout_timestamp = parser.load_u64(64)?;
         let source_denom = parser.load_address()?;
