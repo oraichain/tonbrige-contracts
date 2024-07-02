@@ -22,15 +22,14 @@ use tonbridge_bridge::{
 use tonbridge_parser::{to_bytes32, types::BridgePacketData, OPCODE_1, OPCODE_2};
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
-    address::TonAddress,
-    cell::{BagOfCells, Cell, CellBuilder},
+    cell::{BagOfCells, Cell},
     responses::{MaybeRefData, MessageType, Transaction, TransactionMessage},
 };
 
 use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
-    helper::is_expired,
+    helper::{build_bridge_to_ton_commitment, build_receive_packet_timeout_commitment, is_expired},
     state::{
         ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, SEND_PACKET_COMMITMENT,
         TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
@@ -178,13 +177,7 @@ impl Bridge {
         if is_expired(current_timestamp, data.timeout_timestamp) {
             TIMEOUT_RECEIVE_PACKET.save(storage, receive_packet.seq, &receive_packet)?;
             // must store timeout commitment
-            let mut cell_builder = CellBuilder::new();
-            cell_builder.store_bits(
-                32,
-                &RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes().to_vec(),
-            )?; // opcode
-            cell_builder.store_bits(64, &data.seq.to_be_bytes().to_vec())?; // seq
-            let commitment: Vec<u8> = cell_builder.build()?.cell_hash()?;
+            let commitment = build_receive_packet_timeout_commitment(data.seq)?;
             TIMEOUT_RECEIVE_PACKET_COMMITMENT.save(
                 storage,
                 receive_packet.seq,
@@ -345,16 +338,14 @@ impl Bridge {
             },
         )?;
 
-        // build commitment of send_packet
-        let mut cell_builder = CellBuilder::new();
-        cell_builder.store_bits(32, &SEND_TO_TON_MAGIC_NUMBER.to_be_bytes().to_vec())?; // opcode
-        cell_builder.store_bits(32, &msg.crc_src.to_be_bytes().to_vec())?; // crc_src
-        cell_builder.store_bits(64, &last_packet_seq.to_be_bytes().to_vec())?; // seq
-        cell_builder.store_address(&TonAddress::from_base64_std(&msg.to)?)?; // receiver
-        cell_builder.store_address(&TonAddress::from_base64_std(&msg.denom)?)?; // remote denom
-        cell_builder.store_bits(128, &remote_amount.to_be_bytes().to_vec())?; // remote amount
-        cell_builder.store_bits(64, &timeout_timestamp.to_be_bytes().to_vec())?; // timeout timestamp
-        let commitment = cell_builder.build()?.cell_hash()?;
+        let commitment = build_bridge_to_ton_commitment(
+            last_packet_seq,
+            msg.crc_src,
+            &msg.to,
+            &msg.denom,
+            remote_amount,
+            timeout_timestamp,
+        )?;
         SEND_PACKET_COMMITMENT.save(
             deps.storage,
             last_packet_seq,
