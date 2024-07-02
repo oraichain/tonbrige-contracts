@@ -40,7 +40,7 @@ cw-tonbridge-validator = { path = "./contracts/tonbridge_validator" }
 
 oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "f2c1cec" }
 cw20-ics20-msg = { git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev = "0e0258c" }
-tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "4fcd1b14da565109f00488220f50030b71b43a92", default-features = false }
+tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "fea807086556bed79c004e63f83753e8b234a250", default-features = false }
 cw-multi-test = "0.16.6"
 
 [patch.crates-io]
