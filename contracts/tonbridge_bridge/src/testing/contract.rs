@@ -21,7 +21,7 @@ use tonbridge_parser::{
 };
 use tonlib::{
     address::TonAddress,
-    cell::{Cell, CellBuilder, TonCellError},
+    cell::{CellBuilder, TonCellError},
     responses::{AnyCell, MaybeRefData, MessageType, TransactionMessage},
 };
 

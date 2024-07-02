@@ -2,8 +2,9 @@ pub fn is_expired(now: u64, timestamp: u64) -> bool {
     now > timestamp
 }
 
+#[cfg(test)]
 mod tests {
-    use crate::helper::is_expired;
+    use super::is_expired;
 
     #[test]
     fn test_is_expired() {
