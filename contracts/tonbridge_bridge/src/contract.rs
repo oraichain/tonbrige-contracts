@@ -482,6 +482,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
         QueryMsg::ChannelStateData { channel_id } => to_binary(&query_channel(deps, channel_id)?),
         QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
+        QueryMsg::QueryTimeoutReceivePackets {} => to_binary(&query_timeout_receive_packets(deps)?),
     }
 }
 
@@ -518,6 +519,13 @@ pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelRespons
         balances,
         total_sent,
     })
+}
+
+pub fn query_timeout_receive_packets(deps: Deps) -> StdResult<Vec<ReceivePacket>> {
+    TIMEOUT_RECEIVE_PACKET
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|data| -> StdResult<ReceivePacket> { Ok(data?.1) })
+        .collect()
 }
 
 fn get_mapping_from_key(deps: Deps, ibc_denom: String) -> StdResult<PairQuery> {
