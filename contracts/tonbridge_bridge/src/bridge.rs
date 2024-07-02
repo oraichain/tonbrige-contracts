@@ -8,6 +8,7 @@ use cw20_ics20_msg::{
     amount::{convert_local_to_remote, convert_remote_to_local, Amount},
     helper::{denom_to_asset_info, parse_asset_info_denom},
 };
+
 use oraiswap::{
     asset::{Asset, AssetInfo},
     router::{RouterController, SwapOperation},
@@ -21,7 +22,8 @@ use tonbridge_bridge::{
 use tonbridge_parser::{to_bytes32, types::BridgePacketData, OPCODE_1, OPCODE_2};
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
-    cell::{BagOfCells, Cell},
+    address::TonAddress,
+    cell::{BagOfCells, Cell, CellBuilder},
     responses::{MaybeRefData, MessageType, Transaction, TransactionMessage},
 };
 
@@ -30,8 +32,8 @@ use crate::{
     error::ContractError,
     helper::is_expired,
     state::{
-        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, TIMEOUT_RECEIVE_PACKET,
-        TIMEOUT_SEND_PACKET, TOKEN_FEE,
+        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PACKET_COMMITMENT, PROCESSED_TXS, SEND_PACKET,
+        TIMEOUT_RECEIVE_PACKET, TIMEOUT_SEND_PACKET, TOKEN_FEE,
     },
 };
 
@@ -315,15 +317,12 @@ impl Bridge {
         )?;
 
         // store to pending packet transfer
-
         let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default() + 1;
-
         SEND_PACKET.save(
             deps.storage,
             last_packet_seq,
             &SendPacket {
                 sequence: last_packet_seq,
-                sender: sender.to_string(),
                 to: msg.to.clone(),
                 denom: msg.denom.clone(),
                 amount: remote_amount,
@@ -331,6 +330,23 @@ impl Bridge {
                 timeout_timestamp,
             },
         )?;
+
+        // build commitment of send_packet
+        let mut cell_builder = CellBuilder::new();
+        cell_builder.store_bits(32, &SEND_TO_TON_MAGIC_NUMBER.to_be_bytes().to_vec())?; // opcode
+        cell_builder.store_bits(32, &msg.crc_src.to_be_bytes().to_vec())?; // crc_src
+        cell_builder.store_bits(64, &last_packet_seq.to_be_bytes().to_vec())?; // seq
+        cell_builder.store_address(&TonAddress::from_base64_std(&msg.to)?)?; // receiver
+        cell_builder.store_address(&TonAddress::from_base64_std(&msg.denom)?)?; // remote denom
+        cell_builder.store_bits(128, &remote_amount.to_be_bytes().to_vec())?; // remote amount
+        cell_builder.store_bits(64, &timeout_timestamp.to_be_bytes().to_vec())?; // timeout timestamp
+        let commitment = cell_builder.build()?.cell_hash()?;
+        PACKET_COMMITMENT.save(
+            deps.storage,
+            last_packet_seq,
+            &to_bytes32(&HexBinary::from(commitment))?,
+        )?;
+
         // this packet is saved just in case we need to refund the sender due to timeout
         TIMEOUT_SEND_PACKET.save(
             deps.storage,

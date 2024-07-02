@@ -4,7 +4,7 @@ use cosmwasm_std::{ConversionOverflowError, OverflowError, StdError};
 use cw_controllers::AdminError;
 use cw_utils::PaymentError;
 use thiserror::Error;
-use tonlib::cell::TonCellError;
+use tonlib::{address::TonAddressParseError, cell::TonCellError};
 
 #[derive(Error, Debug)]
 pub enum ContractError {
@@ -28,6 +28,9 @@ pub enum ContractError {
 
     #[error("{0}")]
     TryFromSliceError(#[from] TryFromSliceError),
+
+    #[error("{0}")]
+    TonAddressParseError(#[from] TonAddressParseError),
 
     #[error("Unauthorized")]
     Unauthorized {},

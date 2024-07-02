@@ -15,13 +15,13 @@ use tonbridge_bridge::msg::{
     PairQuery, QueryMsg, UpdatePairMsg,
 };
 use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
-use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, SendPacket, TokenFee};
+use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, TokenFee};
 use tonbridge_parser::to_bytes32;
 use tonbridge_parser::transaction_parser::{get_channel_id, ITransactionParser, TransactionParser};
 use tonlib::cell::{BagOfCells, Cell, TonCellError};
 use tonlib::responses::{MaybeRefData, TransactionMessage};
 
-use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER};
+use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER};
 use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{

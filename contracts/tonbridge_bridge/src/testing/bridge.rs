@@ -14,7 +14,7 @@ use tonbridge_bridge::{
         BridgeToTonMsg, ChannelResponse, ExecuteMsg, InstantiateMsg, QueryMsg as BridgeQueryMsg,
         UpdatePairMsg,
     },
-    state::{Config, MappingMetadata, Ratio, SendPacket, TokenFee},
+    state::{Config, MappingMetadata, Ratio, TokenFee},
 };
 use tonbridge_parser::{types::BridgePacketData, OPCODE_2};
 use tonlib::{
@@ -27,7 +27,7 @@ use crate::{
     channel::increase_channel_balance,
     contract::{execute, instantiate},
     error::ContractError,
-    state::{CONFIG, SEND_PACKET, TOKEN_FEE},
+    state::{CONFIG, TOKEN_FEE},
     testing::mock::{new_mock_app, MockApp},
 };
 
