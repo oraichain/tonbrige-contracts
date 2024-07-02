@@ -1,4 +1,3 @@
-use cosmwasm_schema::serde::de;
 use cosmwasm_std::{
     attr, coin,
     testing::{mock_dependencies, mock_env, mock_info},

@@ -38,7 +38,7 @@ use crate::{
 };
 
 pub const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
-pub const RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x64060175; // crc32("recv::timeout_recv_packet")
+pub const RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x0da5c1c4; // crc32("ops::ack_timeout")
 pub const SEND_TO_TON_MAGIC_NUMBER: u32 = 0x4E545F4; // crc32("src::cosmos")
 
 #[cw_serde]
