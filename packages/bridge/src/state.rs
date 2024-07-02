@@ -54,6 +54,7 @@ pub struct Config {
 #[cw_serde]
 pub struct SendPacket {
     pub sequence: u64,
+    pub sender: String,
     pub to: String,
     pub denom: String,
     pub amount: Uint128,

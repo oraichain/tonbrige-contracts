@@ -472,6 +472,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
             &SendPacket {
                 sequence: seq,
                 to: "receiver".to_string(),
+                sender: "sender".to_string(),
                 denom: "orai".to_string(),
                 amount: Uint128::one(),
                 crc_src: SEND_PACKET_TIMEOUT_MAGIC_NUMBER,

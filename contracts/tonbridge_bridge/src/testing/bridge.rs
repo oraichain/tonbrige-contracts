@@ -25,7 +25,7 @@ use tonlib::{
 use crate::{
     bridge::{Bridge, DEFAULT_TIMEOUT, SEND_TO_TON_MAGIC_NUMBER},
     channel::increase_channel_balance,
-    contract::{execute, execute_submit_bridge_to_ton_info, instantiate},
+    contract::{execute, instantiate},
     error::ContractError,
     state::{CONFIG, SEND_PACKET, TOKEN_FEE},
     testing::mock::{new_mock_app, MockApp},
@@ -529,49 +529,6 @@ fn test_bridge_cw20_to_ton() {
             attr("seq", "1"),
         ]
     );
-}
-
-#[test]
-fn test_submit_bridge_to_ton_info() {
-    let mut deps = mock_dependencies();
-    let env = mock_env();
-    SEND_PACKET
-        .save(
-            deps.as_mut().storage,
-            1,
-            &SendPacket {
-                sequence: 1,
-                to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-                amount: Uint128::from(10000000000u128),
-                crc_src: SEND_TO_TON_MAGIC_NUMBER,
-                timeout_timestamp: env.block.time.seconds() + DEFAULT_TIMEOUT,
-            },
-        )
-        .unwrap();
-
-    // seq = 2
-    let data_err = "000000000000000280002255d73e3a5c1a9589f0aece31e97b54b261ac3d7d16d4f1068fdf9d4b4e18300071737b65193ddbb57097037ae801ee6dc77ee97dd5862112116b04da4eb70080000000000000000000000009502f9000139517d0000000019a07ba04";
-    let res =
-        execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data_err).unwrap())
-            .unwrap_err();
-    assert!(res.to_string().contains("SendPacket not found"));
-
-    // verify success
-    let data = "000000000000000180002255d73e3a5c1a9589f0aece31e97b54b261ac3d7d16d4f1068fdf9d4b4e18300071737b65193ddbb57097037ae801ee6dc77ee97dd5862112116b04da4eb70080000000000000000000000009502f9000139517d00000000176bf1eec";
-    let res = execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data).unwrap())
-        .unwrap();
-    assert_eq!(
-        res.attributes,
-        vec![
-            ("action", "submit_bridge_to_ton_info"),
-            ("data", &data.to_lowercase())
-        ]
-    );
-
-    // after submit, not found send_packet
-    let packet = SEND_PACKET.may_load(deps.as_ref().storage, 1).unwrap();
-    assert_eq!(packet, None);
 }
 
 #[test]

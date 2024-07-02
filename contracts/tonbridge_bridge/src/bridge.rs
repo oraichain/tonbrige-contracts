@@ -323,6 +323,7 @@ impl Bridge {
             last_packet_seq,
             &SendPacket {
                 sequence: last_packet_seq,
+                sender: sender.to_string(),
                 to: msg.to.clone(),
                 denom: msg.denom.clone(),
                 amount: remote_amount,

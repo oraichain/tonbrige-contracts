@@ -94,7 +94,6 @@ pub fn execute(
             Bridge::handle_bridge_to_ton(deps, env, msg, amount, info.sender)
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
-        ExecuteMsg::SubmitBridgeToTonInfo { data } => execute_submit_bridge_to_ton_info(deps, data),
         ExecuteMsg::ProcessTimeoutSendPacket {
             masterchain_header_proof,
             tx_boc,
@@ -293,47 +292,6 @@ pub fn execute_receive(
     let msg: BridgeToTonMsg = from_binary(&wrapper.msg)?;
     let sender = deps.api.addr_validate(&wrapper.sender)?;
     Bridge::handle_bridge_to_ton(deps, env, msg, amount, sender)
-}
-
-pub fn execute_submit_bridge_to_ton_info(
-    deps: DepsMut,
-    boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let mut cell = Cell::default();
-    cell.data = boc.as_slice().to_vec();
-    cell.bit_len = cell.data.len() * 8;
-
-    let mut parser = cell.parser();
-
-    let seq = parser.load_u64(64)?;
-    let to = parser.load_address()?;
-    let denom = parser.load_address()?;
-    let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
-    let crc_src = parser.load_u32(32)?;
-    if crc_src != SEND_TO_TON_MAGIC_NUMBER {
-        return Err(ContractError::TonCellError(
-            TonCellError::cell_parser_error("Not a bridge to ton info data"),
-        ));
-    }
-    let timeout_timestamp = parser.load_u64(64)?;
-    let send_packet = SEND_PACKET.load(deps.storage, seq)?;
-    if send_packet.ne(&SendPacket {
-        sequence: seq,
-        to: to.to_string(),
-        denom: denom.to_string(),
-        amount: Uint128::from(amount),
-        crc_src,
-        timeout_timestamp,
-    }) {
-        return Err(ContractError::InvalidSendPacketBoc {});
-    }
-
-    // after finished verifying the boc, we remove the packet to prevent replay attack
-    SEND_PACKET.remove(deps.storage, seq);
-
-    Ok(Response::new()
-        .add_attribute("action", "submit_bridge_to_ton_info")
-        .add_attribute("data", boc.to_hex()))
 }
 
 pub fn process_timeout_send_packet(

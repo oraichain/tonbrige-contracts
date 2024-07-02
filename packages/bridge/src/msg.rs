@@ -27,9 +27,6 @@ pub enum ExecuteMsg {
     DeleteMappingPair(DeletePairMsg),
     BridgeToTon(BridgeToTonMsg),
     Receive(Cw20ReceiveMsg),
-    SubmitBridgeToTonInfo {
-        data: HexBinary,
-    },
     UpdateOwner {
         new_owner: Addr,
     },
