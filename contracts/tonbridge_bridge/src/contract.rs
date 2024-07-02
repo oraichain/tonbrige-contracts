@@ -26,7 +26,7 @@ use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{
     ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
-    TIMEOUT_RECEIVE_PACKET, TIMEOUT_SEND_PACKET, TOKEN_FEE,
+    TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -382,6 +382,7 @@ pub fn process_timeout_receive_packet(
 
     // after finished verifying the boc, we remove the packet to prevent replay attack
     TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
+    TIMEOUT_RECEIVE_PACKET_COMMITMENT.remove(deps.storage, seq);
 
     Ok(Response::new().add_attribute("action", "process_timeout_recv_packet"))
 }
