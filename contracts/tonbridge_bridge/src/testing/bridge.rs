@@ -1,3 +1,4 @@
+use cosmwasm_schema::serde::de;
 use cosmwasm_std::{
     attr, coin,
     testing::{mock_dependencies, mock_env, mock_info},
@@ -283,7 +284,7 @@ fn test_read_transaction() {
 #[test]
 fn test_bridge_native_to_ton() {
     let mut deps = mock_dependencies();
-    let denom = "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN";
+    let denom = "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB";
     instantiate(
         deps.as_mut(),
         mock_env(),
@@ -326,7 +327,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
+            denom: denom.to_string(),
             crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
@@ -342,7 +343,7 @@ fn test_bridge_native_to_ton() {
         mock_info("owner", &vec![]),
         ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
             local_channel_id: "channel-0".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: denom.to_string(),
             local_asset_info: AssetInfo::NativeToken {
                 denom: "orai".to_string(),
             },
@@ -361,7 +362,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: denom.to_string(),
             crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
@@ -377,7 +378,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: denom.to_string(),
             crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
@@ -389,7 +390,7 @@ fn test_bridge_native_to_ton() {
     increase_channel_balance(
         deps.as_mut().storage,
         "channel-0",
-        "orai_ton",
+        denom,
         Uint128::from(1000000000u128),
     )
     .unwrap();
@@ -400,7 +401,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: denom.to_string(),
             crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
@@ -415,7 +416,7 @@ fn test_bridge_native_to_ton() {
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
             ),
-            ("dest_denom", "orai_ton"),
+            ("dest_denom", denom),
             ("local_amount", "10000"),
             ("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
             ("relayer_fee", "0"),
@@ -465,7 +466,7 @@ fn test_bridge_cw20_to_ton() {
         mock_info("owner", &vec![]),
         ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
             local_channel_id: "channel-0".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
             local_asset_info: AssetInfo::Token {
                 contract_addr: Addr::unchecked("usdt"),
             },
@@ -479,7 +480,7 @@ fn test_bridge_cw20_to_ton() {
     increase_channel_balance(
         deps.as_mut().storage,
         "channel-0",
-        "orai_ton",
+        "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB",
         Uint128::from(1000000000u128),
     )
     .unwrap();
@@ -494,7 +495,7 @@ fn test_bridge_cw20_to_ton() {
             msg: to_binary(&BridgeToTonMsg {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                denom: "orai_ton".to_string(),
+                denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
@@ -511,7 +512,10 @@ fn test_bridge_cw20_to_ton() {
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
             ),
-            attr("dest_denom", "orai_ton"),
+            attr(
+                "dest_denom",
+                "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
+            ),
             attr("local_amount", "10000"),
             attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
             attr("relayer_fee", "0"),
@@ -561,7 +565,7 @@ fn test_bridge_to_ton_with_fee() {
         mock_info("owner", &vec![]),
         ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
             local_channel_id: "channel-0".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
             local_asset_info: AssetInfo::Token {
                 contract_addr: Addr::unchecked("orai"),
             },
@@ -586,7 +590,7 @@ fn test_bridge_to_ton_with_fee() {
             relayer_fee: None,
             swap_router_contract: None,
             token_fee: Some(vec![TokenFee {
-                token_denom: "orai_ton".to_string(),
+                token_denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 ratio: Ratio {
                     nominator: 1,
                     denominator: 1000,
@@ -599,7 +603,7 @@ fn test_bridge_to_ton_with_fee() {
     increase_channel_balance(
         deps.as_mut().storage,
         "channel-0",
-        "orai_ton",
+        "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB",
         Uint128::from(1000000000u128),
     )
     .unwrap();
@@ -614,7 +618,7 @@ fn test_bridge_to_ton_with_fee() {
             msg: to_binary(&BridgeToTonMsg {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                denom: "orai_ton".to_string(),
+                denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
@@ -653,7 +657,10 @@ fn test_bridge_to_ton_with_fee() {
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
             ),
-            attr("dest_denom", "orai_ton"),
+            attr(
+                "dest_denom",
+                "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
+            ),
             attr("local_amount", "8990"),
             attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
             attr("relayer_fee", "1000"),
@@ -703,7 +710,7 @@ fn test_bridge_to_ton_with_fee() {
             msg: to_binary(&BridgeToTonMsg {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                denom: "orai_ton".to_string(),
+                denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
@@ -731,7 +738,10 @@ fn test_bridge_to_ton_with_fee() {
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
             ),
-            attr("dest_denom", "orai_ton"),
+            attr(
+                "dest_denom",
+                "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
+            ),
             attr("local_amount", "9990"),
             attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
             attr("relayer_fee", "0"),

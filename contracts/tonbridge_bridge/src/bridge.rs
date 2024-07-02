@@ -32,8 +32,8 @@ use crate::{
     error::ContractError,
     helper::is_expired,
     state::{
-        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PACKET_COMMITMENT, PROCESSED_TXS, SEND_PACKET,
-        TIMEOUT_RECEIVE_PACKET, TIMEOUT_SEND_PACKET, TOKEN_FEE,
+        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, SEND_PACKET_COMMITMENT,
+        TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
     },
 };
 
@@ -177,6 +177,20 @@ impl Bridge {
         // check packet timeout
         if is_expired(current_timestamp, data.timeout_timestamp) {
             TIMEOUT_RECEIVE_PACKET.save(storage, receive_packet.seq, &receive_packet)?;
+            // must store timeout commitment
+            let mut cell_builder = CellBuilder::new();
+            cell_builder.store_bits(
+                32,
+                &RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes().to_vec(),
+            )?; // opcode
+            cell_builder.store_bits(64, &data.seq.to_be_bytes().to_vec())?; // seq
+            let commitment: Vec<u8> = cell_builder.build()?.cell_hash()?;
+            TIMEOUT_RECEIVE_PACKET_COMMITMENT.save(
+                storage,
+                receive_packet.seq,
+                &to_bytes32(&HexBinary::from(commitment))?,
+            )?;
+
             return Ok((vec![], vec![attr("status", "timeout")]));
         }
         // increase first
@@ -341,7 +355,7 @@ impl Bridge {
         cell_builder.store_bits(128, &remote_amount.to_be_bytes().to_vec())?; // remote amount
         cell_builder.store_bits(64, &timeout_timestamp.to_be_bytes().to_vec())?; // timeout timestamp
         let commitment = cell_builder.build()?.cell_hash()?;
-        PACKET_COMMITMENT.save(
+        SEND_PACKET_COMMITMENT.save(
             deps.storage,
             last_packet_seq,
             &to_bytes32(&HexBinary::from(commitment))?,
