@@ -2,7 +2,7 @@ use cosmwasm_std::Uint128;
 use tonlib::{address::TonAddress, cell::CellBuilder};
 
 use crate::{
-    bridge::{RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
+    bridge::{ACK_MAGIC_NUMBER, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
     error::ContractError,
 };
 
@@ -19,9 +19,9 @@ pub fn build_bridge_to_ton_commitment(
     timeout_timestamp: u64,
 ) -> Result<Vec<u8>, ContractError> {
     let mut cell_builder = CellBuilder::new();
+    cell_builder.store_slice(&seq.to_be_bytes())?; // seq
     cell_builder.store_slice(&SEND_TO_TON_MAGIC_NUMBER.to_be_bytes())?; // opcode
     cell_builder.store_slice(&crc_src.to_be_bytes())?; // crc_src
-    cell_builder.store_slice(&seq.to_be_bytes())?; // seq
     cell_builder.store_address(&TonAddress::from_base64_std(to)?)?; // receiver
     cell_builder.store_address(&TonAddress::from_base64_std(denom)?)?; // remote denom
     cell_builder.store_slice(&amount.to_be_bytes())?; // remote amount
@@ -33,8 +33,17 @@ pub fn build_bridge_to_ton_commitment(
 
 pub fn build_receive_packet_timeout_commitment(seq: u64) -> Result<Vec<u8>, ContractError> {
     let mut cell_builder = CellBuilder::new();
-    cell_builder.store_slice(&RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes())?; // opcode
     cell_builder.store_slice(&seq.to_be_bytes())?; // seq
+    cell_builder.store_slice(&RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes())?; // opcode
+
+    let commitment: Vec<u8> = cell_builder.build()?.cell_hash()?;
+    Ok(commitment)
+}
+
+pub fn build_ack_commitment(seq: u64) -> Result<Vec<u8>, ContractError> {
+    let mut cell_builder = CellBuilder::new();
+    cell_builder.store_slice(&seq.to_be_bytes())?; // seq
+    cell_builder.store_slice(&ACK_MAGIC_NUMBER.to_be_bytes())?; // opcode
 
     let commitment: Vec<u8> = cell_builder.build()?.cell_hash()?;
     Ok(commitment)
@@ -43,6 +52,8 @@ pub fn build_receive_packet_timeout_commitment(seq: u64) -> Result<Vec<u8>, Cont
 #[cfg(test)]
 mod tests {
     use cosmwasm_std::Uint128;
+
+    use crate::helper::build_ack_commitment;
 
     use super::{
         build_bridge_to_ton_commitment, build_receive_packet_timeout_commitment, is_expired,
@@ -61,8 +72,19 @@ mod tests {
         assert_eq!(
             commitment,
             vec![
-                31, 112, 103, 53, 231, 62, 248, 14, 0, 155, 123, 249, 55, 209, 63, 240, 63, 255,
-                84, 147, 234, 64, 167, 198, 41, 72, 6, 213, 27, 47, 165, 189
+                147, 141, 120, 107, 189, 160, 37, 224, 20, 139, 119, 27, 41, 112, 235, 158, 243,
+                86, 229, 168, 245, 240, 137, 105, 219, 215, 18, 219, 240, 56, 252, 91
+            ]
+        )
+    }
+    #[test]
+    fn test_build_ack_commitment() {
+        let commitment = build_ack_commitment(1).unwrap();
+        assert_eq!(
+            commitment,
+            vec![
+                179, 254, 186, 2, 145, 250, 132, 167, 133, 98, 70, 99, 164, 49, 39, 41, 170, 131,
+                214, 113, 92, 87, 140, 74, 254, 68, 4, 123, 121, 0, 37, 237
             ]
         )
     }
@@ -81,8 +103,8 @@ mod tests {
         assert_eq!(
             commitment,
             vec![
-                119, 193, 142, 10, 121, 185, 151, 96, 213, 92, 38, 8, 35, 164, 206, 127, 169, 152,
-                124, 138, 154, 53, 213, 232, 194, 103, 121, 126, 40, 150, 236, 133
+                176, 40, 134, 153, 7, 174, 65, 132, 250, 22, 14, 89, 57, 48, 237, 114, 194, 57,
+                158, 22, 197, 123, 38, 238, 56, 19, 59, 140, 221, 175, 42, 35
             ]
         )
     }

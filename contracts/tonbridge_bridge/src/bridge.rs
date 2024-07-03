@@ -29,16 +29,21 @@ use tonlib::{
 use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
-    helper::{build_bridge_to_ton_commitment, build_receive_packet_timeout_commitment, is_expired},
+    helper::{
+        build_ack_commitment, build_bridge_to_ton_commitment,
+        build_receive_packet_timeout_commitment, is_expired,
+    },
     state::{
-        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET_COMMITMENT,
-        TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
+        ics20_denoms, ACK_COMMITMENT, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS,
+        SEND_PACKET_COMMITMENT, TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT,
+        TIMEOUT_SEND_PACKET, TOKEN_FEE,
     },
 };
 
 pub const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
 pub const RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x0da5c1c4; // crc32("ops::ack_timeout")
 pub const SEND_TO_TON_MAGIC_NUMBER: u32 = 0x4E545F4; // crc32("src::cosmos")
+pub const ACK_MAGIC_NUMBER: u32 = 0x3acb0e2; // crc32("ops::ack_success")
 
 #[cw_serde]
 pub struct Bridge {
@@ -254,6 +259,14 @@ impl Bridge {
         } else if mapping.opcode == OPCODE_2 {
             cosmos_msgs.push(msg.into_msg(None, querier, recipient)?);
         }
+
+        // store ack commitment
+        let commitment = build_ack_commitment(receive_packet.seq)?;
+        ACK_COMMITMENT.save(
+            storage,
+            receive_packet.seq,
+            &to_bytes32(&HexBinary::from(commitment))?,
+        )?;
 
         Ok((cosmos_msgs, attributes))
     }

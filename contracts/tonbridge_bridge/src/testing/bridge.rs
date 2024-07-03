@@ -27,7 +27,8 @@ use crate::{
     channel::increase_channel_balance,
     contract::{execute, instantiate},
     error::ContractError,
-    state::{CONFIG, TOKEN_FEE},
+    helper::build_ack_commitment,
+    state::{ACK_COMMITMENT, CONFIG, TOKEN_FEE},
     testing::mock::{new_mock_app, MockApp},
 };
 
@@ -137,7 +138,9 @@ fn test_handle_packet_receive() {
         mapping,
     )
     .unwrap();
-    println!("res: {:?}", res);
+
+    let commitment = ACK_COMMITMENT.load(deps.as_ref().storage, 0).unwrap();
+    assert_eq!(commitment, build_ack_commitment(0).unwrap().as_slice());
 }
 
 #[test]
