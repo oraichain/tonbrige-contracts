@@ -25,7 +25,7 @@ use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER};
 use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{
-    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
+    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
     SEND_PACKET_COMMITMENT, TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT,
     TIMEOUT_SEND_PACKET, TOKEN_FEE,
 };
@@ -404,12 +404,7 @@ pub fn build_timeout_send_packet_refund_msgs(
     }
     let cell = cell.unwrap();
     let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
-    let send_packet = SEND_PACKET.may_load(storage, packet_seq_timeout)?;
 
-    // only continue processing timeout if the SEND_PACKET has been already processed & removed by the relayer to prevent double spending
-    if send_packet.is_some() {
-        return Err(ContractError::SendPacketExists {});
-    }
     let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, packet_seq_timeout)?;
 
     // no-op to prevent error spamming from the relayer

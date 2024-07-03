@@ -52,16 +52,6 @@ pub struct Config {
 }
 
 #[cw_serde]
-pub struct SendPacket {
-    pub sequence: u64,
-    pub to: String,
-    pub denom: String,
-    pub amount: Uint128,
-    pub crc_src: u32,
-    pub timeout_timestamp: u64,
-}
-
-#[cw_serde]
 pub struct TimeoutSendPacket {
     pub local_refund_asset: Asset,
     pub sender: String,

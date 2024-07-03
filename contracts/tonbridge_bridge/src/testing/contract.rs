@@ -12,9 +12,7 @@ use oraiswap::{
 use tonbridge_bridge::{
     msg::{ChannelResponse, DeletePairMsg, PairQuery, QueryMsg as BridgeQueryMsg, UpdatePairMsg},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
-    state::{
-        Config, MappingMetadata, Ratio, ReceivePacket, SendPacket, TimeoutSendPacket, TokenFee,
-    },
+    state::{Config, MappingMetadata, Ratio, ReceivePacket, TimeoutSendPacket, TokenFee},
 };
 use tonbridge_parser::{
     to_bytes32, transaction_parser::SEND_PACKET_TIMEOUT_MAGIC_NUMBER, EMPTY_HASH,
@@ -33,7 +31,7 @@ use crate::{
         query,
     },
     error::ContractError,
-    state::{PROCESSED_TXS, SEND_PACKET, TIMEOUT_RECEIVE_PACKET, TIMEOUT_SEND_PACKET},
+    state::{PROCESSED_TXS, TIMEOUT_RECEIVE_PACKET, TIMEOUT_SEND_PACKET},
 };
 
 use super::mock::{new_mock_app, MockApp};
@@ -464,38 +462,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
     transaction_message.body.cell_ref = Some((Some(any_cell.clone()), None));
     out_msg.data = Some(transaction_message.clone());
 
-    // case 2: existing SEND_PACKET -> should not build refund msg
-    SEND_PACKET
-        .save(
-            deps_mut.storage,
-            seq,
-            &SendPacket {
-                sequence: seq,
-                to: "receiver".to_string(),
-                denom: "orai".to_string(),
-                amount: Uint128::one(),
-                crc_src: SEND_PACKET_TIMEOUT_MAGIC_NUMBER,
-                timeout_timestamp: latest_timestamp - 1,
-            },
-        )
-        .unwrap();
-
-    let err = build_timeout_send_packet_refund_msgs(
-        deps_mut.storage,
-        deps_mut.api,
-        &deps_mut.querier,
-        out_msg.clone(),
-        bridge_addr.clone(),
-        latest_timestamp as u32,
-    )
-    .unwrap_err();
-    assert_eq!(
-        err.to_string(),
-        ContractError::SendPacketExists {}.to_string()
-    );
-
-    // case 3: timeout packet not found -> no-op
-    SEND_PACKET.clear(deps_mut.storage);
+    // case 2: timeout packet not found -> no-op
     let res = build_timeout_send_packet_refund_msgs(
         deps_mut.storage,
         deps_mut.api,
@@ -507,7 +474,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
     .unwrap();
     assert_eq!(res.len(), 0);
 
-    // case 4: packet has not timed out yet
+    // case 3: packet has not timed out yet
     TIMEOUT_SEND_PACKET
         .save(
             deps_mut.storage,
@@ -536,7 +503,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
     .unwrap_err();
     assert_eq!(err.to_string(), ContractError::NotExpired {}.to_string());
 
-    // case 5: happy case
+    // case 4: happy case
     TIMEOUT_SEND_PACKET
         .save(
             deps_mut.storage,

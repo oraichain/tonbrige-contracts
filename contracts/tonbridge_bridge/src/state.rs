@@ -2,7 +2,7 @@ use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 
 use cw_controllers::Admin;
 use tonbridge_bridge::state::{
-    ChannelState, Config, MappingMetadata, Ratio, ReceivePacket, SendPacket, TimeoutSendPacket,
+    ChannelState, Config, MappingMetadata, Ratio, ReceivePacket, TimeoutSendPacket,
 };
 use tonbridge_parser::types::Bytes32;
 
@@ -16,7 +16,6 @@ pub const TOKEN_FEE: Map<&str, Ratio> = Map::new("token_fee");
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-pub const SEND_PACKET: Map<u64, SendPacket> = Map::new("send_packet");
 pub const TIMEOUT_SEND_PACKET: Map<u64, TimeoutSendPacket> = Map::new("timeout_send_packet");
 pub const LAST_PACKET_SEQ: Item<u64> = Item::new("last_packet_seq");
 pub const TIMEOUT_RECEIVE_PACKET: Map<u64, ReceivePacket> = Map::new("receive_packet");

@@ -17,7 +17,7 @@ use std::ops::Mul;
 use tonbridge_bridge::{
     msg::{BridgeToTonMsg, FeeData},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
-    state::{MappingMetadata, Ratio, ReceivePacket, SendPacket, TimeoutSendPacket},
+    state::{MappingMetadata, Ratio, ReceivePacket, TimeoutSendPacket},
 };
 use tonbridge_parser::{to_bytes32, types::BridgePacketData, OPCODE_1, OPCODE_2};
 use tonbridge_validator::wrapper::ValidatorWrapper;
@@ -31,7 +31,7 @@ use crate::{
     error::ContractError,
     helper::{build_bridge_to_ton_commitment, build_receive_packet_timeout_commitment, is_expired},
     state::{
-        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET, SEND_PACKET_COMMITMENT,
+        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET_COMMITMENT,
         TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
     },
 };
@@ -323,20 +323,7 @@ impl Bridge {
             remote_amount,
         )?;
 
-        // store to pending packet transfer
         let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default() + 1;
-        SEND_PACKET.save(
-            deps.storage,
-            last_packet_seq,
-            &SendPacket {
-                sequence: last_packet_seq,
-                to: msg.to.clone(),
-                denom: msg.denom.clone(),
-                amount: remote_amount,
-                crc_src: msg.crc_src,
-                timeout_timestamp,
-            },
-        )?;
 
         let commitment = build_bridge_to_ton_commitment(
             last_packet_seq,
