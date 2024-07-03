@@ -129,7 +129,7 @@ fn test_handle_packet_receive() {
 
     // case 2: happy case
     bridge_packet_data.timeout_timestamp = current_timestamp;
-    let res = Bridge::handle_packet_receive(
+    Bridge::handle_packet_receive(
         storage,
         api,
         &querier,

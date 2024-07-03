@@ -329,7 +329,7 @@ pub fn process_timeout_send_packet(
             config.bridge_adapter.clone(),
             masterchain_block_latest_timestamp,
         )?;
-        if refund_msgs.len() == 0 {
+        if refund_msgs.is_empty() {
             continue;
         }
 
@@ -420,7 +420,7 @@ pub fn build_timeout_send_packet_refund_msgs(
     }
     let refund_msg = timeout_packet.local_refund_asset.into_msg(
         None,
-        &querier,
+        querier,
         api.addr_validate(&timeout_packet.sender)?,
     )?;
     TIMEOUT_SEND_PACKET.remove(storage, packet_seq_timeout);
