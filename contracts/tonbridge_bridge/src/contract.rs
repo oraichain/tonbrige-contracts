@@ -26,7 +26,8 @@ use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{
     ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
-    TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
+    SEND_PACKET_COMMITMENT, TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT,
+    TIMEOUT_SEND_PACKET, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -331,6 +332,7 @@ pub fn process_timeout_send_packet(
         if refund_msgs.len() == 0 {
             continue;
         }
+
         return Ok(Response::new()
             .add_attribute("action", "process_timeout_send_packet")
             .add_messages(refund_msgs));
@@ -427,6 +429,8 @@ pub fn build_timeout_send_packet_refund_msgs(
         api.addr_validate(&timeout_packet.sender)?,
     )?;
     TIMEOUT_SEND_PACKET.remove(storage, packet_seq_timeout);
+    SEND_PACKET_COMMITMENT.remove(storage, packet_seq_timeout);
+
     Ok(vec![refund_msg])
 }
 
