@@ -621,9 +621,7 @@ fn test_process_timeout_receive_packet_invalid_boc() {
         .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
         .unwrap();
     cell_builder.store_u16(16, 10).unwrap();
-    cell_builder
-        .store_bits(128, Uint128::one().to_be_bytes().as_slice())
-        .unwrap();
+    cell_builder.store_slice(&1u128.to_be_bytes()).unwrap();
     cell_builder.store_u64(64, timeout_timestamp).unwrap();
     let cell = cell_builder.build().unwrap();
 
@@ -670,9 +668,7 @@ fn test_process_timeout_receive_packet_happy_case() {
         .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
         .unwrap();
     cell_builder.store_u16(16, 0).unwrap();
-    cell_builder
-        .store_bits(128, Uint128::one().to_be_bytes().as_slice())
-        .unwrap();
+    cell_builder.store_slice(&1u128.to_be_bytes()).unwrap();
     cell_builder.store_u64(64, timeout_timestamp).unwrap();
     let cell = cell_builder.build().unwrap();
 
