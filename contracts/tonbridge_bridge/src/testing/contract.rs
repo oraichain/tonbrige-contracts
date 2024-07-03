@@ -435,7 +435,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
     let latest_timestamp = env.block.time.seconds();
     let bridge_addr = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string();
     let sender = "orai1rchnkdpsxzhquu63y6r4j4t57pnc9w8ehdhedx";
-    let seq = 1;
+    let seq = 1u64;
 
     // case 1: out msg is invalid -> empty res
     let res = build_timeout_send_packet_refund_msgs(
@@ -455,10 +455,10 @@ fn test_build_timeout_send_packet_refund_msgs() {
     let mut any_cell = AnyCell::default();
     let mut cell_builder = CellBuilder::new();
     cell_builder
-        .store_u32(32, SEND_PACKET_TIMEOUT_MAGIC_NUMBER)
+        .store_slice(&SEND_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes())
         .unwrap();
     // sequence
-    cell_builder.store_u64(64, seq).unwrap();
+    cell_builder.store_slice(&seq.to_be_bytes()).unwrap();
     let cell = cell_builder.build().unwrap();
     any_cell.cell = cell;
     transaction_message.body.cell_ref = Some((Some(any_cell.clone()), None));
@@ -571,7 +571,7 @@ fn test_process_timeout_receive_packet_not_a_receive_packet_timeout() {
     let deps_mut = deps.as_mut();
     let mut cell_builder = CellBuilder::new();
     cell_builder
-        .store_u32(32, SEND_TO_TON_MAGIC_NUMBER)
+        .store_slice(&SEND_TO_TON_MAGIC_NUMBER.to_be_bytes())
         .unwrap();
     let cell = cell_builder.build().unwrap();
     let res = process_timeout_receive_packet(deps_mut, HexBinary::from(cell.data)).unwrap_err();
@@ -610,19 +610,21 @@ fn test_process_timeout_receive_packet_invalid_boc() {
 
     let mut cell_builder = CellBuilder::new();
     cell_builder
-        .store_u32(32, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER)
+        .store_slice(&RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes())
         .unwrap();
     // sequence
-    cell_builder.store_u64(64, 1).unwrap();
+    cell_builder.store_slice(&1u64.to_be_bytes()).unwrap();
     cell_builder
         .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
         .unwrap();
     cell_builder
         .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
         .unwrap();
-    cell_builder.store_u16(16, 10).unwrap();
+    cell_builder.store_slice(&10u16.to_be_bytes()).unwrap();
     cell_builder.store_slice(&1u128.to_be_bytes()).unwrap();
-    cell_builder.store_u64(64, timeout_timestamp).unwrap();
+    cell_builder
+        .store_slice(&timeout_timestamp.to_be_bytes())
+        .unwrap();
     let cell = cell_builder.build().unwrap();
 
     let res = process_timeout_receive_packet(deps_mut, HexBinary::from(cell.data)).unwrap_err();
@@ -657,19 +659,21 @@ fn test_process_timeout_receive_packet_happy_case() {
 
     let mut cell_builder = CellBuilder::new();
     cell_builder
-        .store_u32(32, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER)
+        .store_slice(&RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes())
         .unwrap();
     // sequence
-    cell_builder.store_u64(64, 1).unwrap();
+    cell_builder.store_slice(&1u64.to_be_bytes()).unwrap();
     cell_builder
         .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
         .unwrap();
     cell_builder
         .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
         .unwrap();
-    cell_builder.store_u16(16, 0).unwrap();
+    cell_builder.store_slice(&0u16.to_be_bytes()).unwrap();
     cell_builder.store_slice(&1u128.to_be_bytes()).unwrap();
-    cell_builder.store_u64(64, timeout_timestamp).unwrap();
+    cell_builder
+        .store_slice(&timeout_timestamp.to_be_bytes())
+        .unwrap();
     let cell = cell_builder.build().unwrap();
 
     process_timeout_receive_packet(deps.as_mut(), HexBinary::from(cell.data)).unwrap();
