@@ -26,10 +26,8 @@ pub fn build_bridge_to_ton_commitment(
     cell_builder.store_address(&TonAddress::from_base64_std(denom)?)?; // remote denom
     cell_builder.store_bits(128, &amount.to_be_bytes().to_vec())?; // remote amount
     cell_builder.store_bits(64, &timeout_timestamp.to_be_bytes().to_vec())?; // timeout timestamp
-    let mut cell = cell_builder.build()?;
-    // cell_type is not is_exotic
-    cell.is_exotic = false;
-    let commitment: Vec<u8> = cell.cell_hash()?;
+
+    let commitment: Vec<u8> = cell_builder.build()?.cell_hash()?;
     Ok(commitment)
 }
 
@@ -40,11 +38,8 @@ pub fn build_receive_packet_timeout_commitment(seq: u64) -> Result<Vec<u8>, Cont
         &RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes().to_vec(),
     )?; // opcode
     cell_builder.store_bits(64, &seq.to_be_bytes().to_vec())?; // seq
-    let mut cell = cell_builder.build()?;
-    // cell_type is not is_exotic
-    cell.is_exotic = false;
-    let commitment: Vec<u8> = cell.cell_hash()?;
 
+    let commitment: Vec<u8> = cell_builder.build()?.cell_hash()?;
     Ok(commitment)
 }
 
