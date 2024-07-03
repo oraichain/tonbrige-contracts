@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    from_binary, to_binary, Addr, Api, Attribute, CosmosMsg, Empty, Order, QuerierWrapper,
+    attr, from_binary, to_binary, Addr, Api, Attribute, CosmosMsg, Empty, Order, QuerierWrapper,
     StdError, Storage, Uint128,
 };
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
@@ -105,6 +105,7 @@ pub fn execute(
         ExecuteMsg::ProcessTimeoutRecievePacket { receive_packet } => {
             process_timeout_receive_packet(deps, receive_packet)
         }
+        ExecuteMsg::Acknowledgment { tx_proof, tx_boc } => acknowledgment(deps, tx_proof, tx_boc),
     }
 }
 
@@ -224,6 +225,39 @@ pub fn read_transaction(
     Ok(Response::new()
         .add_messages(cosmos_msgs)
         .add_attributes(vec![("action", "bridge_to_cosmos")])
+        .add_attributes(attrs))
+}
+
+pub fn acknowledgment(
+    deps: DepsMut,
+    tx_proof: HexBinary,
+    tx_boc: HexBinary,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let bridge = Bridge::new(config.validator_contract_addr);
+
+    let mut attrs: Vec<Attribute> = vec![];
+    let transaction = bridge.read_transaction(
+        deps.storage,
+        &deps.querier,
+        tx_proof.as_slice(),
+        tx_boc.as_slice(),
+    )?;
+    let tx_parser = TransactionParser::default();
+    for out_msg in transaction.out_msgs.into_values() {
+        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
+        if cell.is_none() {
+            continue;
+        }
+        let cell = cell.unwrap();
+        let seq = tx_parser.parse_ack_data(&cell)?;
+
+        // remove packet commitment
+        SEND_PACKET_COMMITMENT.remove(deps.storage, seq);
+        attrs.push(attr("seq", &seq.to_string()));
+    }
+    Ok(Response::new()
+        .add_attributes(vec![("action", "acknowledgment")])
         .add_attributes(attrs))
 }
 

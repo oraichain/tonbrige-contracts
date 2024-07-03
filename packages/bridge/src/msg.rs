@@ -48,6 +48,10 @@ pub enum ExecuteMsg {
     ProcessTimeoutRecievePacket {
         receive_packet: HexBinary,
     },
+    Acknowledgment {
+        tx_proof: HexBinary,
+        tx_boc: HexBinary, // in hex form
+    },
 }
 
 #[cw_serde]
