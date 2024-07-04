@@ -1,8 +1,9 @@
 use cosmwasm_std::Uint128;
+use tonbridge_parser::transaction_parser::ACK_MAGIC_NUMBER;
 use tonlib::{address::TonAddress, cell::CellBuilder};
 
 use crate::{
-    bridge::{ACK_MAGIC_NUMBER, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
+    bridge::{RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
     error::ContractError,
 };
 
@@ -103,8 +104,8 @@ mod tests {
         assert_eq!(
             commitment,
             vec![
-                176, 40, 134, 153, 7, 174, 65, 132, 250, 22, 14, 89, 57, 48, 237, 114, 194, 57,
-                158, 22, 197, 123, 38, 238, 56, 19, 59, 140, 221, 175, 42, 35
+                250, 117, 106, 136, 54, 154, 42, 176, 158, 190, 62, 35, 202, 184, 106, 99, 90, 232,
+                238, 243, 228, 223, 3, 240, 51, 172, 64, 173, 70, 112, 226, 199
             ]
         )
     }
