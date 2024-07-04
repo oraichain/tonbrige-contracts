@@ -64,6 +64,7 @@ pub struct UpdatePairMsg {
     pub remote_decimals: u8,
     pub local_asset_info_decimals: u8,
     pub opcode: HexBinary,
+    pub crc_src: u32,
 }
 
 #[cw_serde]
@@ -78,7 +79,6 @@ pub struct BridgeToTonMsg {
     pub local_channel_id: String, // default channel-0
     pub to: String,
     pub denom: String,
-    pub crc_src: u32,
     pub timeout: Option<u64>,
 }
 

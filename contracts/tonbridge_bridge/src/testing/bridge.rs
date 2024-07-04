@@ -23,7 +23,7 @@ use tonlib::{
 };
 
 use crate::{
-    bridge::{Bridge, DEFAULT_TIMEOUT, SEND_TO_TON_MAGIC_NUMBER},
+    bridge::{Bridge, DEFAULT_TIMEOUT},
     channel::increase_channel_balance,
     contract::{execute, instantiate},
     error::ContractError,
@@ -85,6 +85,7 @@ fn test_handle_packet_receive() {
         remote_decimals: 6,
         asset_info_decimals: 6,
         opcode: OPCODE_2,
+        crc_src: 3724195509,
     };
     CONFIG
         .save(
@@ -199,6 +200,7 @@ fn test_read_transaction() {
                     remote_decimals: 6,
                     local_asset_info_decimals: 6,
                     opcode,
+                    crc_src: 3724195509,
                 },
             ))
             .unwrap(),
@@ -314,7 +316,6 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
-            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -330,7 +331,6 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
-            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -352,6 +352,7 @@ fn test_bridge_native_to_ton() {
             remote_decimals: 6,
             local_asset_info_decimals: 6,
             opcode,
+            crc_src: 3724195509,
         }),
     )
     .unwrap();
@@ -365,7 +366,6 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
-            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -381,7 +381,6 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
-            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -404,7 +403,6 @@ fn test_bridge_native_to_ton() {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
-            crc_src: SEND_TO_TON_MAGIC_NUMBER,
             timeout: None,
         }),
     )
@@ -420,7 +418,7 @@ fn test_bridge_native_to_ton() {
             ),
             ("dest_denom", denom),
             ("local_amount", "10000"),
-            ("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
+            ("crc_src", &3724195509u32.to_string()),
             ("relayer_fee", "0"),
             ("token_fee", "0"),
             (
@@ -475,6 +473,7 @@ fn test_bridge_cw20_to_ton() {
             remote_decimals: 6,
             local_asset_info_decimals: 6,
             opcode,
+            crc_src: 3724195509,
         }),
     )
     .unwrap();
@@ -498,7 +497,6 @@ fn test_bridge_cw20_to_ton() {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
-                crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
             .unwrap(),
@@ -519,7 +517,7 @@ fn test_bridge_cw20_to_ton() {
                 "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
             ),
             attr("local_amount", "10000"),
-            attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
+            attr("crc_src", &3724195509u32.to_string()),
             attr("relayer_fee", "0"),
             attr("token_fee", "0"),
             attr(
@@ -574,6 +572,7 @@ fn test_bridge_to_ton_with_fee() {
             remote_decimals: 6,
             local_asset_info_decimals: 6,
             opcode,
+            crc_src: 3724195509,
         }),
     )
     .unwrap();
@@ -621,7 +620,6 @@ fn test_bridge_to_ton_with_fee() {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
-                crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
             .unwrap(),
@@ -664,7 +662,7 @@ fn test_bridge_to_ton_with_fee() {
                 "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
             ),
             attr("local_amount", "8990"),
-            attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
+            attr("crc_src", &3724195509u32.to_string()),
             attr("relayer_fee", "1000"),
             attr("token_fee", "10"),
             attr(
@@ -713,7 +711,6 @@ fn test_bridge_to_ton_with_fee() {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
-                crc_src: SEND_TO_TON_MAGIC_NUMBER,
                 timeout: None,
             })
             .unwrap(),
@@ -745,7 +742,7 @@ fn test_bridge_to_ton_with_fee() {
                 "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
             ),
             attr("local_amount", "9990"),
-            attr("crc_src", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
+            attr("crc_src", &3724195509u32.to_string()),
             attr("relayer_fee", "0"),
             attr("token_fee", "10"),
             attr(
@@ -847,6 +844,7 @@ fn test_bridge_ton_to_orai_with_fee() {
                     remote_decimals: 6,
                     local_asset_info_decimals: 6,
                     opcode,
+                    crc_src: 3724195509,
                 },
             ))
             .unwrap(),

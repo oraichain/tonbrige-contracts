@@ -287,6 +287,7 @@ pub fn update_mapping_pair(
             remote_decimals: msg.remote_decimals,
             asset_info_decimals: msg.local_asset_info_decimals,
             opcode: to_bytes32(&msg.opcode)?,
+            crc_src: msg.crc_src,
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))

@@ -270,6 +270,7 @@ fn test_register_mapping_pair() {
                     remote_decimals: 6,
                     local_asset_info_decimals: 6,
                     opcode: opcode.clone(),
+                    crc_src: 3724195509,
                 },
             ))
             .unwrap(),
@@ -293,6 +294,7 @@ fn test_register_mapping_pair() {
                     remote_decimals: 6,
                     local_asset_info_decimals: 6,
                     opcode: opcode.clone(),
+                    crc_src: 3724195509,
                 },
             ))
             .unwrap(),
@@ -326,7 +328,8 @@ fn test_register_mapping_pair() {
                 },
                 remote_decimals: 6,
                 asset_info_decimals: 6,
-                opcode: to_bytes32(&opcode).unwrap()
+                opcode: to_bytes32(&opcode).unwrap(),
+                crc_src: 3724195509
             }
         }
     );

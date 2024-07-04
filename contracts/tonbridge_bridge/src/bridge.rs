@@ -339,7 +339,7 @@ impl Bridge {
 
         let commitment = build_bridge_to_ton_commitment(
             last_packet_seq,
-            msg.crc_src,
+            mapping.crc_src,
             sender.as_str(),
             &msg.to,
             &msg.denom,
@@ -374,7 +374,7 @@ impl Bridge {
                 ("dest_receiver", &msg.to),
                 ("dest_denom", &msg.denom),
                 ("local_amount", &local_amount.to_string()),
-                ("crc_src", &msg.crc_src.to_string()),
+                ("crc_src", &mapping.crc_src.to_string()),
                 ("relayer_fee", &fee_data.relayer_fee.amount().to_string()),
                 ("token_fee", &fee_data.token_fee.amount().to_string()),
                 ("timeout", &timeout_timestamp.to_owned().to_string()),
