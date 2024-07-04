@@ -14,6 +14,7 @@ pub fn is_expired(now: u64, timestamp: u64) -> bool {
 pub fn build_bridge_to_ton_commitment(
     seq: u64,
     crc_src: u32,
+    sender: &str,
     to: &str,
     denom: &str,
     amount: Uint128,
@@ -27,6 +28,9 @@ pub fn build_bridge_to_ton_commitment(
     cell_builder.store_address(&TonAddress::from_base64_std(denom)?)?; // remote denom
     cell_builder.store_slice(&amount.to_be_bytes())?; // remote amount
     cell_builder.store_slice(&timeout_timestamp.to_be_bytes())?; // timeout timestamp
+
+    let sender_ref = CellBuilder::new().store_string(sender)?.build()?;
+    cell_builder.store_reference(&sender_ref.to_arc())?; //the first ref is sender address
 
     let commitment: Vec<u8> = cell_builder.build()?.cell_hash()?;
     Ok(commitment)
@@ -95,6 +99,7 @@ mod tests {
         let commitment = build_bridge_to_ton_commitment(
             1,
             1576711861,
+            "orai15un8msx3n5zf9ahlxmfeqd2kwa5wm0nrpxer304m9nd5q6qq0g6sku5pdd",
             "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT",
             "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT",
             Uint128::from(10000000000u128),
@@ -104,8 +109,8 @@ mod tests {
         assert_eq!(
             commitment,
             vec![
-                250, 117, 106, 136, 54, 154, 42, 176, 158, 190, 62, 35, 202, 184, 106, 99, 90, 232,
-                238, 243, 228, 223, 3, 240, 51, 172, 64, 173, 70, 112, 226, 199
+                63, 40, 35, 40, 51, 244, 221, 14, 185, 75, 201, 9, 155, 210, 56, 172, 89, 229, 231,
+                115, 162, 252, 191, 220, 53, 159, 222, 186, 91, 104, 158, 67
             ]
         )
     }

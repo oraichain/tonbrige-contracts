@@ -10,7 +10,7 @@ pub trait ITransactionParser {
 }
 
 pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x540CE379; // crc32("src::timeout_send_packet")
-pub const RECEIVE_PACKET_MAGIC_NUMBER: u32 = 0x4b9c032d; // crc32("src::receive_packet")
+pub const RECEIVE_PACKET_MAGIC_NUMBER: u32 = 0xa64c12a3; // crc32("op::send_to_cosmos")
 pub const ACK_MAGIC_NUMBER: u32 = 0x3acb0e2; // crc32("ops::ack_success")
 
 pub fn get_channel_id(channel_num: u16) -> String {

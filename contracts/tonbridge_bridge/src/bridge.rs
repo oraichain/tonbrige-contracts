@@ -340,6 +340,7 @@ impl Bridge {
         let commitment = build_bridge_to_ton_commitment(
             last_packet_seq,
             msg.crc_src,
+            sender.as_str(),
             &msg.to,
             &msg.denom,
             remote_amount,
