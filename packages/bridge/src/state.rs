@@ -1,6 +1,9 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Uint128};
-use oraiswap::{asset::AssetInfo, router::RouterController};
+use oraiswap::{
+    asset::{Asset, AssetInfo},
+    router::RouterController,
+};
 use tonbridge_parser::types::Bytes32;
 
 #[cw_serde]
@@ -10,6 +13,7 @@ pub struct MappingMetadata {
     pub remote_decimals: u8,
     pub asset_info_decimals: u8,
     pub opcode: Bytes32,
+    pub crc_src: u32, // to determine the source of token
 }
 
 #[cw_serde]
@@ -49,30 +53,18 @@ pub struct Config {
 }
 
 #[cw_serde]
-pub struct SendPacket {
-    pub sequence: u64,
-    pub to: String,
-    pub denom: String,
-    pub amount: Uint128,
-    pub crc_src: u32,
-}
-
-#[cw_serde]
-pub enum Status {
-    Success,
-    Error,
-    Timeout,
+pub struct TimeoutSendPacket {
+    pub local_refund_asset: Asset,
+    pub sender: String,
+    pub timeout_timestamp: u64,
 }
 #[cw_serde]
-pub struct PacketReceive {
+pub struct ReceivePacket {
+    pub magic: u32, // crc32
     pub seq: u64,
-    pub timeout: u64,
+    pub timeout_timestamp: u64,
+    pub src_sender: String,
     pub src_denom: String,
     pub src_channel: String,
     pub amount: Uint128,
-    pub dest_denom: String,
-    pub dest_channel: String,
-    pub dest_receiver: String,
-    pub orai_address: String,
-    pub status: Status,
 }

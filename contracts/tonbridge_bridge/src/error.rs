@@ -4,7 +4,7 @@ use cosmwasm_std::{ConversionOverflowError, OverflowError, StdError};
 use cw_controllers::AdminError;
 use cw_utils::PaymentError;
 use thiserror::Error;
-use tonlib::cell::TonCellError;
+use tonlib::{address::TonAddressParseError, cell::TonCellError};
 
 #[derive(Error, Debug)]
 pub enum ContractError {
@@ -29,6 +29,9 @@ pub enum ContractError {
     #[error("{0}")]
     TryFromSliceError(#[from] TryFromSliceError),
 
+    #[error("{0}")]
+    TonAddressParseError(#[from] TonAddressParseError),
+
     #[error("Unauthorized")]
     Unauthorized {},
 
@@ -38,6 +41,15 @@ pub enum ContractError {
     #[error("Invalid funds")]
     InvalidFund {},
 
-    #[error("Packet timeout period has expired")]
+    #[error("Packet has expired due to timeout")]
     Expired {},
+
+    #[error("Packet timeout has not been reached for timestamp")]
+    NotExpired {},
+
+    #[error("The send packet still exists. Cannot process timeout")]
+    SendPacketExists {},
+
+    #[error("The BOC does not match with the send packet")]
+    InvalidSendPacketBoc {},
 }

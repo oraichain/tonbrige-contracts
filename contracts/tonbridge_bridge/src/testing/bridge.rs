@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use cosmwasm_std::{
     attr, coin,
     testing::{mock_dependencies, mock_env, mock_info},
@@ -9,22 +7,142 @@ use cosmwasm_std::{
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw20_ics20_msg::amount::Amount;
 use cw_multi_test::Executor;
-use oraiswap::asset::AssetInfo;
+
+use oraiswap::{asset::AssetInfo, router::RouterController};
 use tonbridge_bridge::{
     msg::{
         BridgeToTonMsg, ChannelResponse, ExecuteMsg, InstantiateMsg, QueryMsg as BridgeQueryMsg,
         UpdatePairMsg,
     },
-    state::{Ratio, SendPacket, TokenFee},
+    state::{Config, MappingMetadata, Ratio, TokenFee},
+};
+use tonbridge_parser::{types::BridgePacketData, OPCODE_2};
+use tonlib::{
+    address::TonAddress,
+    responses::{AnyCell, MaybeRefData, MessageType, TransactionMessage},
 };
 
 use crate::{
+    bridge::{Bridge, DEFAULT_TIMEOUT},
     channel::increase_channel_balance,
-    contract::{execute, execute_submit_bridge_to_ton_info, instantiate},
+    contract::{execute, instantiate},
     error::ContractError,
-    state::SEND_PACKET,
+    helper::build_ack_commitment,
+    state::{ACK_COMMITMENT, CONFIG, TOKEN_FEE},
     testing::mock::{new_mock_app, MockApp},
 };
+
+#[test]
+fn test_validate_transaction_out_msg() {
+    let mut maybe_ref = MaybeRefData::default();
+    let bridge_addr = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string();
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+    let mut transaction_message = TransactionMessage::default();
+    transaction_message.info.msg_type = MessageType::ExternalIn as u8;
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+    transaction_message.info.msg_type = MessageType::ExternalOut as u8;
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+    transaction_message.info.src = TonAddress::from_base64_url(&bridge_addr.clone()).unwrap();
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+
+    transaction_message.body.cell_ref = Some((None, None));
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res, None);
+
+    let any_cell = AnyCell::default();
+    transaction_message.body.cell_ref = Some((Some(any_cell.clone()), None));
+    maybe_ref.data = Some(transaction_message.clone());
+    let res = Bridge::validate_transaction_out_msg(maybe_ref.clone(), bridge_addr.clone());
+    assert_eq!(res.unwrap(), any_cell.cell);
+}
+
+#[test]
+fn test_handle_packet_receive() {
+    let mut deps = mock_dependencies();
+    let deps_mut = deps.as_mut();
+    let storage = deps_mut.storage;
+    let api = deps_mut.api;
+    let querier = deps_mut.querier;
+    let env = mock_env();
+    let current_timestamp = env.block.time.seconds() + DEFAULT_TIMEOUT;
+    let mut bridge_packet_data = BridgePacketData::default();
+    bridge_packet_data.amount = Uint128::from(1000000000u128);
+    bridge_packet_data.src_denom = "orai".to_string();
+    bridge_packet_data.dest_denom = "orai".to_string();
+    bridge_packet_data.orai_address = "orai_address".to_string();
+    let mapping = MappingMetadata {
+        asset_info: AssetInfo::NativeToken {
+            denom: "orai".to_string(),
+        },
+        remote_decimals: 6,
+        asset_info_decimals: 6,
+        opcode: OPCODE_2,
+        crc_src: 3724195509,
+    };
+    CONFIG
+        .save(
+            storage,
+            &Config {
+                validator_contract_addr: Addr::unchecked("validator"),
+                bridge_adapter: "bridge_adapter".to_string(),
+                relayer_fee_token: AssetInfo::NativeToken {
+                    denom: "orai".to_string(),
+                },
+                relayer_fee: Uint128::from(100000u128),
+                token_fee_receiver: Addr::unchecked("token_fee_receiver"),
+                relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
+                swap_router_contract: RouterController("router".to_string()),
+            },
+        )
+        .unwrap();
+    TOKEN_FEE
+        .save(
+            storage,
+            "orai",
+            &Ratio {
+                nominator: 1,
+                denominator: 1000,
+            },
+        )
+        .unwrap();
+
+    // case 1: timeout
+    let res = Bridge::handle_packet_receive(
+        storage,
+        api,
+        &querier,
+        current_timestamp,
+        bridge_packet_data.clone(),
+        mapping.clone(),
+    )
+    .unwrap();
+
+    assert_eq!(res.0.len(), 0);
+    assert_eq!(res.1[0].value, "timeout".to_string());
+
+    // case 2: happy case
+    bridge_packet_data.timeout_timestamp = current_timestamp;
+    Bridge::handle_packet_receive(
+        storage,
+        api,
+        &querier,
+        current_timestamp,
+        bridge_packet_data.clone(),
+        mapping,
+    )
+    .unwrap();
+
+    let commitment = ACK_COMMITMENT.load(deps.as_ref().storage, 0).unwrap();
+    assert_eq!(commitment, build_ack_commitment(0).unwrap().as_slice());
+}
 
 #[test]
 fn test_read_transaction() {
@@ -37,9 +155,32 @@ fn test_read_transaction() {
         ..
     } = new_mock_app();
 
-    let tx_boc = HexBinary::from_hex("b5ee9c72010210010002a00003b5704f1a9d989d4054ca72c292ffdf220c45c592fba86b562654fc500b6efdcc0a1000014c775004781596aa8bae813b9e6a71ade2ba8a393b7b1fff5c20db8414268e761e80f445466000014c774a4ba016675543a00034671e79e80102030201e00405008272c22a17f9d66afb94f83e04c02edc5abb7f2a15486ef4beaa703990dbfadb3b4085457ef326f4ecbbe9d81236ead8479f8765194636e87e84ca27eff6a7ec1f1d02170447c90ec90dd418656798110e0f01b16801ed89e454ebd04155a7ef579cecc7ff77907f2288f16bb339766711298f1f775700013c6a766275015329cb0a4bff7c883117164beea1ad589953f1402dbbf7302850ec90dd400613faa00000298ee9a50184cceaa864c0060101df080118af35dc850000000000000000070155ffff801397b648216d9f2f44369a4d6a5d42c41146f4cbc66093a35ba780f4e6a405714e071afd498d00010a019fe000278d4ecc4ea02a653961497fef910622e2c97dd435ab132a7e2805b77ee6050b006b6841e5c7db57b8d076dfa4368dea08e132f2917969b5920fbd8229dc6560d7000014c7750047826675543a60090153801397b648216d9f2f44369a4d6a5d42c41146f4cbc66093a35ba780f4e6a405714e071afd498d0000100a04000c0b0c0d00126368616e6e656c2d31000000566f726169317263686e6b647073787a687175753633793672346a34743537706e6339773865686468656478009e43758c3d090000000000000000008c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc986db784c36dbc000000000000200000000000390f7bed18b3fc226db7ad9ac1961b38a37b80e826f33ccabfa03d8405819e6ca41902b2c").unwrap();
+    // update bridge adapter contract
+    app.execute(
+        owner.clone(),
+        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+            contract_addr: bridge_addr.to_string(),
+            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
+                validator_contract_addr: None,
+                bridge_adapter: Some(
+                    "EQDZfQX89gMo3HAiW1tSK9visb2gouUvDCt6PODo3qkXKeox".to_string(),
+                ),
+                relayer_fee_token: None,
+                token_fee_receiver: None,
+                relayer_fee_receiver: None,
+                relayer_fee: None,
+                swap_router_contract: None,
+                token_fee: None,
+            })
+            .unwrap(),
+            funds: vec![],
+        }),
+    )
+    .unwrap();
 
-    let tx_proof = HexBinary::from_hex("b5ee9c7201020e010002cd00094603b4107e11da299213c78b889ec423fe1c7de98b508a4fdd113c6990b307235d80001d01241011ef55aafffffffd0203040502a09bc7a987000000008401014ceab100000000020000000000000000000000006675543a000014c775004780000014c7750047831736f9b3000446e401361bf701361bd7c400000007000000000000002e06072848010169df3a129570f135f49a71d8b483fa4c1c482f3f66ed85120a88d1b12fa9d16500012848010140bc4dd799a511514e2389685f05400ff4552fd0742fa5bcffc54f5628ba2728001c23894a33f6fde40b062e4f9ca75cdd7575e0d2ad61010f65e76ead272c60375bbdf85721963d37da28343e390d3d0fcc100f52754cdd13a8e4b655b0b6d5953c09f2f928d8ce4008090a0098000014c774e1c30401361bf750761c553cb279919d5c01370e223caddc8aed39f253c97e2067fab0d970edb84dfe70fb36e9e9e40e03596ed1ede5e16b95c4ab61817ceac5e86ca43fd7b4480098000014c774f10543014ceab0eadce00e65f2d6771561346ad31884c67e036c6aa63d14ba694d6affdf684810f750e961923988298da0b1dbe93abce9756cc3ef6b72dfd97531c7ce6199cabb28480101a7f5bf430102522e84d0b8b108a45efc71925ce0c6c591ae5ac50e7ead9baa15000828480101db58517b1e79f67b35742f301a407f7edf1b95fae995d949f62cbeb17f10e0e60009210799c79e7a0b22a5a0009e353b313a80a994e58525ffbe44188b8b25f750d6ac4ca9f8a016ddfb98142671e79e504f1a9d989d4054ca72c292ffdf220c45c592fba86b562654fc500b6efdcc0a1a000000a63ba8023c099c79e7a00c0d28480101f12edcfd2cb61fdee42d31cd884d21f92891e1ef9072f3ba4dded90ea5a09f380006008272c22a17f9d66afb94f83e04c02edc5abb7f2a15486ef4beaa703990dbfadb3b4085457ef326f4ecbbe9d81236ead8479f8765194636e87e84ca27eff6a7ec1f1d").unwrap();
+    let tx_boc = HexBinary::from_hex("b5ee9c720102140100036f0003b57d97d05fcf60328dc70225b5b522bdbe2b1bda0a2e52f0c2b7a3ce0e8dea9172900001513ba0d5d85fc0a773e4754705ea84026db44fbeaaca1e2baf0dd5dedfe39db629d4958734300001513ba0d5d8166828e58000546a6690680102030201e00405008272dcb41d4bf971f06092f6eecdbf898756d673d77735a4e84ae7d12925d9b7c0baf82aaff12d7b49ab7b07f3867ae213de3521afd2baa482b651cc317c41c049b2021504091cee16fc18681bfa11121301b16801ed89e454ebd04155a7ef579cecc7ff77907f2288f16bb339766711298f1f775700365f417f3d80ca371c0896d6d48af6f8ac6f6828b94bc30ade8f383a37aa45ca51cee16fc006175b3800002a27741abb08cd051cb0c0060201dd090a0118af35dc850000000000000000070261ffff800722ce79faef732792855db51f4a0e589748492ca4cada73bb8a6ab5dd23d034abd1a94a20002fbc2afd93dc58010e080043800536affe20d6af471ee32332b9ebfa93e271bd0d924f1e3bc5f0dce4860a07c5100101200b0101200c00c94801b2fa0bf9ec0651b8e044b6b6a457b7c5637b4145ca5e1856f479c1d1bd522e53000a6d5ffc41ad5e8e3dc6466573d7f527c4e37a1b249e3c778be1b9c90c140f8a11cdc586800608235a00002a27741abb0ccd051cb06a993b6d800000000000000040019fe006cbe82fe7b01946e38112dada915edf158ded05172978615bd1e70746f548b94b003cb93f68a17ddadc9e1033a70011995f47a9ca4b7f154529567ed2a85365ea3600001513ba0d5d8766828e58600d01bd4b9c032d000000000000000017de157ec9ee2c00800722ce79faef732792855db51f4a0e589748492ca4cada73bb8a6ab5dd23d034b000a6d5ffc41ad5e8e3dc6466573d7f527c4e37a1b249e3c778be1b9c90c140f8a000017a35294400200e0400100f101100126368616e6e656c2d31000000566f726169317263686e6b647073787a687175753633793672346a34743537706e6339773865686468656478009e4530ac3d09000000000000000000c200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc98b33304c4952cc000000000004000000000004d7b30c9a07a17122303e6553a62e1d950e281e9004aa667753aa60229513e7b041d0516c").unwrap();
+
+    let tx_proof = HexBinary::from_hex("b5ee9c720102120100032c00094603a3cb391146df5705d742be39ac98c524e855432deb2ee6b1f82fe6f799fcef2d002001241011ef55aafffffffd0203040502a09bc7a9870000000084010151a1d4000000000200000000c00000000000000066828e5800001513ba0d5d8000001513ba0d5d88837ff5db0004556a013aba55013ab763c40000000800000000000001ee060728480101f3dc120bc609815b58aef43dbe778b2f3093f4b0dad0696d679493c152257f370001284801014dae1684965192171ff59dac6926af8723434cb423fe202778ac41f464950d3d001f23894a33f6fd5480343a842774e357cd56897609f3c5c8588c8b3c283f5b18285bb8807be560d6d6de6dc2167c056be8dbe0b6730d78710e2f5a23925744e5d42bb06f83f2d94008090a009800001513b9eed904013aba55b50e708866382195a989f99d8da25bc54877f2aec6daaaf75f7cf3e9972a145ae5440af7377ce89a83f2d8358dbed3178fcb2a0ade86abcb6bcbf90182b59535009800001513b9fe1b410151a1d3212289c6d0fb1539609cdd394bc23531bcba82f753e5a9dbd9a6cee888c4030d886e635a5ed24d2f249a2d9d0b6dda7ebf13d4d3fa6793d8d8fd99d79506b47a284801015b7e35806d90337174c4de9d01f675ea8383c808cb3d9c6a0e6fbba5085b7616001d28480101010eda12c8af2956eb710ab448f85c98be497f5fc519d2ad69e7601fb34566e4001c2109a00ba6e01a0b220b6d005d3700d00c0d23a3bf72fa0bf9ec0651b8e044b6b6a457b7c5637b4145ca5e1856f479c1d1bd522e5272b46f05d97d05fcf60328dc70225b5b522bdbe2b1bda0a2e52f0c2b7a3ce0e8dea917299e80000a89dd06aec0e568de100e0f10284801011d043a2d0fe2149600d727199be18bdaccd18347e5ed02fd482949d5c3f22432001b284801010f817018a69a0ce9a6de89a7faad4f9af47269dc9bad30be7d99560538bf20280008210964d4cd20d011008272ab568aad25dc4660ab5eb95d50378160501acbb2cbfa2ca5ff51e04f32008c8cf82aaff12d7b49ab7b07f3867ae213de3521afd2baa482b651cc317c41c049b228480101ab3fae260d0c12845931495c10fadc8b0335224544311638d48dd60d3d6eefa50007").unwrap();
 
     let opcode =
         HexBinary::from_hex("0000000000000000000000000000000000000000000000000000000000000002")
@@ -52,13 +193,14 @@ fn test_read_transaction() {
             msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
                 UpdatePairMsg {
                     local_channel_id: "channel-0".to_string(),
-                    denom: "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl".to_string(),
+                    denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                     local_asset_info: AssetInfo::Token {
                         contract_addr: Addr::unchecked(cw20_addr.clone()),
                     },
                     remote_decimals: 6,
                     local_asset_info_decimals: 6,
                     opcode,
+                    crc_src: 3724195509,
                 },
             ))
             .unwrap(),
@@ -85,7 +227,7 @@ fn test_read_transaction() {
 
     // shard block with block hash
     let block_hash =
-        HexBinary::from_hex("b4107e11da299213c78b889ec423fe1c7de98b508a4fdd113c6990b307235d80")
+        HexBinary::from_hex("a3cb391146df5705d742be39ac98c524e855432deb2ee6b1f82fe6f799fcef2d")
             .unwrap();
 
     // set verified for simplicity
@@ -132,12 +274,12 @@ fn test_read_transaction() {
         res,
         ChannelResponse {
             balances: vec![Amount::Native(coin(
-                1000000000000000,
-                "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl"
+                1000000000000,
+                "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
             ))],
             total_sent: vec![Amount::Native(coin(
-                1000000000000000,
-                "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl"
+                1000000000000,
+                "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
             ))],
         }
     );
@@ -146,6 +288,7 @@ fn test_read_transaction() {
 #[test]
 fn test_bridge_native_to_ton() {
     let mut deps = mock_dependencies();
+    let denom = "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB";
     instantiate(
         deps.as_mut(),
         mock_env(),
@@ -172,31 +315,14 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-            crc_src: 82134516,
+            denom: denom.to_string(),
             timeout: None,
         }),
     )
     .unwrap_err();
     assert_eq!(err.to_string(), "No funds sent");
 
-    // case 2: failed, invalid timeout
-    let err = execute(
-        deps.as_mut(),
-        mock_env(),
-        mock_info("sender", &vec![coin(10000, "orai")]),
-        ExecuteMsg::BridgeToTon(BridgeToTonMsg {
-            local_channel_id: "channel-0".to_string(),
-            to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-            crc_src: 82134516,
-            timeout: Some(100),
-        }),
-    )
-    .unwrap_err();
-    assert_eq!(err.to_string(), ContractError::Expired {}.to_string());
-
-    // case 3: failed, not mapping pair
+    // case 2: failed, not mapping pair
     execute(
         deps.as_mut(),
         mock_env(),
@@ -204,8 +330,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-            crc_src: 82134516,
+            denom: denom.to_string(),
             timeout: None,
         }),
     )
@@ -220,13 +345,14 @@ fn test_bridge_native_to_ton() {
         mock_info("owner", &vec![]),
         ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
             local_channel_id: "channel-0".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: denom.to_string(),
             local_asset_info: AssetInfo::NativeToken {
                 denom: "orai".to_string(),
             },
             remote_decimals: 6,
             local_asset_info_decimals: 6,
             opcode,
+            crc_src: 3724195509,
         }),
     )
     .unwrap();
@@ -239,8 +365,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "orai_ton".to_string(),
-            crc_src: 82134516,
+            denom: denom.to_string(),
             timeout: None,
         }),
     )
@@ -255,8 +380,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "orai_ton".to_string(),
-            crc_src: 82134516,
+            denom: denom.to_string(),
             timeout: None,
         }),
     )
@@ -267,7 +391,7 @@ fn test_bridge_native_to_ton() {
     increase_channel_balance(
         deps.as_mut().storage,
         "channel-0",
-        "orai_ton",
+        denom,
         Uint128::from(1000000000u128),
     )
     .unwrap();
@@ -278,8 +402,7 @@ fn test_bridge_native_to_ton() {
         ExecuteMsg::BridgeToTon(BridgeToTonMsg {
             local_channel_id: "channel-0".to_string(),
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-            denom: "orai_ton".to_string(),
-            crc_src: 82134516,
+            denom: denom.to_string(),
             timeout: None,
         }),
     )
@@ -293,9 +416,9 @@ fn test_bridge_native_to_ton() {
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
             ),
-            ("dest_denom", "orai_ton"),
+            ("dest_denom", denom),
             ("local_amount", "10000"),
-            ("crc_src", "82134516"),
+            ("crc_src", &3724195509u32.to_string()),
             ("relayer_fee", "0"),
             ("token_fee", "0"),
             (
@@ -343,13 +466,14 @@ fn test_bridge_cw20_to_ton() {
         mock_info("owner", &vec![]),
         ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
             local_channel_id: "channel-0".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
             local_asset_info: AssetInfo::Token {
                 contract_addr: Addr::unchecked("usdt"),
             },
             remote_decimals: 6,
             local_asset_info_decimals: 6,
             opcode,
+            crc_src: 3724195509,
         }),
     )
     .unwrap();
@@ -357,7 +481,7 @@ fn test_bridge_cw20_to_ton() {
     increase_channel_balance(
         deps.as_mut().storage,
         "channel-0",
-        "orai_ton",
+        "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB",
         Uint128::from(1000000000u128),
     )
     .unwrap();
@@ -372,8 +496,7 @@ fn test_bridge_cw20_to_ton() {
             msg: to_binary(&BridgeToTonMsg {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                denom: "orai_ton".to_string(),
-                crc_src: 82134516,
+                denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
             })
             .unwrap(),
@@ -389,9 +512,12 @@ fn test_bridge_cw20_to_ton() {
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
             ),
-            attr("dest_denom", "orai_ton"),
+            attr(
+                "dest_denom",
+                "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
+            ),
             attr("local_amount", "10000"),
-            attr("crc_src", "82134516"),
+            attr("crc_src", &3724195509u32.to_string()),
             attr("relayer_fee", "0"),
             attr("token_fee", "0"),
             attr(
@@ -407,47 +533,6 @@ fn test_bridge_cw20_to_ton() {
             attr("seq", "1"),
         ]
     );
-}
-
-#[test]
-fn test_submit_bridge_to_ton_info() {
-    let mut deps = mock_dependencies();
-    SEND_PACKET
-        .save(
-            deps.as_mut().storage,
-            1,
-            &SendPacket {
-                sequence: 1,
-                to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                denom: "EQAcXN7ZRk927VwlwN66AHubcd-6X3VhiESEWsE2k63AICIN".to_string(),
-                amount: Uint128::from(10000000000u128),
-                crc_src: 82134516,
-            },
-        )
-        .unwrap();
-
-    // seq = 2
-    let data_err = "000000000000000280002255D73E3A5C1A9589F0AECE31E97B54B261AC3D7D16D4F1068FDF9D4B4E18300071737B65193DDBB57097037AE801EE6DC77EE97DD5862112116B04DA4EB70080000000000000000000000009502F9000139517D2";
-    let res =
-        execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data_err).unwrap())
-            .unwrap_err();
-    assert!(res.to_string().contains("SendPacket not found"));
-
-    // verify success
-    let data = "000000000000000180002255D73E3A5C1A9589F0AECE31E97B54B261AC3D7D16D4F1068FDF9D4B4E18300071737B65193DDBB57097037AE801EE6DC77EE97DD5862112116B04DA4EB70080000000000000000000000009502F9000139517D2";
-    let res = execute_submit_bridge_to_ton_info(deps.as_mut(), HexBinary::from_hex(data).unwrap())
-        .unwrap();
-    assert_eq!(
-        res.attributes,
-        vec![
-            ("action", "submit_bridge_to_ton_info"),
-            ("data", &data.to_lowercase())
-        ]
-    );
-
-    // after submit, not found send_packet
-    let packet = SEND_PACKET.may_load(deps.as_ref().storage, 1).unwrap();
-    assert_eq!(packet, None);
 }
 
 #[test]
@@ -480,13 +565,14 @@ fn test_bridge_to_ton_with_fee() {
         mock_info("owner", &vec![]),
         ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
             local_channel_id: "channel-0".to_string(),
-            denom: "orai_ton".to_string(),
+            denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
             local_asset_info: AssetInfo::Token {
                 contract_addr: Addr::unchecked("orai"),
             },
             remote_decimals: 6,
             local_asset_info_decimals: 6,
             opcode,
+            crc_src: 3724195509,
         }),
     )
     .unwrap();
@@ -505,7 +591,7 @@ fn test_bridge_to_ton_with_fee() {
             relayer_fee: None,
             swap_router_contract: None,
             token_fee: Some(vec![TokenFee {
-                token_denom: "orai_ton".to_string(),
+                token_denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 ratio: Ratio {
                     nominator: 1,
                     denominator: 1000,
@@ -518,7 +604,7 @@ fn test_bridge_to_ton_with_fee() {
     increase_channel_balance(
         deps.as_mut().storage,
         "channel-0",
-        "orai_ton",
+        "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB",
         Uint128::from(1000000000u128),
     )
     .unwrap();
@@ -533,8 +619,7 @@ fn test_bridge_to_ton_with_fee() {
             msg: to_binary(&BridgeToTonMsg {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                denom: "orai_ton".to_string(),
-                crc_src: 82134516,
+                denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
             })
             .unwrap(),
@@ -572,9 +657,12 @@ fn test_bridge_to_ton_with_fee() {
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
             ),
-            attr("dest_denom", "orai_ton"),
+            attr(
+                "dest_denom",
+                "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
+            ),
             attr("local_amount", "8990"),
-            attr("crc_src", "82134516"),
+            attr("crc_src", &3724195509u32.to_string()),
             attr("relayer_fee", "1000"),
             attr("token_fee", "10"),
             attr(
@@ -622,8 +710,7 @@ fn test_bridge_to_ton_with_fee() {
             msg: to_binary(&BridgeToTonMsg {
                 local_channel_id: "channel-0".to_string(),
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-                denom: "orai_ton".to_string(),
-                crc_src: 82134516,
+                denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
             })
             .unwrap(),
@@ -650,9 +737,12 @@ fn test_bridge_to_ton_with_fee() {
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
             ),
-            attr("dest_denom", "orai_ton"),
+            attr(
+                "dest_denom",
+                "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB"
+            ),
             attr("local_amount", "9990"),
-            attr("crc_src", "82134516"),
+            attr("crc_src", &3724195509u32.to_string()),
             attr("relayer_fee", "0"),
             attr("token_fee", "10"),
             attr(
@@ -680,10 +770,32 @@ fn test_bridge_ton_to_orai_with_fee() {
         validator_addr,
         ..
     } = new_mock_app();
+    // update bridge adapter contract
+    app.execute(
+        owner.clone(),
+        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+            contract_addr: bridge_addr.to_string(),
+            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
+                validator_contract_addr: None,
+                bridge_adapter: Some(
+                    "EQDZfQX89gMo3HAiW1tSK9visb2gouUvDCt6PODo3qkXKeox".to_string(),
+                ),
+                relayer_fee_token: None,
+                token_fee_receiver: None,
+                relayer_fee_receiver: None,
+                relayer_fee: None,
+                swap_router_contract: None,
+                token_fee: None,
+            })
+            .unwrap(),
+            funds: vec![],
+        }),
+    )
+    .unwrap();
 
-    let tx_boc = HexBinary::from_hex("b5ee9c72010210010002a00003b5704f1a9d989d4054ca72c292ffdf220c45c592fba86b562654fc500b6efdcc0a1000014c775004781596aa8bae813b9e6a71ade2ba8a393b7b1fff5c20db8414268e761e80f445466000014c774a4ba016675543a00034671e79e80102030201e00405008272c22a17f9d66afb94f83e04c02edc5abb7f2a15486ef4beaa703990dbfadb3b4085457ef326f4ecbbe9d81236ead8479f8765194636e87e84ca27eff6a7ec1f1d02170447c90ec90dd418656798110e0f01b16801ed89e454ebd04155a7ef579cecc7ff77907f2288f16bb339766711298f1f775700013c6a766275015329cb0a4bff7c883117164beea1ad589953f1402dbbf7302850ec90dd400613faa00000298ee9a50184cceaa864c0060101df080118af35dc850000000000000000070155ffff801397b648216d9f2f44369a4d6a5d42c41146f4cbc66093a35ba780f4e6a405714e071afd498d00010a019fe000278d4ecc4ea02a653961497fef910622e2c97dd435ab132a7e2805b77ee6050b006b6841e5c7db57b8d076dfa4368dea08e132f2917969b5920fbd8229dc6560d7000014c7750047826675543a60090153801397b648216d9f2f44369a4d6a5d42c41146f4cbc66093a35ba780f4e6a405714e071afd498d0000100a04000c0b0c0d00126368616e6e656c2d31000000566f726169317263686e6b647073787a687175753633793672346a34743537706e6339773865686468656478009e43758c3d090000000000000000008c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc986db784c36dbc000000000000200000000000390f7bed18b3fc226db7ad9ac1961b38a37b80e826f33ccabfa03d8405819e6ca41902b2c").unwrap();
+    let tx_boc = HexBinary::from_hex("b5ee9c720102140100036f0003b57d97d05fcf60328dc70225b5b522bdbe2b1bda0a2e52f0c2b7a3ce0e8dea9172900001513ba0d5d85fc0a773e4754705ea84026db44fbeaaca1e2baf0dd5dedfe39db629d4958734300001513ba0d5d8166828e58000546a6690680102030201e00405008272dcb41d4bf971f06092f6eecdbf898756d673d77735a4e84ae7d12925d9b7c0baf82aaff12d7b49ab7b07f3867ae213de3521afd2baa482b651cc317c41c049b2021504091cee16fc18681bfa11121301b16801ed89e454ebd04155a7ef579cecc7ff77907f2288f16bb339766711298f1f775700365f417f3d80ca371c0896d6d48af6f8ac6f6828b94bc30ade8f383a37aa45ca51cee16fc006175b3800002a27741abb08cd051cb0c0060201dd090a0118af35dc850000000000000000070261ffff800722ce79faef732792855db51f4a0e589748492ca4cada73bb8a6ab5dd23d034abd1a94a20002fbc2afd93dc58010e080043800536affe20d6af471ee32332b9ebfa93e271bd0d924f1e3bc5f0dce4860a07c5100101200b0101200c00c94801b2fa0bf9ec0651b8e044b6b6a457b7c5637b4145ca5e1856f479c1d1bd522e53000a6d5ffc41ad5e8e3dc6466573d7f527c4e37a1b249e3c778be1b9c90c140f8a11cdc586800608235a00002a27741abb0ccd051cb06a993b6d800000000000000040019fe006cbe82fe7b01946e38112dada915edf158ded05172978615bd1e70746f548b94b003cb93f68a17ddadc9e1033a70011995f47a9ca4b7f154529567ed2a85365ea3600001513ba0d5d8766828e58600d01bd4b9c032d000000000000000017de157ec9ee2c00800722ce79faef732792855db51f4a0e589748492ca4cada73bb8a6ab5dd23d034b000a6d5ffc41ad5e8e3dc6466573d7f527c4e37a1b249e3c778be1b9c90c140f8a000017a35294400200e0400100f101100126368616e6e656c2d31000000566f726169317263686e6b647073787a687175753633793672346a34743537706e6339773865686468656478009e4530ac3d09000000000000000000c200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc98b33304c4952cc000000000004000000000004d7b30c9a07a17122303e6553a62e1d950e281e9004aa667753aa60229513e7b041d0516c").unwrap();
 
-    let tx_proof = HexBinary::from_hex("b5ee9c7201020e010002cd00094603b4107e11da299213c78b889ec423fe1c7de98b508a4fdd113c6990b307235d80001d01241011ef55aafffffffd0203040502a09bc7a987000000008401014ceab100000000020000000000000000000000006675543a000014c775004780000014c7750047831736f9b3000446e401361bf701361bd7c400000007000000000000002e06072848010169df3a129570f135f49a71d8b483fa4c1c482f3f66ed85120a88d1b12fa9d16500012848010140bc4dd799a511514e2389685f05400ff4552fd0742fa5bcffc54f5628ba2728001c23894a33f6fde40b062e4f9ca75cdd7575e0d2ad61010f65e76ead272c60375bbdf85721963d37da28343e390d3d0fcc100f52754cdd13a8e4b655b0b6d5953c09f2f928d8ce4008090a0098000014c774e1c30401361bf750761c553cb279919d5c01370e223caddc8aed39f253c97e2067fab0d970edb84dfe70fb36e9e9e40e03596ed1ede5e16b95c4ab61817ceac5e86ca43fd7b4480098000014c774f10543014ceab0eadce00e65f2d6771561346ad31884c67e036c6aa63d14ba694d6affdf684810f750e961923988298da0b1dbe93abce9756cc3ef6b72dfd97531c7ce6199cabb28480101a7f5bf430102522e84d0b8b108a45efc71925ce0c6c591ae5ac50e7ead9baa15000828480101db58517b1e79f67b35742f301a407f7edf1b95fae995d949f62cbeb17f10e0e60009210799c79e7a0b22a5a0009e353b313a80a994e58525ffbe44188b8b25f750d6ac4ca9f8a016ddfb98142671e79e504f1a9d989d4054ca72c292ffdf220c45c592fba86b562654fc500b6efdcc0a1a000000a63ba8023c099c79e7a00c0d28480101f12edcfd2cb61fdee42d31cd884d21f92891e1ef9072f3ba4dded90ea5a09f380006008272c22a17f9d66afb94f83e04c02edc5abb7f2a15486ef4beaa703990dbfadb3b4085457ef326f4ecbbe9d81236ead8479f8765194636e87e84ca27eff6a7ec1f1d").unwrap();
+    let tx_proof = HexBinary::from_hex("b5ee9c720102120100032c00094603a3cb391146df5705d742be39ac98c524e855432deb2ee6b1f82fe6f799fcef2d002001241011ef55aafffffffd0203040502a09bc7a9870000000084010151a1d4000000000200000000c00000000000000066828e5800001513ba0d5d8000001513ba0d5d88837ff5db0004556a013aba55013ab763c40000000800000000000001ee060728480101f3dc120bc609815b58aef43dbe778b2f3093f4b0dad0696d679493c152257f370001284801014dae1684965192171ff59dac6926af8723434cb423fe202778ac41f464950d3d001f23894a33f6fd5480343a842774e357cd56897609f3c5c8588c8b3c283f5b18285bb8807be560d6d6de6dc2167c056be8dbe0b6730d78710e2f5a23925744e5d42bb06f83f2d94008090a009800001513b9eed904013aba55b50e708866382195a989f99d8da25bc54877f2aec6daaaf75f7cf3e9972a145ae5440af7377ce89a83f2d8358dbed3178fcb2a0ade86abcb6bcbf90182b59535009800001513b9fe1b410151a1d3212289c6d0fb1539609cdd394bc23531bcba82f753e5a9dbd9a6cee888c4030d886e635a5ed24d2f249a2d9d0b6dda7ebf13d4d3fa6793d8d8fd99d79506b47a284801015b7e35806d90337174c4de9d01f675ea8383c808cb3d9c6a0e6fbba5085b7616001d28480101010eda12c8af2956eb710ab448f85c98be497f5fc519d2ad69e7601fb34566e4001c2109a00ba6e01a0b220b6d005d3700d00c0d23a3bf72fa0bf9ec0651b8e044b6b6a457b7c5637b4145ca5e1856f479c1d1bd522e5272b46f05d97d05fcf60328dc70225b5b522bdbe2b1bda0a2e52f0c2b7a3ce0e8dea917299e80000a89dd06aec0e568de100e0f10284801011d043a2d0fe2149600d727199be18bdaccd18347e5ed02fd482949d5c3f22432001b284801010f817018a69a0ce9a6de89a7faad4f9af47269dc9bad30be7d99560538bf20280008210964d4cd20d011008272ab568aad25dc4660ab5eb95d50378160501acbb2cbfa2ca5ff51e04f32008c8cf82aaff12d7b49ab7b07f3867ae213de3521afd2baa482b651cc317c41c049b228480101ab3fae260d0c12845931495c10fadc8b0335224544311638d48dd60d3d6eefa50007").unwrap();
 
     let opcode =
         HexBinary::from_hex("0000000000000000000000000000000000000000000000000000000000000002")
@@ -705,7 +817,7 @@ fn test_bridge_ton_to_orai_with_fee() {
                 relayer_fee: Some(Uint128::from(1000u128)),
                 swap_router_contract: None,
                 token_fee: Some(vec![TokenFee {
-                    token_denom: "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl".to_string(),
+                    token_denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                     ratio: Ratio {
                         nominator: 1,
                         denominator: 1000,
@@ -725,13 +837,14 @@ fn test_bridge_ton_to_orai_with_fee() {
             msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
                 UpdatePairMsg {
                     local_channel_id: "channel-0".to_string(),
-                    denom: "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl".to_string(),
+                    denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                     local_asset_info: AssetInfo::Token {
                         contract_addr: Addr::unchecked(cw20_addr.clone()),
                     },
                     remote_decimals: 6,
                     local_asset_info_decimals: 6,
                     opcode,
+                    crc_src: 3724195509,
                 },
             ))
             .unwrap(),
@@ -742,7 +855,7 @@ fn test_bridge_ton_to_orai_with_fee() {
 
     // shard block with block hash
     let block_hash =
-        HexBinary::from_hex("b4107e11da299213c78b889ec423fe1c7de98b508a4fdd113c6990b307235d80")
+        HexBinary::from_hex("a3cb391146df5705d742be39ac98c524e855432deb2ee6b1f82fe6f799fcef2d")
             .unwrap();
 
     // set verified for simplicity
@@ -794,5 +907,5 @@ fn test_bridge_ton_to_orai_with_fee() {
             },
         )
         .unwrap();
-    assert_eq!(token_fee_balance.balance, Uint128::from(1000000000000u128));
+    assert_eq!(token_fee_balance.balance, Uint128::from(1000000000u128));
 }

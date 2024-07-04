@@ -245,7 +245,7 @@ impl ISignatureValidator for SignatureValidator {
         let candidates_for_validator_set = get_signature_candidate_validators(storage)?;
         // if current validator_set is empty, check caller
         // else check votes
-        if val_set.len() == 0 {
+        if val_set.is_empty() {
             return Err(StdError::generic_err("current validator_set is empty"));
         }
         if val_set[0].weight == 0 {
@@ -326,18 +326,24 @@ impl ISignatureValidator for SignatureValidator {
         }
         let block_extra = block_extra.unwrap();
 
-        let mut key_block_vals = KeyBlockValidators::default();
-
-        key_block_vals.current =
-            SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 34)?;
-        key_block_vals.previous =
-            SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 32)
-                .ok()
-                .unwrap_or_default();
-        key_block_vals.next =
-            SignatureValidator::load_validator_from_config_param(&block_extra.custom.config, 36)
-                .ok()
-                .unwrap_or_default();
+        let key_block_vals = KeyBlockValidators {
+            current: SignatureValidator::load_validator_from_config_param(
+                &block_extra.custom.config,
+                34,
+            )?,
+            previous: SignatureValidator::load_validator_from_config_param(
+                &block_extra.custom.config,
+                32,
+            )
+            .ok()
+            .unwrap_or_default(),
+            next: SignatureValidator::load_validator_from_config_param(
+                &block_extra.custom.config,
+                36,
+            )
+            .ok()
+            .unwrap_or_default(),
+        };
 
         Ok(key_block_vals)
     }

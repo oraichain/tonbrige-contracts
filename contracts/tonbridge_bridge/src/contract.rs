@@ -1,6 +1,9 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
+use cosmwasm_std::{
+    attr, from_binary, to_binary, Addr, Api, Attribute, CosmosMsg, Empty, Order, QuerierWrapper,
+    StdError, Storage, Uint128,
+};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
@@ -12,15 +15,19 @@ use tonbridge_bridge::msg::{
     PairQuery, QueryMsg, UpdatePairMsg,
 };
 use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
-use tonbridge_bridge::state::{Config, MappingMetadata, SendPacket, TokenFee};
+use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, TokenFee};
 use tonbridge_parser::to_bytes32;
-use tonlib::cell::Cell;
+use tonbridge_parser::transaction_parser::{get_channel_id, ITransactionParser, TransactionParser};
+use tonlib::cell::{BagOfCells, Cell, TonCellError};
+use tonlib::responses::{MaybeRefData, TransactionMessage};
 
-use crate::bridge::Bridge;
+use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER};
 use crate::error::ContractError;
+use crate::helper::is_expired;
 use crate::state::{
-    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
-    TOKEN_FEE,
+    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
+    SEND_PACKET_COMMITMENT, TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT,
+    TIMEOUT_SEND_PACKET, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -88,7 +95,17 @@ pub fn execute(
             Bridge::handle_bridge_to_ton(deps, env, msg, amount, info.sender)
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
-        ExecuteMsg::SubmitBridgeToTonInfo { data } => execute_submit_bridge_to_ton_info(deps, data),
+        ExecuteMsg::ProcessTimeoutSendPacket {
+            masterchain_header_proof,
+            tx_boc,
+            tx_proof_unreceived,
+        } => {
+            process_timeout_send_packet(deps, masterchain_header_proof, tx_proof_unreceived, tx_boc)
+        }
+        ExecuteMsg::ProcessTimeoutRecievePacket { receive_packet } => {
+            process_timeout_receive_packet(deps, receive_packet)
+        }
+        ExecuteMsg::Acknowledgment { tx_proof, tx_boc } => acknowledgment(deps, tx_proof, tx_boc),
     }
 }
 
@@ -107,6 +124,7 @@ pub fn execute_update_owner(
     ]))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
@@ -164,17 +182,83 @@ pub fn read_transaction(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let bridge = Bridge::new(config.validator_contract_addr);
-    let res = bridge.read_transaction(
-        deps,
-        &env,
-        env.contract.address.as_str(),
+    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    let mut attrs: Vec<Attribute> = vec![];
+    let transaction = bridge.read_transaction(
+        deps.storage,
+        &deps.querier,
         tx_proof.as_slice(),
         tx_boc.as_slice(),
     )?;
+    let tx_parser = TransactionParser::default();
+    for out_msg in transaction.out_msgs.into_values() {
+        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
+        if cell.is_none() {
+            continue;
+        }
+        let cell = cell.unwrap();
+        let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
+
+        let mapping = ics20_denoms().load(
+            deps.storage,
+            &get_key_ics20_ibc_denom(
+                &parse_ibc_wasm_port_id(env.contract.address.as_str()),
+                &packet_data.src_channel,
+                &packet_data.src_denom,
+            ),
+        )?;
+
+        let mut res = Bridge::handle_packet_receive(
+            deps.storage,
+            deps.api,
+            &deps.querier,
+            env.block.time.seconds(),
+            packet_data,
+            mapping,
+        )?;
+        cosmos_msgs.append(&mut res.0);
+        attrs.append(&mut res.1);
+
+        // we assume that one transaction only has one matching external out msg. After handling it -> we stop reading
+        break;
+    }
     Ok(Response::new()
-        .add_messages(res.0)
-        .add_attributes(vec![("action", "read_transaction")])
-        .add_attributes(res.1))
+        .add_messages(cosmos_msgs)
+        .add_attributes(vec![("action", "bridge_to_cosmos")])
+        .add_attributes(attrs))
+}
+
+pub fn acknowledgment(
+    deps: DepsMut,
+    tx_proof: HexBinary,
+    tx_boc: HexBinary,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let bridge = Bridge::new(config.validator_contract_addr);
+
+    let mut attrs: Vec<Attribute> = vec![];
+    let transaction = bridge.read_transaction(
+        deps.storage,
+        &deps.querier,
+        tx_proof.as_slice(),
+        tx_boc.as_slice(),
+    )?;
+    let tx_parser = TransactionParser::default();
+    for out_msg in transaction.out_msgs.into_values() {
+        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
+        if cell.is_none() {
+            continue;
+        }
+        let cell = cell.unwrap();
+        let seq = tx_parser.parse_ack_data(&cell)?;
+
+        // remove packet commitment
+        SEND_PACKET_COMMITMENT.remove(deps.storage, seq);
+        attrs.push(attr("seq", &seq.to_string()));
+    }
+    Ok(Response::new()
+        .add_attributes(vec![("action", "acknowledgment")])
+        .add_attributes(attrs))
 }
 
 pub fn update_mapping_pair(
@@ -203,6 +287,7 @@ pub fn update_mapping_pair(
             remote_decimals: msg.remote_decimals,
             asset_info_decimals: msg.local_asset_info_decimals,
             opcode: to_bytes32(&msg.opcode)?,
+            crc_src: msg.crc_src,
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
@@ -245,41 +330,138 @@ pub fn execute_receive(
     Bridge::handle_bridge_to_ton(deps, env, msg, amount, sender)
 }
 
-pub fn execute_submit_bridge_to_ton_info(
+pub fn process_timeout_send_packet(
     deps: DepsMut,
-    boc: HexBinary,
+    latest_masterchain_header_proof: HexBinary,
+    tx_proof_unreceived: HexBinary,
+    tx_boc: HexBinary,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let bridge = Bridge::new(config.validator_contract_addr);
+
+    let header_cells = BagOfCells::parse_hex(&latest_masterchain_header_proof.to_hex())?;
+    let block_cell = header_cells.single_root()?.reference(0)?;
+
+    // TODO: need to update latest client state of TON every time we have a new incoming tx
+    // so that we can verify the logical time against the latest_masterchain_header_proof
+    let block_info = Cell::load_block(block_cell)?;
+    let masterchain_block_latest_timestamp =
+        block_info.info.to_owned().unwrap_or_default().gen_utime;
+
+    let transaction = bridge.read_transaction(
+        deps.storage,
+        &deps.querier,
+        tx_proof_unreceived.as_slice(),
+        tx_boc.as_slice(),
+    )?;
+
+    for out_msg in transaction.out_msgs.into_values() {
+        let refund_msgs = build_timeout_send_packet_refund_msgs(
+            deps.storage,
+            deps.api,
+            &deps.querier,
+            out_msg,
+            config.bridge_adapter.clone(),
+            masterchain_block_latest_timestamp,
+        )?;
+        if refund_msgs.is_empty() {
+            continue;
+        }
+
+        return Ok(Response::new()
+            .add_attribute("action", "process_timeout_send_packet")
+            .add_messages(refund_msgs));
+    }
+    Err(ContractError::Std(StdError::generic_err(
+        "The given transaction has no timeout message",
+    )))
+}
+
+// called when there is a TON bridge transaction to CW, but it has expired
+// -> relayer triggers this function for the TON side to refund to the sender.
+pub fn process_timeout_receive_packet(
+    deps: DepsMut,
+    data: HexBinary,
 ) -> Result<Response, ContractError> {
     let mut cell = Cell::default();
-    cell.data = boc.as_slice().to_vec();
+    cell.data = data.as_slice().to_vec();
     cell.bit_len = cell.data.len() * 8;
 
     let mut parser = cell.parser();
 
+    let magic_number = parser.load_u32(32)?;
+    if magic_number != RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER {
+        return Err(ContractError::TonCellError(
+            TonCellError::cell_parser_error("Not a receive packet timeout"),
+        ));
+    }
     let seq = parser.load_u64(64)?;
-    let to = parser.load_address()?;
-    let denom = parser.load_address()?;
+    let src_sender = parser.load_address()?;
+    let src_denom = parser.load_address()?;
+    // assume that the largest channel id is 65536 = 2^16
+    let src_channel_num = parser.load_u16(16)?;
     let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
-    let crc_src = parser.load_u32(32)?;
+    let timeout_timestamp = parser.load_u64(64)?;
 
-    let send_packet = SEND_PACKET.load(deps.storage, seq)?;
-    if send_packet.ne(&SendPacket {
-        sequence: seq,
-        to: to.to_string(),
-        denom: denom.to_string(),
+    let timeout_receive_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
+
+    if timeout_receive_packet.ne(&ReceivePacket {
+        magic: magic_number,
+        seq,
+        timeout_timestamp,
+        src_sender: src_sender.to_base64_url(),
+        src_denom: src_denom.to_base64_url(),
+        src_channel: get_channel_id(src_channel_num),
         amount: Uint128::from(amount),
-        crc_src,
     }) {
-        return Err(ContractError::Std(StdError::generic_err(
-            "Invalid send_packet",
-        )));
+        return Err(ContractError::InvalidSendPacketBoc {});
     }
 
     // after finished verifying the boc, we remove the packet to prevent replay attack
-    SEND_PACKET.remove(deps.storage, seq);
+    TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
+    TIMEOUT_RECEIVE_PACKET_COMMITMENT.remove(deps.storage, seq);
 
-    Ok(Response::new()
-        .add_attribute("action", "submit_bridge_to_ton_info")
-        .add_attribute("data", boc.to_hex()))
+    Ok(Response::new().add_attribute("action", "process_timeout_recv_packet"))
+}
+
+pub fn build_timeout_send_packet_refund_msgs(
+    storage: &mut dyn Storage,
+    api: &dyn Api,
+    querier: &QuerierWrapper,
+    out_msg: MaybeRefData<TransactionMessage>,
+    bridge_adapter: String,
+    latest_masterchain_block_timestamp: u32,
+) -> Result<Vec<CosmosMsg>, ContractError> {
+    let tx_parser = TransactionParser::default();
+    let cell = Bridge::validate_transaction_out_msg(out_msg, bridge_adapter);
+    if cell.is_none() {
+        return Ok(vec![]);
+    }
+    let cell = cell.unwrap();
+    let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
+
+    let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, packet_seq_timeout)?;
+
+    // no-op to prevent error spamming from the relayer
+    if timeout_packet.is_none() {
+        return Ok(vec![]);
+    }
+    let timeout_packet = timeout_packet.unwrap();
+    if !is_expired(
+        latest_masterchain_block_timestamp as u64,
+        timeout_packet.timeout_timestamp,
+    ) {
+        return Err(ContractError::NotExpired {});
+    }
+    let refund_msg = timeout_packet.local_refund_asset.into_msg(
+        None,
+        querier,
+        api.addr_validate(&timeout_packet.sender)?,
+    )?;
+    TIMEOUT_SEND_PACKET.remove(storage, packet_seq_timeout);
+    SEND_PACKET_COMMITMENT.remove(storage, packet_seq_timeout);
+
+    Ok(vec![refund_msg])
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -293,6 +475,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
         QueryMsg::ChannelStateData { channel_id } => to_binary(&query_channel(deps, channel_id)?),
         QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
+        QueryMsg::QueryTimeoutReceivePackets {} => to_binary(&query_timeout_receive_packets(deps)?),
     }
 }
 
@@ -329,6 +512,13 @@ pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelRespons
         balances,
         total_sent,
     })
+}
+
+pub fn query_timeout_receive_packets(deps: Deps) -> StdResult<Vec<ReceivePacket>> {
+    TIMEOUT_RECEIVE_PACKET
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|data| -> StdResult<ReceivePacket> { Ok(data?.1) })
+        .collect()
 }
 
 fn get_mapping_from_key(deps: Deps, ibc_denom: String) -> StdResult<PairQuery> {

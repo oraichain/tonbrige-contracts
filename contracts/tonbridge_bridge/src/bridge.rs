@@ -8,6 +8,7 @@ use cw20_ics20_msg::{
     amount::{convert_local_to_remote, convert_remote_to_local, Amount},
     helper::{denom_to_asset_info, parse_asset_info_denom},
 };
+
 use oraiswap::{
     asset::{Asset, AssetInfo},
     router::{RouterController, SwapOperation},
@@ -16,31 +17,32 @@ use std::ops::Mul;
 use tonbridge_bridge::{
     msg::{BridgeToTonMsg, FeeData},
     parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
-    state::{MappingMetadata, PacketReceive, Ratio, SendPacket, Status},
+    state::{MappingMetadata, Ratio, ReceivePacket, TimeoutSendPacket},
 };
-use tonbridge_parser::{
-    to_bytes32,
-    transaction_parser::{ITransactionParser, TransactionParser},
-    types::BridgePacketData,
-    OPCODE_1, OPCODE_2,
-};
+use tonbridge_parser::{to_bytes32, types::BridgePacketData, OPCODE_1, OPCODE_2};
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
     cell::{BagOfCells, Cell},
-    responses::MessageType,
+    responses::{MaybeRefData, MessageType, Transaction, TransactionMessage},
 };
 
 use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
-    helper::is_expired,
+    helper::{
+        build_ack_commitment, build_bridge_to_ton_commitment,
+        build_receive_packet_timeout_commitment, is_expired,
+    },
     state::{
-        ics20_denoms, CONFIG, LAST_PACKET_SEQ, PACKET_RECEIVE, PROCESSED_TXS, SEND_PACKET,
-        TOKEN_FEE,
+        ics20_denoms, ACK_COMMITMENT, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS,
+        SEND_PACKET_COMMITMENT, TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT,
+        TIMEOUT_SEND_PACKET, TOKEN_FEE,
     },
 };
 
-const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
+pub const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
+pub const RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x0da5c1c4; // crc32("ops::ack_timeout")
+pub const SEND_TO_TON_MAGIC_NUMBER: u32 = 0x2e89be5b; // crc32("op::send_to_ton")
 
 #[cw_serde]
 pub struct Bridge {
@@ -56,22 +58,45 @@ impl Bridge {
 }
 
 impl Bridge {
+    pub fn validate_transaction_out_msg(
+        out_msg: MaybeRefData<TransactionMessage>,
+        bridge_adapter_addr: String,
+    ) -> Option<Cell> {
+        if out_msg.data.is_none() {
+            return None;
+        }
+        let out_msg = out_msg.data.unwrap();
+        if out_msg.info.msg_type != MessageType::ExternalOut as u8 {
+            return None;
+        }
+        // verify source of tx is bridge adapter contract
+        if out_msg.info.src.to_string() != bridge_adapter_addr {
+            return None;
+        }
+
+        if out_msg.body.cell_ref.is_none() {
+            return None;
+        }
+        let cell = out_msg.body.cell_ref.unwrap().0;
+        if cell.is_none() {
+            return None;
+        }
+
+        // body cell
+        Some(cell.unwrap().cell)
+    }
+
     pub fn read_transaction(
         &self,
-        deps: DepsMut,
-        env: &Env,
-        contract_address: &str,
+        storage: &mut dyn Storage,
+        querier: &QuerierWrapper,
         tx_proof: &[u8],
         tx_boc: &[u8],
-    ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
-        let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-        let mut attrs: Vec<Attribute> = vec![];
-        let config = CONFIG.load(deps.storage)?;
-
+    ) -> Result<Transaction, ContractError> {
         let tx_cells = BagOfCells::parse(tx_boc)?;
         let tx_root = tx_cells.single_root()?;
         let transaction = Cell::load_transaction(tx_root, &mut 0, &mut tx_root.parser())?;
-        let transaction_hash = to_bytes32(&HexBinary::from(transaction.hash))?;
+        let transaction_hash = to_bytes32(&HexBinary::from(transaction.hash.clone()))?;
 
         let tx_proof_cells = BagOfCells::parse(tx_proof)?;
         let tx_proof_cell_first_ref = tx_proof_cells.single_root()?.reference(0)?;
@@ -79,7 +104,7 @@ impl Bridge {
 
         let is_root_hash_verified = self
             .validator
-            .is_verified_block(&deps.querier, HexBinary::from(root_hash))?;
+            .is_verified_block(querier, HexBinary::from(root_hash))?;
 
         if !is_root_hash_verified {
             return Err(ContractError::Std(StdError::generic_err(
@@ -120,7 +145,7 @@ impl Bridge {
         }
 
         let is_tx_processed = PROCESSED_TXS
-            .may_load(deps.storage, &transaction_hash)?
+            .may_load(storage, &transaction_hash)?
             .unwrap_or(false);
 
         if is_tx_processed {
@@ -129,93 +154,41 @@ impl Bridge {
             )));
         }
 
-        PROCESSED_TXS.save(deps.storage, &transaction_hash, &true)?;
-        let tx_parser = TransactionParser::default();
-
-        let storage = deps.storage;
-        let api = deps.api;
-        let querier = deps.querier;
-        for out_msg in transaction.out_msgs.into_values() {
-            if out_msg.data.is_none() {
-                deps.api.debug("empty out_msg data");
-                continue;
-            }
-            let out_msg = out_msg.data.unwrap();
-            if out_msg.info.msg_type != MessageType::ExternalOut as u8 {
-                deps.api.debug("msg type is not external out");
-                continue;
-            }
-
-            if out_msg.body.cell_ref.is_none() {
-                deps.api.debug("cell ref is none when reading transaction");
-                continue;
-            }
-            let cell = out_msg.body.cell_ref.unwrap().0;
-            if cell.is_none() {
-                deps.api.debug("any cell is empty when reading transaction");
-            }
-
-            // verify source of tx is bridge adapter contract
-            if out_msg.info.src.to_string() != config.bridge_adapter {
-                deps.api
-                    .debug("this tx is not from bridge_adapter contract");
-                continue;
-            }
-
-            let cell = cell.unwrap().cell;
-            let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
-
-            let mapping = ics20_denoms().load(
-                storage,
-                &get_key_ics20_ibc_denom(
-                    &parse_ibc_wasm_port_id(contract_address),
-                    &packet_data.src_channel,
-                    &packet_data.src_denom,
-                ),
-            )?;
-
-            let mut res =
-                Bridge::handle_packet_receive(env, storage, api, &querier, packet_data, mapping)?;
-            cosmos_msgs.append(&mut res.0);
-            attrs.append(&mut res.1);
-        }
-        Ok((cosmos_msgs, attrs))
+        PROCESSED_TXS.save(storage, &transaction_hash, &true)?;
+        Ok(transaction)
     }
 
     pub fn handle_packet_receive(
-        env: &Env,
         storage: &mut dyn Storage,
         api: &dyn Api,
         querier: &QuerierWrapper,
+        current_timestamp: u64,
         data: BridgePacketData,
         mapping: MappingMetadata,
     ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let config = CONFIG.load(storage)?;
 
-        let mut packet_receive = PacketReceive {
+        let receive_packet: ReceivePacket = ReceivePacket {
+            magic: RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER,
             seq: data.seq,
-            timeout: data.timeout,
+            timeout_timestamp: data.timeout_timestamp,
+            src_sender: data.src_sender.clone(),
             src_denom: data.src_denom.clone(),
             src_channel: data.src_channel.clone(),
             amount: data.amount,
-            dest_denom: data.dest_denom.clone(),
-            dest_channel: data.dest_channel.clone(),
-            dest_receiver: data.dest_receiver.clone(),
-            orai_address: data.orai_address.clone(),
-            status: Status::Success,
         };
-        // check  packet timeout
-        if is_expired(env, data.timeout) {
-            packet_receive.status = Status::Timeout;
-            PACKET_RECEIVE.save(storage, packet_receive.seq, &packet_receive)?;
-            return Ok((
-                vec![],
-                vec![
-                    attr("action", "bridge_to_cosmos"),
-                    attr("status", "timeout"),
-                    attr("packet_receive", format!("{:?}", packet_receive)),
-                ],
-            ));
+        // check packet timeout
+        if is_expired(current_timestamp, data.timeout_timestamp) {
+            TIMEOUT_RECEIVE_PACKET.save(storage, receive_packet.seq, &receive_packet)?;
+            // must store timeout commitment
+            let commitment = build_receive_packet_timeout_commitment(data.seq)?;
+            TIMEOUT_RECEIVE_PACKET_COMMITMENT.save(
+                storage,
+                receive_packet.seq,
+                &to_bytes32(&HexBinary::from(commitment))?,
+            )?;
+
+            return Ok((vec![], vec![attr("status", "timeout")]));
         }
         // increase first
         increase_channel_balance(storage, &data.src_channel, &data.src_denom, data.amount)?;
@@ -233,6 +206,7 @@ impl Bridge {
         );
 
         let fee_data = Bridge::process_deduct_fee(storage, querier, api, data.src_denom, to_send)?;
+        let local_amount = fee_data.deducted_amount;
 
         if !fee_data.token_fee.is_empty() {
             cosmos_msgs.push(
@@ -250,23 +224,21 @@ impl Bridge {
         }
 
         let attributes: Vec<Attribute> = vec![
-            attr("action", "bridge_to_cosmos"),
             attr("status", "success"),
-            attr("packet_receive", format!("{:?}", packet_receive)),
             attr("dest_receiver", recipient.as_str()),
-            attr("local_amount", fee_data.deducted_amount.to_string()),
+            attr("local_amount", local_amount.to_string()),
             attr("relayer_fee", fee_data.relayer_fee.amount().to_string()),
             attr("token_fee", fee_data.token_fee.amount().to_string()),
         ];
 
         // if the fees have consumed all user funds, we send all the fees to our token fee receiver
-        if fee_data.deducted_amount.is_zero() {
+        if local_amount.is_zero() {
             return Ok((cosmos_msgs, attributes));
         }
 
         let msg = Asset {
             info: mapping.asset_info.clone(),
-            amount: fee_data.deducted_amount,
+            amount: local_amount,
         };
         if mapping.opcode == OPCODE_1 {
             let msg = match msg.info {
@@ -278,7 +250,7 @@ impl Bridge {
                 AssetInfo::Token { contract_addr } => {
                     Cw20Contract(contract_addr).call(Cw20ExecuteMsg::Mint {
                         recipient: recipient.to_string(),
-                        amount: fee_data.deducted_amount,
+                        amount: local_amount,
                     })
                 }
             }?;
@@ -286,6 +258,14 @@ impl Bridge {
         } else if mapping.opcode == OPCODE_2 {
             cosmos_msgs.push(msg.into_msg(None, querier, recipient)?);
         }
+
+        // store ack commitment
+        let commitment = build_ack_commitment(receive_packet.seq)?;
+        ACK_COMMITMENT.save(
+            storage,
+            receive_packet.seq,
+            &to_bytes32(&HexBinary::from(commitment))?,
+        )?;
 
         Ok((cosmos_msgs, attributes))
     }
@@ -295,14 +275,11 @@ impl Bridge {
         env: Env,
         msg: BridgeToTonMsg,
         amount: Amount,
-        _sender: Addr,
+        sender: Addr,
     ) -> Result<Response, ContractError> {
-        let timeout = msg
+        let timeout_timestamp = msg
             .timeout
             .unwrap_or(env.block.time.seconds() + DEFAULT_TIMEOUT);
-        if is_expired(&env, timeout) {
-            return Err(ContractError::Expired {});
-        }
 
         let config = CONFIG.load(deps.storage)?;
         let denom_key = get_key_ics20_ibc_denom(
@@ -344,8 +321,9 @@ impl Bridge {
             )
         }
 
+        let local_amount = fee_data.deducted_amount;
         let remote_amount = convert_local_to_remote(
-            fee_data.deducted_amount,
+            local_amount,
             mapping.remote_decimals,
             mapping.asset_info_decimals,
         )?;
@@ -357,20 +335,34 @@ impl Bridge {
             remote_amount,
         )?;
 
-        // store to pending packet transfer
-
         let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default() + 1;
 
-        //FIXME: store timeout to send_packet
-        SEND_PACKET.save(
+        let commitment = build_bridge_to_ton_commitment(
+            last_packet_seq,
+            mapping.crc_src,
+            sender.as_str(),
+            &msg.to,
+            &msg.denom,
+            remote_amount,
+            timeout_timestamp,
+        )?;
+        SEND_PACKET_COMMITMENT.save(
             deps.storage,
             last_packet_seq,
-            &SendPacket {
-                sequence: last_packet_seq,
-                to: msg.to.clone(),
-                denom: msg.denom.clone(),
-                amount: remote_amount,
-                crc_src: msg.crc_src,
+            &to_bytes32(&HexBinary::from(commitment))?,
+        )?;
+
+        // this packet is saved just in case we need to refund the sender due to timeout
+        TIMEOUT_SEND_PACKET.save(
+            deps.storage,
+            last_packet_seq,
+            &TimeoutSendPacket {
+                sender: sender.to_string(),
+                local_refund_asset: Asset {
+                    info: mapping.asset_info,
+                    amount: local_amount,
+                },
+                timeout_timestamp,
             },
         )?;
         LAST_PACKET_SEQ.save(deps.storage, &last_packet_seq)?;
@@ -381,11 +373,11 @@ impl Bridge {
                 ("action", "bridge_to_ton"),
                 ("dest_receiver", &msg.to),
                 ("dest_denom", &msg.denom),
-                ("local_amount", &fee_data.deducted_amount.to_string()),
-                ("crc_src", &msg.crc_src.to_string()),
+                ("local_amount", &local_amount.to_string()),
+                ("crc_src", &mapping.crc_src.to_string()),
                 ("relayer_fee", &fee_data.relayer_fee.amount().to_string()),
                 ("token_fee", &fee_data.token_fee.amount().to_string()),
-                ("timeout", &timeout.to_owned().to_string()),
+                ("timeout", &timeout_timestamp.to_owned().to_string()),
                 ("remote_amount", &remote_amount.to_string()),
                 ("seq", &last_packet_seq.to_string()),
             ]))

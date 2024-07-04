@@ -4,7 +4,7 @@ use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
-use crate::state::{MappingMetadata, TokenFee};
+use crate::state::{MappingMetadata, ReceivePacket, TokenFee};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -27,9 +27,6 @@ pub enum ExecuteMsg {
     DeleteMappingPair(DeletePairMsg),
     BridgeToTon(BridgeToTonMsg),
     Receive(Cw20ReceiveMsg),
-    SubmitBridgeToTonInfo {
-        data: HexBinary,
-    },
     UpdateOwner {
         new_owner: Addr,
     },
@@ -43,6 +40,18 @@ pub enum ExecuteMsg {
         swap_router_contract: Option<String>,
         token_fee: Option<Vec<TokenFee>>,
     },
+    ProcessTimeoutSendPacket {
+        masterchain_header_proof: HexBinary,
+        tx_proof_unreceived: HexBinary,
+        tx_boc: HexBinary, // in hex form
+    },
+    ProcessTimeoutRecievePacket {
+        receive_packet: HexBinary,
+    },
+    Acknowledgment {
+        tx_proof: HexBinary,
+        tx_boc: HexBinary, // in hex form
+    },
 }
 
 #[cw_serde]
@@ -55,6 +64,7 @@ pub struct UpdatePairMsg {
     pub remote_decimals: u8,
     pub local_asset_info_decimals: u8,
     pub opcode: HexBinary,
+    pub crc_src: u32,
 }
 
 #[cw_serde]
@@ -69,7 +79,6 @@ pub struct BridgeToTonMsg {
     pub local_channel_id: String, // default channel-0
     pub to: String,
     pub denom: String,
-    pub crc_src: u32,
     pub timeout: Option<u64>,
 }
 
@@ -93,6 +102,8 @@ pub enum QueryMsg {
     TokenFee { remote_token_denom: String },
     #[returns(PairQuery)]
     PairMapping { key: String },
+    #[returns(Vec<ReceivePacket>)]
+    QueryTimeoutReceivePackets {},
 }
 
 #[cw_serde]
