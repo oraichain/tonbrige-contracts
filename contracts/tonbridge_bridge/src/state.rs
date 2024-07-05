@@ -1,3 +1,4 @@
+use cosmwasm_std::Uint256;
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 
 use cw_controllers::Admin;
@@ -16,11 +17,11 @@ pub const TOKEN_FEE: Map<&str, Ratio> = Map::new("token_fee");
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-pub const TIMEOUT_SEND_PACKET: Map<u64, TimeoutSendPacket> = Map::new("timeout_send_packet");
-pub const LAST_PACKET_SEQ: Item<u64> = Item::new("last_packet_seq");
-pub const TIMEOUT_RECEIVE_PACKET: Map<u64, ReceivePacket> = Map::new("receive_packet");
-pub const SEND_PACKET_COMMITMENT: Map<u64, Bytes32> = Map::new("send_packet_commitment"); // cell hash of send_packet
-pub const TIMEOUT_RECEIVE_PACKET_COMMITMENT: Map<u64, Bytes32> =
+pub const TIMEOUT_SEND_PACKET: Map<&str, TimeoutSendPacket> = Map::new("timeout_send_packet");
+pub const LAST_PACKET_SEQ: Map<&str, u64> = Map::new("last_packet_seq"); // mapping: chanel->seq
+pub const TIMEOUT_RECEIVE_PACKET: Map<&str, ReceivePacket> = Map::new("receive_packet");
+pub const SEND_PACKET_COMMITMENT: Map<&str, Uint256> = Map::new("send_packet_commitment"); // cell hash of send_packet
+pub const TIMEOUT_RECEIVE_PACKET_COMMITMENT: Map<&str, Uint256> =
     Map::new("timeout_receive_packet_commitment"); // cell hash of TIMEOUT_RECEIVE_PACKET
 pub const ACK_COMMITMENT: Map<u64, Bytes32> = Map::new("ack_commitment");
 

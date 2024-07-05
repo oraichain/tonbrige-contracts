@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
     attr, Addr, Api, Attribute, CosmosMsg, Decimal, DepsMut, Env, HexBinary, QuerierWrapper,
-    Response, StdError, StdResult, Storage, Uint128,
+    Response, StdError, StdResult, Storage, Uint128, Uint256,
 };
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
 use cw20_ics20_msg::{
@@ -16,7 +16,7 @@ use oraiswap::{
 use std::ops::Mul;
 use tonbridge_bridge::{
     msg::{BridgeToTonMsg, FeeData},
-    parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
+    parser::{build_commitment_key, get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
     state::{MappingMetadata, Ratio, ReceivePacket, TimeoutSendPacket},
 };
 use tonbridge_parser::{to_bytes32, types::BridgePacketData, OPCODE_1, OPCODE_2};
@@ -180,13 +180,14 @@ impl Bridge {
 
         // check packet timeout
         if is_expired(current_timestamp, data.timeout_timestamp) {
-            TIMEOUT_RECEIVE_PACKET.save(storage, receive_packet.seq, &receive_packet)?;
+            let key = build_commitment_key(&receive_packet.src_channel, receive_packet.seq);
+            TIMEOUT_RECEIVE_PACKET.save(storage, &key, &receive_packet)?;
             // must store timeout commitment
             let commitment = build_receive_packet_timeout_commitment(data.seq)?;
             TIMEOUT_RECEIVE_PACKET_COMMITMENT.save(
                 storage,
-                receive_packet.seq,
-                &to_bytes32(&HexBinary::from(commitment))?,
+                &key,
+                &Uint256::from_be_bytes(commitment.as_slice().try_into()?),
             )?;
 
             return Ok((vec![], vec![attr("status", "timeout")]));
@@ -337,7 +338,10 @@ impl Bridge {
             remote_amount,
         )?;
 
-        let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default() + 1;
+        let last_packet_seq = LAST_PACKET_SEQ
+            .may_load(deps.storage, &msg.local_channel_id)?
+            .unwrap_or_default()
+            + 1;
 
         let commitment = build_bridge_to_ton_commitment(
             last_packet_seq,
@@ -348,16 +352,19 @@ impl Bridge {
             remote_amount,
             timeout_timestamp,
         )?;
+        // TODO: mapping real channel, current default channel-0
+        let commitment_key = build_commitment_key("channel-0", last_packet_seq);
+
         SEND_PACKET_COMMITMENT.save(
             deps.storage,
-            last_packet_seq,
-            &to_bytes32(&HexBinary::from(commitment))?,
+            &commitment_key,
+            &Uint256::from_be_bytes(commitment.as_slice().try_into()?),
         )?;
 
         // this packet is saved just in case we need to refund the sender due to timeout
         TIMEOUT_SEND_PACKET.save(
             deps.storage,
-            last_packet_seq,
+            &commitment_key,
             &TimeoutSendPacket {
                 sender: sender.to_string(),
                 local_refund_asset: Asset {
@@ -367,7 +374,7 @@ impl Bridge {
                 timeout_timestamp,
             },
         )?;
-        LAST_PACKET_SEQ.save(deps.storage, &last_packet_seq)?;
+        LAST_PACKET_SEQ.save(deps.storage, &msg.local_channel_id, &last_packet_seq)?;
 
         Ok(Response::new()
             .add_messages(cosmos_msgs)
