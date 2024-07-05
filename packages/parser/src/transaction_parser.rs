@@ -9,7 +9,7 @@ pub trait ITransactionParser {
     fn parse_ack_data(&self, cell: &Cell) -> Result<u64, TonCellError>;
 }
 
-pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x540CE379; // crc32("src::timeout_send_packet")
+pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x540da70d; // crc32("ops::timeout_send_packet")
 pub const RECEIVE_PACKET_MAGIC_NUMBER: u32 = 0xa64c12a3; // crc32("op::send_to_cosmos")
 pub const ACK_MAGIC_NUMBER: u32 = 0x3acb0e2; // crc32("ops::ack_success")
 
