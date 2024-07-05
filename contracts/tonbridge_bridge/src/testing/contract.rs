@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use cosmwasm_std::{
     coin, from_binary,
     testing::{mock_dependencies, mock_env},
@@ -452,7 +454,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
 
     let mut transaction_message = TransactionMessage::default();
     transaction_message.info.msg_type = MessageType::ExternalOut as u8;
-    transaction_message.info.src = TonAddress::from_base64_url(&bridge_addr.clone()).unwrap();
+    transaction_message.info.src = TonAddress::from_str(&bridge_addr.clone()).unwrap();
     let mut any_cell = AnyCell::default();
     let mut cell_builder = CellBuilder::new();
     cell_builder
@@ -585,10 +587,10 @@ fn test_process_timeout_receive_packet_invalid_boc() {
     // sequence
     cell_builder.store_slice(&1u64.to_be_bytes()).unwrap();
     cell_builder
-        .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
+        .store_address(&TonAddress::from_str(&src_sender).unwrap())
         .unwrap();
     cell_builder
-        .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
+        .store_address(&TonAddress::from_str(&src_sender).unwrap())
         .unwrap();
     cell_builder.store_slice(&10u16.to_be_bytes()).unwrap();
     cell_builder.store_slice(&1u128.to_be_bytes()).unwrap();
@@ -634,10 +636,10 @@ fn test_process_timeout_receive_packet_happy_case() {
     // sequence
     cell_builder.store_slice(&1u64.to_be_bytes()).unwrap();
     cell_builder
-        .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
+        .store_address(&TonAddress::from_str(&src_sender).unwrap())
         .unwrap();
     cell_builder
-        .store_address(&TonAddress::from_base64_url(&src_sender).unwrap())
+        .store_address(&TonAddress::from_str(&src_sender).unwrap())
         .unwrap();
     cell_builder.store_slice(&0u16.to_be_bytes()).unwrap();
     cell_builder.store_slice(&1u128.to_be_bytes()).unwrap();

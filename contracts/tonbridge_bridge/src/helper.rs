@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use cosmwasm_std::Uint128;
 use tonbridge_parser::transaction_parser::ACK_MAGIC_NUMBER;
 use tonlib::{address::TonAddress, cell::CellBuilder};
@@ -24,8 +26,8 @@ pub fn build_bridge_to_ton_commitment(
     cell_builder.store_slice(&seq.to_be_bytes())?; // seq
     cell_builder.store_slice(&SEND_TO_TON_MAGIC_NUMBER.to_be_bytes())?; // opcode
     cell_builder.store_slice(&crc_src.to_be_bytes())?; // crc_src
-    cell_builder.store_address(&TonAddress::from_base64_std(to)?)?; // receiver
-    cell_builder.store_address(&TonAddress::from_base64_std(denom)?)?; // remote denom
+    cell_builder.store_address(&TonAddress::from_str(to)?)?; // receiver
+    cell_builder.store_address(&TonAddress::from_str(denom)?)?; // remote denom
     cell_builder.store_slice(&amount.to_be_bytes())?; // remote amount
     cell_builder.store_slice(&timeout_timestamp.to_be_bytes())?; // timeout timestamp
 
@@ -56,6 +58,7 @@ pub fn build_ack_commitment(seq: u64) -> Result<Vec<u8>, ContractError> {
 
 #[cfg(test)]
 mod tests {
+
     use cosmwasm_std::Uint128;
 
     use crate::helper::build_ack_commitment;

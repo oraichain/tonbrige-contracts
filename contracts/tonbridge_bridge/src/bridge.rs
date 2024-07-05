@@ -177,6 +177,7 @@ impl Bridge {
             src_channel: data.src_channel.clone(),
             amount: data.amount,
         };
+
         // check packet timeout
         if is_expired(current_timestamp, data.timeout_timestamp) {
             TIMEOUT_RECEIVE_PACKET.save(storage, receive_packet.seq, &receive_packet)?;
@@ -190,6 +191,7 @@ impl Bridge {
 
             return Ok((vec![], vec![attr("status", "timeout")]));
         }
+
         // increase first
         increase_channel_balance(storage, &data.src_channel, &data.src_denom, data.amount)?;
 

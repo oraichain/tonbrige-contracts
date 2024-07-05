@@ -193,6 +193,7 @@ pub fn read_transaction(
     let tx_parser = TransactionParser::default();
     for out_msg in transaction.out_msgs.into_values() {
         let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
+
         if cell.is_none() {
             continue;
         }
