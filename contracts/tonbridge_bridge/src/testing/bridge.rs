@@ -16,6 +16,7 @@ use tonbridge_bridge::{
         BridgeToTonMsg, ChannelResponse, ExecuteMsg, InstantiateMsg, QueryMsg as BridgeQueryMsg,
         UpdatePairMsg,
     },
+    parser::build_commitment_key,
     state::{Config, MappingMetadata, Ratio, TokenFee},
 };
 use tonbridge_parser::{types::BridgePacketData, OPCODE_2};
@@ -80,6 +81,7 @@ fn test_handle_packet_receive() {
     bridge_packet_data.src_denom = "orai".to_string();
     bridge_packet_data.dest_denom = "orai".to_string();
     bridge_packet_data.orai_address = "orai_address".to_string();
+    bridge_packet_data.src_channel = "channel-0".to_string();
     let mapping = MappingMetadata {
         asset_info: AssetInfo::NativeToken {
             denom: "orai".to_string(),
@@ -142,7 +144,8 @@ fn test_handle_packet_receive() {
     )
     .unwrap();
 
-    let commitment = ACK_COMMITMENT.load(deps.as_ref().storage, 0).unwrap();
+    let key = build_commitment_key(&bridge_packet_data.src_channel, bridge_packet_data.seq);
+    let commitment = ACK_COMMITMENT.load(deps.as_ref().storage, &key).unwrap();
     assert_eq!(commitment, build_ack_commitment(0).unwrap().as_slice());
 }
 

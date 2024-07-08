@@ -14,7 +14,9 @@ use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, DeletePairMsg, ExecuteMsg, InstantiateMsg, MigrateMsg,
     PairQuery, QueryMsg, UpdatePairMsg,
 };
-use tonbridge_bridge::parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id};
+use tonbridge_bridge::parser::{
+    build_commitment_key, get_key_ics20_ibc_denom, parse_ibc_wasm_port_id,
+};
 use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, TokenFee};
 use tonbridge_parser::to_bytes32;
 use tonbridge_parser::transaction_parser::{get_channel_id, ITransactionParser, TransactionParser};
@@ -254,7 +256,9 @@ pub fn acknowledgment(
         let seq = tx_parser.parse_ack_data(&cell)?;
 
         // remove packet commitment
-        SEND_PACKET_COMMITMENT.remove(deps.storage, seq);
+        // TODO: mapping real channel, current default channel-0
+        let commitment_key = build_commitment_key("channel-0", seq);
+        SEND_PACKET_COMMITMENT.remove(deps.storage, &commitment_key);
         attrs.push(attr("seq", &seq.to_string()));
     }
     Ok(Response::new()
@@ -401,10 +405,12 @@ pub fn process_timeout_receive_packet(
     let src_denom = parser.load_address()?;
     // assume that the largest channel id is 65536 = 2^16
     let src_channel_num = parser.load_u16(16)?;
+    let src_channel = get_channel_id(src_channel_num);
     let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
     let timeout_timestamp = parser.load_u64(64)?;
 
-    let timeout_receive_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
+    let commitment_key = build_commitment_key(&src_channel, seq);
+    let timeout_receive_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, &commitment_key)?;
 
     if timeout_receive_packet.ne(&ReceivePacket {
         magic: magic_number,
@@ -412,15 +418,15 @@ pub fn process_timeout_receive_packet(
         timeout_timestamp,
         src_sender: src_sender.to_base64_url(),
         src_denom: src_denom.to_base64_url(),
-        src_channel: get_channel_id(src_channel_num),
+        src_channel,
         amount: Uint128::from(amount),
     }) {
         return Err(ContractError::InvalidSendPacketBoc {});
     }
 
     // after finished verifying the boc, we remove the packet to prevent replay attack
-    TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
-    TIMEOUT_RECEIVE_PACKET_COMMITMENT.remove(deps.storage, seq);
+    TIMEOUT_RECEIVE_PACKET.remove(deps.storage, &commitment_key);
+    TIMEOUT_RECEIVE_PACKET_COMMITMENT.remove(deps.storage, &commitment_key);
 
     Ok(Response::new().add_attribute("action", "process_timeout_recv_packet"))
 }
@@ -441,7 +447,9 @@ pub fn build_timeout_send_packet_refund_msgs(
     let cell = cell.unwrap();
     let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
 
-    let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, packet_seq_timeout)?;
+    // TODO: mapping real channel, current default channel-0
+    let commitment_key = build_commitment_key("channel-0", packet_seq_timeout);
+    let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, &commitment_key)?;
 
     // no-op to prevent error spamming from the relayer
     if timeout_packet.is_none() {
@@ -459,8 +467,12 @@ pub fn build_timeout_send_packet_refund_msgs(
         querier,
         api.addr_validate(&timeout_packet.sender)?,
     )?;
-    TIMEOUT_SEND_PACKET.remove(storage, packet_seq_timeout);
-    SEND_PACKET_COMMITMENT.remove(storage, packet_seq_timeout);
+
+    // TODO: mapping real channel, current default channel-0
+    let commitment_key = build_commitment_key("channel-0", packet_seq_timeout);
+
+    TIMEOUT_SEND_PACKET.remove(storage, &commitment_key);
+    SEND_PACKET_COMMITMENT.remove(storage, &commitment_key);
 
     Ok(vec![refund_msg])
 }

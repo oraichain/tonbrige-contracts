@@ -13,7 +13,7 @@ use oraiswap::{
 };
 use tonbridge_bridge::{
     msg::{ChannelResponse, DeletePairMsg, PairQuery, QueryMsg as BridgeQueryMsg, UpdatePairMsg},
-    parser::{get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
+    parser::{build_commitment_key, get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
     state::{Config, MappingMetadata, Ratio, ReceivePacket, TimeoutSendPacket, TokenFee},
 };
 use tonbridge_parser::{
@@ -439,6 +439,8 @@ fn test_build_timeout_send_packet_refund_msgs() {
     let bridge_addr = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string();
     let sender = "orai1rchnkdpsxzhquu63y6r4j4t57pnc9w8ehdhedx";
     let seq = 1u64;
+    let channel = "channel-0";
+    let commitment_key = build_commitment_key(channel, seq);
 
     // case 1: out msg is invalid -> empty res
     let res = build_timeout_send_packet_refund_msgs(
@@ -483,7 +485,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
     TIMEOUT_SEND_PACKET
         .save(
             deps_mut.storage,
-            seq,
+            &commitment_key,
             &TimeoutSendPacket {
                 local_refund_asset: Asset {
                     info: AssetInfo::NativeToken {
@@ -512,7 +514,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
     TIMEOUT_SEND_PACKET
         .save(
             deps_mut.storage,
-            seq,
+            &commitment_key,
             &TimeoutSendPacket {
                 local_refund_asset: Asset {
                     info: AssetInfo::NativeToken {
@@ -563,18 +565,20 @@ fn test_process_timeout_receive_packet_invalid_boc() {
     let src_sender = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string();
     let seq = 1;
     let timeout_timestamp = 1;
+    let channel = "channel-10";
+    let commitment_key = build_commitment_key(channel, seq);
 
     TIMEOUT_RECEIVE_PACKET
         .save(
             deps_mut.storage,
-            1,
+            &commitment_key,
             &ReceivePacket {
                 magic: RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER,
                 seq: seq.clone(),
                 timeout_timestamp,
                 src_sender: src_sender.clone(),
                 src_denom: src_sender.clone(),
-                src_channel: "channel-0".to_string(),
+                src_channel: "channel-1".to_string(),
                 amount: Uint128::one(),
             },
         )
@@ -612,11 +616,13 @@ fn test_process_timeout_receive_packet_happy_case() {
     let src_sender = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string();
     let seq = 1;
     let timeout_timestamp = 1;
+    let channel = "channel-0";
+    let commitment_key = build_commitment_key(channel, seq);
 
     TIMEOUT_RECEIVE_PACKET
         .save(
             deps.as_mut().storage,
-            1,
+            &commitment_key,
             &ReceivePacket {
                 magic: RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER,
                 seq: seq.clone(),
@@ -651,7 +657,7 @@ fn test_process_timeout_receive_packet_happy_case() {
     process_timeout_receive_packet(deps.as_mut(), HexBinary::from(cell.data)).unwrap();
 
     let timeout_packet = TIMEOUT_RECEIVE_PACKET
-        .may_load(deps.as_mut().storage, 1)
+        .may_load(deps.as_mut().storage, &commitment_key)
         .unwrap();
     assert_eq!(timeout_packet.is_none(), true);
 }
