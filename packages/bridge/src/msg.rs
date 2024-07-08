@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, HexBinary, Uint128};
+use cosmwasm_std::{Addr, HexBinary, Uint128, Uint256};
 use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
@@ -104,6 +104,8 @@ pub enum QueryMsg {
     PairMapping { key: String },
     #[returns(Vec<ReceivePacket>)]
     QueryTimeoutReceivePackets {},
+    #[returns(Uint256)]
+    SendPacketCommitment { channel: String, seq: u64 },
 }
 
 #[cw_serde]

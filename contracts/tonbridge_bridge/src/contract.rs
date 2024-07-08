@@ -489,6 +489,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::ChannelStateData { channel_id } => to_binary(&query_channel(deps, channel_id)?),
         QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
         QueryMsg::QueryTimeoutReceivePackets {} => to_binary(&query_timeout_receive_packets(deps)?),
+        QueryMsg::SendPacketCommitment { channel, seq } => to_binary(
+            &SEND_PACKET_COMMITMENT.load(deps.storage, &build_commitment_key(&channel, seq))?,
+        ),
     }
 }
 
