@@ -377,6 +377,7 @@ impl Bridge {
             .add_messages(cosmos_msgs)
             .add_attributes(vec![
                 ("action", "bridge_to_ton"),
+                ("local_sender", sender.as_str()),
                 ("dest_receiver", &msg.to),
                 ("dest_denom", &msg.denom),
                 ("local_amount", &local_amount.to_string()),
