@@ -264,11 +264,8 @@ impl Bridge {
 
         // store ack commitment
         let commitment = build_ack_commitment(receive_packet.seq)?;
-        ACK_COMMITMENT.save(
-            storage,
-            receive_packet.seq,
-            &to_bytes32(&HexBinary::from(commitment))?,
-        )?;
+        let key = build_commitment_key(&receive_packet.src_channel, receive_packet.seq);
+        ACK_COMMITMENT.save(storage, &key, &to_bytes32(&HexBinary::from(commitment))?)?;
 
         Ok((cosmos_msgs, attributes))
     }
@@ -352,8 +349,8 @@ impl Bridge {
             remote_amount,
             timeout_timestamp,
         )?;
-        // TODO: mapping real channel, current default channel-0
-        let commitment_key = build_commitment_key("channel-0", last_packet_seq);
+
+        let commitment_key = build_commitment_key(&msg.local_channel_id, last_packet_seq);
 
         SEND_PACKET_COMMITMENT.save(
             deps.storage,

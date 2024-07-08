@@ -23,7 +23,7 @@ pub const TIMEOUT_RECEIVE_PACKET: Map<&str, ReceivePacket> = Map::new("receive_p
 pub const SEND_PACKET_COMMITMENT: Map<&str, Uint256> = Map::new("send_packet_commitment"); // cell hash of send_packet
 pub const TIMEOUT_RECEIVE_PACKET_COMMITMENT: Map<&str, Uint256> =
     Map::new("timeout_receive_packet_commitment"); // cell hash of TIMEOUT_RECEIVE_PACKET
-pub const ACK_COMMITMENT: Map<u64, Bytes32> = Map::new("ack_commitment");
+pub const ACK_COMMITMENT: Map<&str, Bytes32> = Map::new("ack_commitment");
 
 // =============================== Reference from: https://github.com/oraichain/ibc-bridge-wasm.git
 /// This channel state is used when a REMOTE chain initiates ibc transfer to LOCAL chain
