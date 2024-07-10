@@ -2,12 +2,12 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::CanonicalAddr;
 use tonlib::cell::{Cell, CellParser, TonCellError};
 
-use crate::types::BridgePacketDataRaw;
+use crate::types::{AckPacket, BridgePacketDataRaw, Status};
 
 pub trait ITransactionParser {
     fn parse_packet_data(&self, cell: &Cell) -> Result<BridgePacketDataRaw, TonCellError>;
     fn parse_send_packet_timeout_data(&self, cell: &Cell) -> Result<u64, TonCellError>;
-    fn parse_ack_data(&self, cell: &Cell) -> Result<u64, TonCellError>;
+    fn parse_ack_data(&self, cell: &Cell) -> Result<AckPacket, TonCellError>;
     fn load_address(parser: &mut CellParser) -> Result<Option<CanonicalAddr>, TonCellError>;
 }
 
@@ -91,14 +91,22 @@ impl ITransactionParser for TransactionParser {
         Ok(packet_seq)
     }
 
-    fn parse_ack_data(&self, cell: &Cell) -> Result<u64, TonCellError> {
+    fn parse_ack_data(&self, cell: &Cell) -> Result<AckPacket, TonCellError> {
         let mut parser = cell.parser();
         let magic_number = parser.load_u32(32)?;
         if magic_number != SEND_TO_TON_MAGIC_NUMBER {
             return Err(TonCellError::cell_parser_error("Not a ack"));
         }
         let packet_seq = parser.load_u64(64)?;
-        Ok(packet_seq)
+        let status = Status::from_value(parser.load_u8(2)?);
+        if status.is_none() {
+            return Err(TonCellError::cell_parser_error("Missing status on ack"));
+        }
+
+        Ok(AckPacket {
+            seq: packet_seq,
+            status: status.unwrap(),
+        })
     }
 }
 

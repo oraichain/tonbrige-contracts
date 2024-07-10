@@ -18,6 +18,7 @@ use tonbridge_bridge::msg::{
 use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
 use tonbridge_parser::to_bytes32;
 use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
+use tonbridge_parser::types::Status;
 use tonlib::cell::{BagOfCells, Cell};
 use tonlib::responses::{MaybeRefData, TransactionMessage};
 
@@ -25,8 +26,8 @@ use crate::bridge::Bridge;
 use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{
-    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
-    SEND_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
+    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
+    SEND_PACKET_COMMITMENT, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -234,20 +235,36 @@ pub fn acknowledgment(
         tx_boc.as_slice(),
     )?;
     let tx_parser = TransactionParser::default();
+    let mut msgs: Vec<CosmosMsg> = vec![];
+
     for out_msg in transaction.out_msgs.into_values() {
         let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
         if cell.is_none() {
             continue;
         }
         let cell = cell.unwrap();
-        let seq = tx_parser.parse_ack_data(&cell)?;
+        let ack = tx_parser.parse_ack_data(&cell)?;
 
-        SEND_PACKET_COMMITMENT.remove(deps.storage, seq);
-        attrs.push(attr("seq", &seq.to_string()));
+        // if not success, try refunds
+        if ack.status.ne(&Status::Success) {
+            let send_packet = SEND_PACKET.load(deps.storage, ack.seq)?;
+
+            let refund_msg = send_packet.local_refund_asset.into_msg(
+                None,
+                &deps.querier,
+                deps.api.addr_validate(&send_packet.sender)?,
+            )?;
+            msgs.push(refund_msg);
+        }
+
+        SEND_PACKET_COMMITMENT.remove(deps.storage, ack.seq);
+        attrs.push(attr("seq", &ack.seq.to_string()));
+        attrs.push(attr("status", ack.status.to_string()));
     }
     Ok(Response::new()
         .add_attributes(vec![("action", "acknowledgment")])
-        .add_attributes(attrs))
+        .add_attributes(attrs)
+        .add_messages(msgs))
 }
 
 pub fn update_mapping_pair(
@@ -368,7 +385,7 @@ pub fn build_timeout_send_packet_refund_msgs(
     let cell = cell.unwrap();
     let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
 
-    let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, packet_seq_timeout)?;
+    let timeout_packet = SEND_PACKET.may_load(storage, packet_seq_timeout)?;
 
     // no-op to prevent error spamming from the relayer
     if timeout_packet.is_none() {
@@ -387,7 +404,7 @@ pub fn build_timeout_send_packet_refund_msgs(
         api.addr_validate(&timeout_packet.sender)?,
     )?;
 
-    TIMEOUT_SEND_PACKET.remove(storage, packet_seq_timeout);
+    SEND_PACKET.remove(storage, packet_seq_timeout);
     SEND_PACKET_COMMITMENT.remove(storage, packet_seq_timeout);
 
     Ok(vec![refund_msg])

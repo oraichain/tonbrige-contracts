@@ -199,6 +199,27 @@ pub enum Status {
     Timeout = 2,
 }
 
+impl Status {
+    pub fn from_value(value: u8) -> Option<Status> {
+        match value {
+            0 => Some(Status::Success),
+            1 => Some(Status::Error),
+            2 => Some(Status::Timeout),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Status::Success => write!(f, "Success"),
+            Status::Error => write!(f, "Error"),
+            Status::Timeout => write!(f, "Timeout"),
+        }
+    }
+}
+
 #[cw_serde]
 pub struct AckPacket {
     pub seq: u64,

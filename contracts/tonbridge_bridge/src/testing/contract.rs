@@ -28,7 +28,7 @@ use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     contract::{build_timeout_send_packet_refund_msgs, is_tx_processed, query},
     error::ContractError,
-    state::{PROCESSED_TXS, TIMEOUT_SEND_PACKET},
+    state::{PROCESSED_TXS, SEND_PACKET},
 };
 
 use super::mock::{new_mock_app, MockApp};
@@ -446,7 +446,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
     assert_eq!(res.len(), 0);
 
     // case 3: packet has not timed out yet
-    TIMEOUT_SEND_PACKET
+    SEND_PACKET
         .save(
             deps_mut.storage,
             seq,
@@ -475,7 +475,7 @@ fn test_build_timeout_send_packet_refund_msgs() {
     assert_eq!(err.to_string(), ContractError::NotExpired {}.to_string());
 
     // case 4: happy case
-    TIMEOUT_SEND_PACKET
+    SEND_PACKET
         .save(
             deps_mut.storage,
             seq,

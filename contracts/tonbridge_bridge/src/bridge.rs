@@ -35,8 +35,8 @@ use crate::{
     error::ContractError,
     helper::{build_ack_commitment, build_bridge_to_ton_commitment, is_expired},
     state::{
-        ics20_denoms, ACK_COMMITMENT, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS,
-        SEND_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
+        ics20_denoms, ACK_COMMITMENT, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS, SEND_PACKET,
+        SEND_PACKET_COMMITMENT, TOKEN_FEE,
     },
 };
 
@@ -365,7 +365,7 @@ impl Bridge {
         )?;
 
         // this packet is saved just in case we need to refund the sender due to timeout
-        TIMEOUT_SEND_PACKET.save(
+        SEND_PACKET.save(
             deps.storage,
             last_packet_seq,
             &TimeoutSendPacket {
