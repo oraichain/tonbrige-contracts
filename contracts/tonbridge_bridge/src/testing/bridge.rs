@@ -417,6 +417,7 @@ fn test_bridge_native_to_ton() {
         res.attributes,
         vec![
             ("action", "bridge_to_ton"),
+            ("local_sender", "sender"),
             (
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
@@ -513,6 +514,7 @@ fn test_bridge_cw20_to_ton() {
         res.attributes,
         vec![
             attr("action", "bridge_to_ton"),
+            attr("local_sender", "sender"),
             attr(
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
@@ -658,6 +660,7 @@ fn test_bridge_to_ton_with_fee() {
         res.attributes,
         vec![
             attr("action", "bridge_to_ton"),
+            attr("local_sender", "sender"),
             attr(
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"
@@ -738,6 +741,7 @@ fn test_bridge_to_ton_with_fee() {
         res.attributes,
         vec![
             attr("action", "bridge_to_ton"),
+            attr("local_sender", "sender"),
             attr(
                 "dest_receiver",
                 "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT"

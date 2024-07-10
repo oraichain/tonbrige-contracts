@@ -16,10 +16,14 @@ use oraiswap::{
 use std::ops::Mul;
 use tonbridge_bridge::{
     msg::{BridgeToTonMsg, FeeData},
-    parser::{build_commitment_key, get_key_ics20_ibc_denom, parse_ibc_wasm_port_id},
     state::{MappingMetadata, Ratio, ReceivePacket, TimeoutSendPacket},
 };
-use tonbridge_parser::{to_bytes32, types::BridgePacketData, OPCODE_1, OPCODE_2};
+use tonbridge_parser::{
+    to_bytes32,
+    transaction_parser::{RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
+    types::{BridgePacketData, Status},
+    OPCODE_1, OPCODE_2,
+};
 use tonbridge_validator::wrapper::ValidatorWrapper;
 use tonlib::{
     cell::{BagOfCells, Cell},
@@ -41,8 +45,6 @@ use crate::{
 };
 
 pub const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
-pub const RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x0da5c1c4; // crc32("ops::ack_timeout")
-pub const SEND_TO_TON_MAGIC_NUMBER: u32 = 0x2e89be5b; // crc32("op::send_to_ton")
 
 #[cw_serde]
 pub struct Bridge {
@@ -174,30 +176,39 @@ impl Bridge {
             timeout_timestamp: data.timeout_timestamp,
             src_sender: data.src_sender.clone(),
             src_denom: data.src_denom.clone(),
-            src_channel: data.src_channel.clone(),
             amount: data.amount,
         };
 
+        let recipient = api.addr_humanize(&data.receiver)?;
+
+        let mut attrs: Vec<Attribute> = vec![
+            attr("seq", data.seq.to_string()),
+            attr("local_amount", data.amount),
+            attr("timeout_timestamp", data.timeout_timestamp.to_string()),
+            attr("recipient", recipient.as_str()),
+            attr("local_denom", data.src_denom.clone()),
+        ];
+
         // check packet timeout
         if is_expired(current_timestamp, data.timeout_timestamp) {
-            let key = build_commitment_key(&receive_packet.src_channel, receive_packet.seq);
-            TIMEOUT_RECEIVE_PACKET.save(storage, &key, &receive_packet)?;
+            TIMEOUT_RECEIVE_PACKET.save(storage, data.seq, &receive_packet)?;
             // must store timeout commitment
             let commitment = build_receive_packet_timeout_commitment(data.seq)?;
             TIMEOUT_RECEIVE_PACKET_COMMITMENT.save(
                 storage,
-                &key,
+                data.seq,
                 &Uint256::from_be_bytes(commitment.as_slice().try_into()?),
             )?;
+            attrs.push(attr("ack", (Status::Timeout as u8).to_string()));
+            attrs.push(attr("ack_value", "timeout"));
 
-            return Ok((vec![], vec![attr("status", "timeout")]));
+            return Ok((vec![], attrs));
         }
 
         // increase first
-        increase_channel_balance(storage, &data.src_channel, &data.src_denom, data.amount)?;
+        increase_channel_balance(storage, &data.src_denom, data.amount)?;
 
         let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-        let recipient = api.addr_validate(&data.orai_address)?;
 
         let to_send = Amount::from_parts(
             parse_asset_info_denom(&mapping.asset_info),
@@ -208,7 +219,8 @@ impl Bridge {
             )?,
         );
 
-        let fee_data = Bridge::process_deduct_fee(storage, querier, api, data.src_denom, to_send)?;
+        let fee_data =
+            Bridge::process_deduct_fee(storage, querier, api, data.src_denom.clone(), to_send)?;
         let local_amount = fee_data.deducted_amount;
 
         if !fee_data.token_fee.is_empty() {
@@ -259,13 +271,25 @@ impl Bridge {
             }?;
             cosmos_msgs.push(msg);
         } else if mapping.opcode == OPCODE_2 {
-            cosmos_msgs.push(msg.into_msg(None, querier, recipient)?);
+            cosmos_msgs.push(msg.into_msg(None, querier, recipient.clone())?);
         }
 
         // store ack commitment
-        let commitment = build_ack_commitment(receive_packet.seq)?;
-        let key = build_commitment_key(&receive_packet.src_channel, receive_packet.seq);
-        ACK_COMMITMENT.save(storage, &key, &to_bytes32(&HexBinary::from(commitment))?)?;
+        let commitment = build_ack_commitment(
+            data.seq,
+            data.token_origin,
+            data.amount,
+            data.timeout_timestamp,
+            data.receiver.as_slice(),
+            &data.src_denom,
+            &data.src_sender,
+            Status::Success,
+        )?;
+        ACK_COMMITMENT.save(
+            storage,
+            data.seq,
+            &Uint256::from_be_bytes(commitment.as_slice().try_into()?),
+        )?;
 
         Ok((cosmos_msgs, attributes))
     }
@@ -282,13 +306,8 @@ impl Bridge {
             .unwrap_or(env.block.time.seconds() + DEFAULT_TIMEOUT);
 
         let config = CONFIG.load(deps.storage)?;
-        let denom_key = get_key_ics20_ibc_denom(
-            &parse_ibc_wasm_port_id(env.contract.address.as_str()),
-            &msg.local_channel_id,
-            &msg.denom,
-        );
 
-        let mapping = ics20_denoms().load(deps.storage, &denom_key)?;
+        let mapping = ics20_denoms().load(deps.storage, &msg.denom)?;
         // ensure amount is correct
         if mapping
             .asset_info
@@ -328,40 +347,31 @@ impl Bridge {
             mapping.asset_info_decimals,
         )?;
         // try decrease channel balance
-        decrease_channel_balance(
-            deps.storage,
-            &msg.local_channel_id,
-            &msg.denom,
-            remote_amount,
-        )?;
+        decrease_channel_balance(deps.storage, &msg.denom, remote_amount)?;
 
-        let last_packet_seq = LAST_PACKET_SEQ
-            .may_load(deps.storage, &msg.local_channel_id)?
-            .unwrap_or_default()
-            + 1;
+        let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default() + 1;
 
+        let sender_raw = deps.api.addr_canonicalize(sender.as_str())?;
         let commitment = build_bridge_to_ton_commitment(
             last_packet_seq,
-            mapping.crc_src,
-            sender.as_str(),
+            mapping.token_origin,
+            sender_raw.as_slice(),
             &msg.to,
             &msg.denom,
             remote_amount,
             timeout_timestamp,
         )?;
 
-        let commitment_key = build_commitment_key(&msg.local_channel_id, last_packet_seq);
-
         SEND_PACKET_COMMITMENT.save(
             deps.storage,
-            &commitment_key,
+            last_packet_seq,
             &Uint256::from_be_bytes(commitment.as_slice().try_into()?),
         )?;
 
         // this packet is saved just in case we need to refund the sender due to timeout
         TIMEOUT_SEND_PACKET.save(
             deps.storage,
-            &commitment_key,
+            last_packet_seq,
             &TimeoutSendPacket {
                 sender: sender.to_string(),
                 local_refund_asset: Asset {
@@ -371,20 +381,24 @@ impl Bridge {
                 timeout_timestamp,
             },
         )?;
-        LAST_PACKET_SEQ.save(deps.storage, &msg.local_channel_id, &last_packet_seq)?;
+        LAST_PACKET_SEQ.save(deps.storage, &last_packet_seq)?;
 
         Ok(Response::new()
             .add_messages(cosmos_msgs)
             .add_attributes(vec![
-                ("action", "bridge_to_ton"),
+                ("action", "send_to_ton"),
+                ("opcode_packet", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
                 ("local_sender", sender.as_str()),
-                ("dest_receiver", &msg.to),
-                ("dest_denom", &msg.denom),
+                ("remote_receiver", &msg.to),
+                ("remote_denom", &msg.denom),
                 ("local_amount", &local_amount.to_string()),
-                ("crc_src", &mapping.crc_src.to_string()),
+                ("token_origin", &mapping.token_origin.to_string()),
                 ("relayer_fee", &fee_data.relayer_fee.amount().to_string()),
                 ("token_fee", &fee_data.token_fee.amount().to_string()),
-                ("timeout", &timeout_timestamp.to_owned().to_string()),
+                (
+                    "timeout_timestamp",
+                    &timeout_timestamp.to_owned().to_string(),
+                ),
                 ("remote_amount", &remote_amount.to_string()),
                 ("seq", &last_packet_seq.to_string()),
             ]))

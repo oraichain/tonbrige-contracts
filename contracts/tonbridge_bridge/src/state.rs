@@ -17,18 +17,18 @@ pub const TOKEN_FEE: Map<&str, Ratio> = Map::new("token_fee");
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-pub const TIMEOUT_SEND_PACKET: Map<&str, TimeoutSendPacket> = Map::new("timeout_send_packet");
-pub const LAST_PACKET_SEQ: Map<&str, u64> = Map::new("last_packet_seq"); // mapping: chanel->seq
-pub const TIMEOUT_RECEIVE_PACKET: Map<&str, ReceivePacket> = Map::new("receive_packet");
-pub const SEND_PACKET_COMMITMENT: Map<&str, Uint256> = Map::new("send_packet_commitment"); // cell hash of send_packet
-pub const TIMEOUT_RECEIVE_PACKET_COMMITMENT: Map<&str, Uint256> =
+pub const TIMEOUT_SEND_PACKET: Map<u64, TimeoutSendPacket> = Map::new("timeout_send_packet");
+pub const LAST_PACKET_SEQ: Item<u64> = Item::new("last_packet_seq"); // mapping: chanel->seq
+pub const TIMEOUT_RECEIVE_PACKET: Map<u64, ReceivePacket> = Map::new("receive_packet");
+pub const SEND_PACKET_COMMITMENT: Map<u64, Uint256> = Map::new("send_packet_commitment"); // cell hash of send_packet
+pub const TIMEOUT_RECEIVE_PACKET_COMMITMENT: Map<u64, Uint256> =
     Map::new("timeout_receive_packet_commitment"); // cell hash of TIMEOUT_RECEIVE_PACKET
-pub const ACK_COMMITMENT: Map<&str, Bytes32> = Map::new("ack_commitment");
+pub const ACK_COMMITMENT: Map<u64, Uint256> = Map::new("ack_commitment");
 
 // =============================== Reference from: https://github.com/oraichain/ibc-bridge-wasm.git
 /// This channel state is used when a REMOTE chain initiates ibc transfer to LOCAL chain
 /// LOCAL chain is the chain hosting this smart contract.
-pub const REMOTE_INITIATED_CHANNEL_STATE: Map<(&str, &str), ChannelState> =
+pub const REMOTE_INITIATED_CHANNEL_STATE: Map<&str, ChannelState> =
     Map::new("remote_initiated_channel_state");
 
 // MappingMetadataIndexex structs keeps a list of indexers

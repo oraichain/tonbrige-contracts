@@ -14,16 +14,16 @@ use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, DeletePairMsg, ExecuteMsg, InstantiateMsg, MigrateMsg,
     PairQuery, QueryMsg, UpdatePairMsg,
 };
-use tonbridge_bridge::parser::{
-    build_commitment_key, get_key_ics20_ibc_denom, parse_ibc_wasm_port_id,
-};
+
 use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, TokenFee};
 use tonbridge_parser::to_bytes32;
-use tonbridge_parser::transaction_parser::{get_channel_id, ITransactionParser, TransactionParser};
+use tonbridge_parser::transaction_parser::{
+    ITransactionParser, TransactionParser, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER,
+};
 use tonlib::cell::{BagOfCells, Cell, TonCellError};
 use tonlib::responses::{MaybeRefData, TransactionMessage};
 
-use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER};
+use crate::bridge::Bridge;
 use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{
@@ -89,8 +89,8 @@ pub fn execute(
         ExecuteMsg::ReadTransaction { tx_proof, tx_boc } => {
             read_transaction(deps, env, tx_proof, tx_boc)
         }
-        ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, env, &info.sender, msg),
-        ExecuteMsg::DeleteMappingPair(msg) => execute_delete_mapping_pair(deps, env, info, msg),
+        ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, &info.sender, msg),
+        ExecuteMsg::DeleteMappingPair(msg) => execute_delete_mapping_pair(deps, info, msg),
         ExecuteMsg::BridgeToTon(msg) => {
             let coin = one_coin(&info)?;
             let amount = Amount::from_parts(coin.denom, coin.amount);
@@ -202,14 +202,7 @@ pub fn read_transaction(
         let cell = cell.unwrap();
         let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
 
-        let mapping = ics20_denoms().load(
-            deps.storage,
-            &get_key_ics20_ibc_denom(
-                &parse_ibc_wasm_port_id(env.contract.address.as_str()),
-                &packet_data.src_channel,
-                &packet_data.src_denom,
-            ),
-        )?;
+        let mapping = ics20_denoms().load(deps.storage, &packet_data.src_denom)?;
 
         let mut res = Bridge::handle_packet_receive(
             deps.storage,
@@ -227,7 +220,7 @@ pub fn read_transaction(
     }
     Ok(Response::new()
         .add_messages(cosmos_msgs)
-        .add_attributes(vec![("action", "bridge_to_cosmos")])
+        .add_attributes(vec![("action", "send_to_cosmos")])
         .add_attributes(attrs))
 }
 
@@ -255,10 +248,7 @@ pub fn acknowledgment(
         let cell = cell.unwrap();
         let seq = tx_parser.parse_ack_data(&cell)?;
 
-        // remove packet commitment
-        // TODO: mapping real channel, current default channel-0
-        let commitment_key = build_commitment_key("channel-0", seq);
-        SEND_PACKET_COMMITMENT.remove(deps.storage, &commitment_key);
+        SEND_PACKET_COMMITMENT.remove(deps.storage, seq);
         attrs.push(attr("seq", &seq.to_string()));
     }
     Ok(Response::new()
@@ -268,31 +258,25 @@ pub fn acknowledgment(
 
 pub fn update_mapping_pair(
     deps: DepsMut,
-    env: Env,
     caller: &Addr,
     msg: UpdatePairMsg,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), caller)?;
-    let ibc_denom = get_key_ics20_ibc_denom(
-        &parse_ibc_wasm_port_id(env.contract.address.as_str()),
-        &msg.local_channel_id,
-        &msg.denom,
-    );
 
     // if pair already exists in list, remove it and create a new one
-    if ics20_denoms().load(deps.storage, &ibc_denom).is_ok() {
-        ics20_denoms().remove(deps.storage, &ibc_denom)?;
+    if ics20_denoms().load(deps.storage, &msg.denom).is_ok() {
+        ics20_denoms().remove(deps.storage, &msg.denom)?;
     }
 
     ics20_denoms().save(
         deps.storage,
-        &ibc_denom,
+        &msg.denom,
         &MappingMetadata {
             asset_info: msg.local_asset_info.clone(),
             remote_decimals: msg.remote_decimals,
             asset_info_decimals: msg.local_asset_info_decimals,
             opcode: to_bytes32(&msg.opcode)?,
-            crc_src: msg.crc_src,
+            token_origin: msg.token_origin,
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
@@ -300,23 +284,15 @@ pub fn update_mapping_pair(
 
 pub fn execute_delete_mapping_pair(
     deps: DepsMut,
-    env: Env,
     info: MessageInfo,
     mapping_pair_msg: DeletePairMsg,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), &info.sender)?;
 
-    let ibc_denom = get_key_ics20_ibc_denom(
-        &parse_ibc_wasm_port_id(env.contract.address.as_str()),
-        &mapping_pair_msg.local_channel_id,
-        &mapping_pair_msg.denom,
-    );
-
-    ics20_denoms().remove(deps.storage, &ibc_denom)?;
+    ics20_denoms().remove(deps.storage, &mapping_pair_msg.denom)?;
 
     let res = Response::new()
         .add_attribute("action", "execute_delete_mapping_pair")
-        .add_attribute("local_channel_id", mapping_pair_msg.local_channel_id)
         .add_attribute("original_denom", mapping_pair_msg.denom);
     Ok(res)
 }
@@ -404,13 +380,11 @@ pub fn process_timeout_receive_packet(
     let src_sender = parser.load_address()?;
     let src_denom = parser.load_address()?;
     // assume that the largest channel id is 65536 = 2^16
-    let src_channel_num = parser.load_u16(16)?;
-    let src_channel = get_channel_id(src_channel_num);
+
     let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
     let timeout_timestamp = parser.load_u64(64)?;
 
-    let commitment_key = build_commitment_key(&src_channel, seq);
-    let timeout_receive_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, &commitment_key)?;
+    let timeout_receive_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
 
     if timeout_receive_packet.ne(&ReceivePacket {
         magic: magic_number,
@@ -418,15 +392,15 @@ pub fn process_timeout_receive_packet(
         timeout_timestamp,
         src_sender: src_sender.to_base64_url(),
         src_denom: src_denom.to_base64_url(),
-        src_channel,
+
         amount: Uint128::from(amount),
     }) {
         return Err(ContractError::InvalidSendPacketBoc {});
     }
 
     // after finished verifying the boc, we remove the packet to prevent replay attack
-    TIMEOUT_RECEIVE_PACKET.remove(deps.storage, &commitment_key);
-    TIMEOUT_RECEIVE_PACKET_COMMITMENT.remove(deps.storage, &commitment_key);
+    TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
+    TIMEOUT_RECEIVE_PACKET_COMMITMENT.remove(deps.storage, seq);
 
     Ok(Response::new().add_attribute("action", "process_timeout_recv_packet"))
 }
@@ -447,9 +421,7 @@ pub fn build_timeout_send_packet_refund_msgs(
     let cell = cell.unwrap();
     let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
 
-    // TODO: mapping real channel, current default channel-0
-    let commitment_key = build_commitment_key("channel-0", packet_seq_timeout);
-    let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, &commitment_key)?;
+    let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, packet_seq_timeout)?;
 
     // no-op to prevent error spamming from the relayer
     if timeout_packet.is_none() {
@@ -468,11 +440,8 @@ pub fn build_timeout_send_packet_refund_msgs(
         api.addr_validate(&timeout_packet.sender)?,
     )?;
 
-    // TODO: mapping real channel, current default channel-0
-    let commitment_key = build_commitment_key("channel-0", packet_seq_timeout);
-
-    TIMEOUT_SEND_PACKET.remove(storage, &commitment_key);
-    SEND_PACKET_COMMITMENT.remove(storage, &commitment_key);
+    TIMEOUT_SEND_PACKET.remove(storage, packet_seq_timeout);
+    SEND_PACKET_COMMITMENT.remove(storage, packet_seq_timeout);
 
     Ok(vec![refund_msg])
 }
@@ -486,12 +455,12 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&TOKEN_FEE.load(deps.storage, &remote_token_denom)?)
         }
         QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
-        QueryMsg::ChannelStateData { channel_id } => to_binary(&query_channel(deps, channel_id)?),
+        QueryMsg::ChannelStateData {} => to_binary(&query_channel(deps)?),
         QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
         QueryMsg::QueryTimeoutReceivePackets {} => to_binary(&query_timeout_receive_packets(deps)?),
-        QueryMsg::SendPacketCommitment { channel, seq } => to_binary(
-            &SEND_PACKET_COMMITMENT.load(deps.storage, &build_commitment_key(&channel, seq))?,
-        ),
+        QueryMsg::SendPacketCommitment { seq } => {
+            to_binary(&SEND_PACKET_COMMITMENT.load(deps.storage, seq)?)
+        }
     }
 }
 
@@ -507,9 +476,8 @@ pub fn get_config(deps: Deps) -> StdResult<Config> {
 }
 
 // make public for ibc tests
-pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelResponse> {
+pub fn query_channel(deps: Deps) -> StdResult<ChannelResponse> {
     let state = REMOTE_INITIATED_CHANNEL_STATE
-        .prefix(&channel_id)
         .range(deps.storage, None, None, Order::Ascending)
         .map(|r| {
             // this denom is

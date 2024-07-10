@@ -56,7 +56,6 @@ pub enum ExecuteMsg {
 
 #[cw_serde]
 pub struct UpdatePairMsg {
-    pub local_channel_id: String,
     /// native denom of the remote chain. Eg: orai
     pub denom: String,
     /// asset info of the local chain.
@@ -64,19 +63,17 @@ pub struct UpdatePairMsg {
     pub remote_decimals: u8,
     pub local_asset_info_decimals: u8,
     pub opcode: HexBinary,
-    pub crc_src: u32,
+    pub token_origin: u32,
 }
 
 #[cw_serde]
 pub struct DeletePairMsg {
-    pub local_channel_id: String,
     /// native denom of the remote chain. Eg: orai
     pub denom: String,
 }
 
 #[cw_serde]
 pub struct BridgeToTonMsg {
-    pub local_channel_id: String, // default channel-0
     pub to: String,
     pub denom: String,
     pub timeout: Option<u64>,
@@ -97,7 +94,7 @@ pub enum QueryMsg {
     IsTxProcessed { tx_hash: HexBinary },
     /// Returns the details of the name channel, error if not created.
     #[returns(ChannelResponse)]
-    ChannelStateData { channel_id: String },
+    ChannelStateData {},
     #[returns(crate::state::Ratio)]
     TokenFee { remote_token_denom: String },
     #[returns(PairQuery)]
@@ -105,7 +102,7 @@ pub enum QueryMsg {
     #[returns(Vec<ReceivePacket>)]
     QueryTimeoutReceivePackets {},
     #[returns(Uint256)]
-    SendPacketCommitment { channel: String, seq: u64 },
+    SendPacketCommitment { seq: u64 },
 }
 
 #[cw_serde]

@@ -1,5 +1,6 @@
 use cosmwasm_schema::cw_serde;
-use tonlib::cell::{Cell, TonCellError};
+use cosmwasm_std::CanonicalAddr;
+use tonlib::cell::{Cell, CellParser, TonCellError};
 
 use crate::types::BridgePacketDataRaw;
 
@@ -7,21 +8,30 @@ pub trait ITransactionParser {
     fn parse_packet_data(&self, cell: &Cell) -> Result<BridgePacketDataRaw, TonCellError>;
     fn parse_send_packet_timeout_data(&self, cell: &Cell) -> Result<u64, TonCellError>;
     fn parse_ack_data(&self, cell: &Cell) -> Result<u64, TonCellError>;
+    fn load_address(parser: &mut CellParser) -> Result<Option<CanonicalAddr>, TonCellError>;
 }
 
-pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x540da70d; // crc32("ops::timeout_send_packet")
+pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x7079b6eb; // crc32("op::timeout_send_packet")
 pub const RECEIVE_PACKET_MAGIC_NUMBER: u32 = 0xa64c12a3; // crc32("op::send_to_cosmos")
-pub const ACK_MAGIC_NUMBER: u32 = 0x3acb0e2; // crc32("ops::ack_success")
-
-pub fn get_channel_id(channel_num: u16) -> String {
-    format!("channel-{:?}", channel_num)
-}
+pub const RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0xda5c1c4; // crc32("op::ack_timeout")
+pub const SEND_TO_TON_MAGIC_NUMBER: u32 = 0xae89be5b; // crc32("op::send_to_ton")
 
 #[cw_serde]
 #[derive(Default)]
 pub struct TransactionParser {}
 
 impl ITransactionParser for TransactionParser {
+    fn load_address(parser: &mut CellParser) -> Result<Option<CanonicalAddr>, TonCellError> {
+        let num_bytes = parser.load_u8(4)?;
+        if num_bytes == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(CanonicalAddr::from(
+                parser.load_bytes(num_bytes as usize)?,
+            )))
+        }
+    }
+
     fn parse_packet_data(&self, cell: &Cell) -> Result<BridgePacketDataRaw, TonCellError> {
         let mut parser = cell.parser();
 
@@ -32,39 +42,43 @@ impl ITransactionParser for TransactionParser {
             ));
         }
         let packet_seq = parser.load_u64(64)?;
+        let token_origin = parser.load_u32(32)?;
+        let amount = parser.load_u128(128)?;
         let timeout_timestamp = parser.load_u64(64)?;
-        let source_denom = parser.load_address()?;
-        let src_sender = parser.load_address()?;
-        // assume that the largest channel id is 65536 = 2^16
-        let src_channel_num = parser.load_u16(16)?;
-        let amount = parser.load_coins()?;
-
-        let mut des_denom: Vec<u8> = vec![];
-        let first_ref = cell.reference(0)?;
-        if first_ref.references.len() < 4 {
+        let receiver = TransactionParser::load_address(&mut parser)?;
+        if receiver.is_none() {
             return Err(TonCellError::cell_parser_error(
-                "Packet data does not have 4 references to parse packet data",
+                "receiver not contain in packet data",
             ));
         }
-        first_ref.references[0].load_buffer(&mut des_denom)?;
-        let mut des_channel: Vec<u8> = vec![];
-        first_ref.references[1].load_buffer(&mut des_channel)?;
-        let mut des_receiver: Vec<u8> = vec![];
-        first_ref.references[2].load_buffer(&mut des_receiver)?;
-        let mut orai_address: Vec<u8> = vec![];
-        first_ref.references[3].load_buffer(&mut orai_address)?;
+
+        let source_denom = parser.load_address()?;
+
+        let first_ref = cell.reference(0)?;
+
+        if first_ref.references.len() < 1 {
+            return Err(TonCellError::cell_parser_error(
+                "Packet data does not have 1 references to parse packet data",
+            ));
+        }
+
+        let src_sender = first_ref.references[0].parser().load_address()?;
+
+        let memo = if first_ref.references.len() > 1 {
+            Some(first_ref.references[1].as_ref().clone())
+        } else {
+            None
+        };
 
         Ok(BridgePacketDataRaw {
             seq: packet_seq,
+            token_origin,
             timeout_timestamp,
             src_denom: source_denom,
             src_sender,
-            src_channel: get_channel_id(src_channel_num).into_bytes(), // FIXME: get src_channel from body data
-            amount: amount.to_str_radix(10),
-            dest_denom: des_denom,
-            dest_channel: des_channel,
-            dest_receiver: des_receiver,
-            orai_address,
+            amount,
+            receiver: receiver.unwrap(),
+            memo,
         })
     }
 
@@ -81,7 +95,7 @@ impl ITransactionParser for TransactionParser {
     fn parse_ack_data(&self, cell: &Cell) -> Result<u64, TonCellError> {
         let mut parser = cell.parser();
         let magic_number = parser.load_u32(32)?;
-        if magic_number != ACK_MAGIC_NUMBER {
+        if magic_number != SEND_TO_TON_MAGIC_NUMBER {
             return Err(TonCellError::cell_parser_error("Not a ack"));
         }
         let packet_seq = parser.load_u64(64)?;
@@ -93,7 +107,7 @@ impl ITransactionParser for TransactionParser {
 mod tests {
     use std::str::FromStr;
 
-    use cosmwasm_std::{HexBinary, Uint128, Uint256};
+    use cosmwasm_std::{testing::mock_dependencies, Api, HexBinary, Uint128, Uint256};
     use tonlib::{
         cell::{BagOfCells, Cell},
         responses::MessageType,
@@ -137,15 +151,16 @@ mod tests {
                 packet_data.to_pretty().unwrap(),
                 BridgePacketData {
                     seq: 1,
+                    token_origin: 123,
                     timeout_timestamp: 1720088536,
                     src_sender: "EQAW5Tsp2mMja-syAH_jw9j7a4dFICcaHHcq8xu0k-_Yzs_T".to_string(),
                     src_denom: "EQB-MPwrd1G6WKNkLz_VnV6WqBDd142KMQv-g1O-8QUA3728".to_string(),
-                    src_channel: "channel-0".to_string(),
                     amount: Uint128::from_str("100000").unwrap(),
-                    dest_denom: "".to_string(),
-                    dest_channel: "channel-0".to_string(),
-                    dest_receiver: "".to_string(),
-                    orai_address: "orai1qtx4mkw5k665snt7jj9ug5d9023hkzauehs04w".to_string()
+                    receiver: mock_dependencies()
+                        .api
+                        .addr_canonicalize(&"orai1qtx4mkw5k665snt7jj9ug5d9023hkzauehs04w")
+                        .unwrap(),
+                    memo: None
                 }
             )
         }

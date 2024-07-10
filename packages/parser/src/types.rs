@@ -1,8 +1,6 @@
-use std::str::FromStr;
-
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{HexBinary, StdResult, Uint128, Uint256};
-use tonlib::address::TonAddress as TonlibTonAddress;
+use cosmwasm_std::{CanonicalAddr, HexBinary, StdResult, Uint128, Uint256};
+use tonlib::{address::TonAddress as TonlibTonAddress, cell::Cell};
 
 pub type Bytes32 = [u8; 32];
 pub type ValidatorSet = Vec<ValidatorDescription>;
@@ -155,48 +153,54 @@ pub struct KeyBlockValidators {
     pub next: ValidatorSet,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct BridgePacketDataRaw {
     pub seq: u64,
+    pub token_origin: u32,
     pub timeout_timestamp: u64,
     pub src_sender: TonlibTonAddress,
     pub src_denom: TonlibTonAddress,
-    pub src_channel: Vec<u8>,
-    pub amount: String,
-    pub dest_denom: Vec<u8>,
-    pub dest_channel: Vec<u8>,
-    pub dest_receiver: Vec<u8>,
-    pub orai_address: Vec<u8>, // use as recovery address
+    pub amount: u128,
+    pub receiver: CanonicalAddr,
+    pub memo: Option<Cell>,
 }
 
 impl BridgePacketDataRaw {
     pub fn to_pretty(self) -> StdResult<BridgePacketData> {
         Ok(BridgePacketData {
             seq: self.seq,
+            token_origin: self.token_origin,
             timeout_timestamp: self.timeout_timestamp,
-            src_sender: self.src_sender.to_base64_url(),
+            src_sender: self.src_sender.to_string(),
             src_denom: self.src_denom.to_string(),
-            src_channel: String::from_utf8(self.src_channel)?,
-            amount: Uint128::from_str(&self.amount)?,
-            dest_denom: String::from_utf8(self.dest_denom)?,
-            dest_channel: String::from_utf8(self.dest_channel)?,
-            dest_receiver: String::from_utf8(self.dest_receiver)?,
-            orai_address: String::from_utf8(self.orai_address)?,
+            receiver: self.receiver,
+            memo: self.memo,
+            amount: Uint128::from(self.amount),
         })
     }
 }
 
-#[cw_serde]
-#[derive(Default)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct BridgePacketData {
     pub seq: u64,
+    pub token_origin: u32,
     pub timeout_timestamp: u64,
     pub src_sender: String,
     pub src_denom: String,
-    pub src_channel: String,
     pub amount: Uint128,
-    pub dest_denom: String,
-    pub dest_channel: String,
-    pub dest_receiver: String,
-    pub orai_address: String, // use as recovery address
+    pub receiver: CanonicalAddr,
+    pub memo: Option<Cell>,
+}
+
+#[cw_serde]
+pub enum Status {
+    Success = 0,
+    Error = 1,
+    Timeout = 2,
+}
+
+#[cw_serde]
+pub struct AckPacket {
+    pub seq: u64,
+    pub status: Status,
 }
