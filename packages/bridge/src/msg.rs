@@ -4,7 +4,7 @@ use cw20::Cw20ReceiveMsg;
 use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
-use crate::state::{MappingMetadata, ReceivePacket, TokenFee};
+use crate::state::{MappingMetadata, TokenFee};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -96,8 +96,6 @@ pub enum QueryMsg {
     TokenFee { remote_token_denom: String },
     #[returns(PairQuery)]
     PairMapping { key: String },
-    #[returns(Vec<ReceivePacket>)]
-    QueryTimeoutReceivePackets {},
     #[returns(Uint256)]
     SendPacketCommitment { seq: u64 },
 }

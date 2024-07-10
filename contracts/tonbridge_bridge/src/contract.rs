@@ -15,7 +15,7 @@ use tonbridge_bridge::msg::{
     PairQuery, QueryMsg, UpdatePairMsg,
 };
 
-use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, TokenFee};
+use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
 use tonbridge_parser::to_bytes32;
 use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
 use tonlib::cell::{BagOfCells, Cell};
@@ -26,7 +26,7 @@ use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{
     ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
-    SEND_PACKET_COMMITMENT, TIMEOUT_RECEIVE_PACKET, TIMEOUT_SEND_PACKET, TOKEN_FEE,
+    SEND_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -404,7 +404,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
         QueryMsg::ChannelStateData {} => to_binary(&query_channel(deps)?),
         QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
-        QueryMsg::QueryTimeoutReceivePackets {} => to_binary(&query_timeout_receive_packets(deps)?),
         QueryMsg::SendPacketCommitment { seq } => {
             to_binary(&SEND_PACKET_COMMITMENT.load(deps.storage, seq)?)
         }
@@ -443,13 +442,6 @@ pub fn query_channel(deps: Deps) -> StdResult<ChannelResponse> {
         balances,
         total_sent,
     })
-}
-
-pub fn query_timeout_receive_packets(deps: Deps) -> StdResult<Vec<ReceivePacket>> {
-    TIMEOUT_RECEIVE_PACKET
-        .range(deps.storage, None, None, Order::Ascending)
-        .map(|data| -> StdResult<ReceivePacket> { Ok(data?.1) })
-        .collect()
 }
 
 fn get_mapping_from_key(deps: Deps, ibc_denom: String) -> StdResult<PairQuery> {

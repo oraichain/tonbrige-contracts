@@ -28,7 +28,7 @@ use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     contract::{build_timeout_send_packet_refund_msgs, is_tx_processed, query},
     error::ContractError,
-    state::{PROCESSED_TXS, TIMEOUT_RECEIVE_PACKET, TIMEOUT_SEND_PACKET},
+    state::{PROCESSED_TXS, TIMEOUT_SEND_PACKET},
 };
 
 use super::mock::{new_mock_app, MockApp};
