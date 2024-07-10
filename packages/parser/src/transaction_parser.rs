@@ -13,7 +13,6 @@ pub trait ITransactionParser {
 
 pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x7079b6eb; // crc32("op::timeout_send_packet")
 pub const RECEIVE_PACKET_MAGIC_NUMBER: u32 = 0xa64c12a3; // crc32("op::send_to_cosmos")
-pub const RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0xda5c1c4; // crc32("op::ack_timeout")
 pub const SEND_TO_TON_MAGIC_NUMBER: u32 = 0xae89be5b; // crc32("op::send_to_ton")
 
 #[cw_serde]
@@ -56,7 +55,7 @@ impl ITransactionParser for TransactionParser {
 
         let first_ref = cell.reference(0)?;
 
-        if first_ref.references.len() < 1 {
+        if first_ref.references.is_empty() {
             return Err(TonCellError::cell_parser_error(
                 "Packet data does not have 1 references to parse packet data",
             ));

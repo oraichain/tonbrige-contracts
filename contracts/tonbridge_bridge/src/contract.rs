@@ -101,9 +101,6 @@ pub fn execute(
         } => {
             process_timeout_send_packet(deps, masterchain_header_proof, tx_proof_unreceived, tx_boc)
         }
-        // ExecuteMsg::ProcessTimeoutRecievePacket { receive_packet } => {
-        //     process_timeout_receive_packet(deps, receive_packet)
-        // }
         ExecuteMsg::Acknowledgment { tx_proof, tx_boc } => acknowledgment(deps, tx_proof, tx_boc),
     }
 }
@@ -354,53 +351,6 @@ pub fn process_timeout_send_packet(
         "The given transaction has no timeout message",
     )))
 }
-
-// called when there is a TON bridge transaction to CW, but it has expired
-// -> relayer triggers this function for the TON side to refund to the sender.
-// pub fn process_timeout_receive_packet(
-//     deps: DepsMut,
-//     data: HexBinary,
-// ) -> Result<Response, ContractError> {
-//     let mut cell = Cell::default();
-//     cell.data = data.as_slice().to_vec();
-//     cell.bit_len = cell.data.len() * 8;
-
-//     let mut parser = cell.parser();
-
-//     let magic_number = parser.load_u32(32)?;
-//     if magic_number != RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER {
-//         return Err(ContractError::TonCellError(
-//             TonCellError::cell_parser_error("Not a receive packet timeout"),
-//         ));
-//     }
-//     let seq = parser.load_u64(64)?;
-//     let src_sender = parser.load_address()?;
-//     let src_denom = parser.load_address()?;
-//     // assume that the largest channel id is 65536 = 2^16
-
-//     let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
-//     let timeout_timestamp = parser.load_u64(64)?;
-
-//     let timeout_receive_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, seq)?;
-
-//     if timeout_receive_packet.ne(&ReceivePacket {
-//         magic: magic_number,
-//         seq,
-//         timeout_timestamp,
-//         src_sender: src_sender.to_base64_url(),
-//         src_denom: src_denom.to_base64_url(),
-
-//         amount: Uint128::from(amount),
-//     }) {
-//         return Err(ContractError::InvalidSendPacketBoc {});
-//     }
-
-//     // after finished verifying the boc, we remove the packet to prevent replay attack
-//     TIMEOUT_RECEIVE_PACKET.remove(deps.storage, seq);
-//     TIMEOUT_RECEIVE_PACKET_COMMITMENT.remove(deps.storage, seq);
-
-//     Ok(Response::new().add_attribute("action", "process_timeout_recv_packet"))
-// }
 
 pub fn build_timeout_send_packet_refund_msgs(
     storage: &mut dyn Storage,

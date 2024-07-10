@@ -45,9 +45,6 @@ pub enum ExecuteMsg {
         tx_proof_unreceived: HexBinary,
         tx_boc: HexBinary, // in hex form
     },
-    // ProcessTimeoutRecievePacket {
-    //     receive_packet: HexBinary,
-    // },
     Acknowledgment {
         tx_proof: HexBinary,
         tx_boc: HexBinary, // in hex form

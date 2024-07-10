@@ -42,6 +42,7 @@ pub fn build_bridge_to_ton_commitment(
     Ok(commitment)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_ack_commitment(
     seq: u64,
     token_origin: u32,
