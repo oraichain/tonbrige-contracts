@@ -16,11 +16,11 @@ use oraiswap::{
 use std::ops::Mul;
 use tonbridge_bridge::{
     msg::{BridgeToTonMsg, FeeData},
-    state::{MappingMetadata, Ratio, ReceivePacket, TimeoutSendPacket},
+    state::{MappingMetadata, Ratio, TimeoutSendPacket},
 };
 use tonbridge_parser::{
     to_bytes32,
-    transaction_parser::{RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
+    transaction_parser::{RECEIVE_PACKET_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
     types::{BridgePacketData, Status},
     OPCODE_1, OPCODE_2,
 };
@@ -33,14 +33,10 @@ use tonlib::{
 use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
     error::ContractError,
-    helper::{
-        build_ack_commitment, build_bridge_to_ton_commitment,
-        build_receive_packet_timeout_commitment, is_expired,
-    },
+    helper::{build_ack_commitment, build_bridge_to_ton_commitment, is_expired},
     state::{
         ics20_denoms, ACK_COMMITMENT, CONFIG, LAST_PACKET_SEQ, PROCESSED_TXS,
-        SEND_PACKET_COMMITMENT, TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT,
-        TIMEOUT_SEND_PACKET, TOKEN_FEE,
+        SEND_PACKET_COMMITMENT, TIMEOUT_SEND_PACKET, TOKEN_FEE,
     },
 };
 
@@ -170,19 +166,11 @@ impl Bridge {
     ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
         let config = CONFIG.load(storage)?;
 
-        let receive_packet: ReceivePacket = ReceivePacket {
-            magic: RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER,
-            seq: data.seq,
-            timeout_timestamp: data.timeout_timestamp,
-            src_sender: data.src_sender.clone(),
-            src_denom: data.src_denom.clone(),
-            amount: data.amount,
-        };
-
         let recipient = api.addr_humanize(&data.receiver)?;
 
         let mut attrs: Vec<Attribute> = vec![
             attr("seq", data.seq.to_string()),
+            attr("opcode_packet", RECEIVE_PACKET_MAGIC_NUMBER.to_string()),
             attr("local_amount", data.amount),
             attr("timeout_timestamp", data.timeout_timestamp.to_string()),
             attr("recipient", recipient.as_str()),
@@ -191,10 +179,18 @@ impl Bridge {
 
         // check packet timeout
         if is_expired(current_timestamp, data.timeout_timestamp) {
-            TIMEOUT_RECEIVE_PACKET.save(storage, data.seq, &receive_packet)?;
             // must store timeout commitment
-            let commitment = build_receive_packet_timeout_commitment(data.seq)?;
-            TIMEOUT_RECEIVE_PACKET_COMMITMENT.save(
+            let commitment = build_ack_commitment(
+                data.seq,
+                data.token_origin,
+                data.amount,
+                data.timeout_timestamp,
+                data.receiver.as_slice(),
+                &data.src_denom,
+                &data.src_sender,
+                Status::Timeout,
+            )?;
+            ACK_COMMITMENT.save(
                 storage,
                 data.seq,
                 &Uint256::from_be_bytes(commitment.as_slice().try_into()?),
