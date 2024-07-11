@@ -220,7 +220,8 @@ pub fn handle_packet_receive(
     }
 
     let attributes: Vec<Attribute> = vec![
-        attr("status", "success"),
+        attr("ack", (Status::Success as u8).to_string()),
+        attr("ack_value", "success"),
         attr("dest_receiver", recipient.as_str()),
         attr("local_amount", local_amount.to_string()),
         attr("relayer_fee", fee_data.relayer_fee.amount().to_string()),
