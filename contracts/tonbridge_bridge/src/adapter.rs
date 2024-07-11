@@ -219,18 +219,18 @@ pub fn handle_packet_receive(
         )
     }
 
-    let attributes: Vec<Attribute> = vec![
+    attrs.append(&mut vec![
         attr("ack", (Status::Success as u8).to_string()),
         attr("ack_value", "success"),
         attr("dest_receiver", recipient.as_str()),
         attr("local_amount", local_amount.to_string()),
         attr("relayer_fee", fee_data.relayer_fee.amount().to_string()),
         attr("token_fee", fee_data.token_fee.amount().to_string()),
-    ];
+    ]);
 
     // if the fees have consumed all user funds, we send all the fees to our token fee receiver
     if local_amount.is_zero() {
-        return Ok((cosmos_msgs, attributes));
+        return Ok((cosmos_msgs, attrs));
     }
 
     let msg = Asset {
@@ -273,7 +273,7 @@ pub fn handle_packet_receive(
         &Uint256::from_be_bytes(commitment.as_slice().try_into()?),
     )?;
 
-    Ok((cosmos_msgs, attributes))
+    Ok((cosmos_msgs, attrs))
 }
 
 pub fn handle_bridge_to_ton(
