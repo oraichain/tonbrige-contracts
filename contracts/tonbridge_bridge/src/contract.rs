@@ -26,8 +26,8 @@ use crate::bridge::Bridge;
 use crate::error::ContractError;
 use crate::helper::is_expired;
 use crate::state::{
-    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET,
-    SEND_PACKET_COMMITMENT, TOKEN_FEE,
+    ics20_denoms, ACK_COMMITMENT, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
+    SEND_PACKET, SEND_PACKET_COMMITMENT, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -327,6 +327,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::SendPacketCommitment { seq } => {
             to_binary(&SEND_PACKET_COMMITMENT.load(deps.storage, seq)?)
         }
+        QueryMsg::AckCommitment { seq } => to_binary(&ACK_COMMITMENT.load(deps.storage, seq)?),
     }
 }
 

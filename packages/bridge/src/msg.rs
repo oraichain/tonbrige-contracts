@@ -96,6 +96,8 @@ pub enum QueryMsg {
     PairMapping { key: String },
     #[returns(Uint256)]
     SendPacketCommitment { seq: u64 },
+    #[returns(Uint256)]
+    AckCommitment { seq: u64 },
 }
 
 #[cw_serde]
