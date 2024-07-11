@@ -135,6 +135,7 @@ pub fn on_acknowledgment(
     }
 
     SEND_PACKET_COMMITMENT.remove(deps.storage, ack.seq);
+    SEND_PACKET.remove(deps.storage, ack.seq);
     attrs.push(attr("seq", ack.seq.to_string()));
     attrs.push(attr("status", ack.status.to_string()));
 
