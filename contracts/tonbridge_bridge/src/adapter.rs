@@ -157,10 +157,11 @@ pub fn handle_packet_receive(
     let mut attrs: Vec<Attribute> = vec![
         attr("seq", data.seq.to_string()),
         attr("opcode_packet", RECEIVE_PACKET_MAGIC_NUMBER.to_string()),
-        attr("local_amount", data.amount),
+        attr("remote_amount", data.amount),
         attr("timeout_timestamp", data.timeout_timestamp.to_string()),
         attr("recipient", recipient.as_str()),
-        attr("local_denom", data.src_denom.clone()),
+        attr("remote_denom", data.src_denom.clone()),
+        attr("remote_sender", data.src_sender.clone()),
     ];
 
     // check packet timeout
@@ -222,7 +223,6 @@ pub fn handle_packet_receive(
     attrs.append(&mut vec![
         attr("ack", (Status::Success as u8).to_string()),
         attr("ack_value", "success"),
-        attr("dest_receiver", recipient.as_str()),
         attr("local_amount", local_amount.to_string()),
         attr("relayer_fee", fee_data.relayer_fee.amount().to_string()),
         attr("token_fee", fee_data.token_fee.amount().to_string()),
