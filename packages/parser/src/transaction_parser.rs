@@ -21,7 +21,7 @@ pub struct TransactionParser {}
 
 impl ITransactionParser for TransactionParser {
     fn load_address(parser: &mut CellParser) -> Result<Option<CanonicalAddr>, TonCellError> {
-        let num_bytes = parser.load_u8(4)?;
+        let num_bytes = parser.load_u8(8)?;
         if num_bytes == 0 {
             Ok(None)
         } else {
@@ -53,18 +53,16 @@ impl ITransactionParser for TransactionParser {
 
         let source_denom = parser.load_address()?;
 
-        let first_ref = cell.reference(0)?;
-
-        if first_ref.references.is_empty() {
+        if cell.references.is_empty() {
             return Err(TonCellError::cell_parser_error(
                 "Packet data does not have 1 references to parse packet data",
             ));
         }
 
-        let src_sender = first_ref.references[0].parser().load_address()?;
+        let src_sender = cell.references[0].parser().load_address()?;
 
-        let memo = if first_ref.references.len() > 1 {
-            Some(first_ref.references[1].as_ref().clone())
+        let memo = if cell.references.len() > 1 {
+            Some(cell.references[1].as_ref().clone())
         } else {
             None
         };
@@ -112,12 +110,13 @@ impl ITransactionParser for TransactionParser {
 
 #[cfg(test)]
 mod tests {
+
     use std::str::FromStr;
 
-    use cosmwasm_std::{testing::mock_dependencies, Api, HexBinary, Uint128, Uint256};
+    use cosmwasm_std::{CanonicalAddr, Uint128};
     use tonlib::{
-        cell::{BagOfCells, Cell, CellBuilder, TonCellError},
-        responses::MessageType,
+        address::TonAddress,
+        cell::{CellBuilder, TonCellError},
     };
 
     use crate::{
@@ -128,40 +127,142 @@ mod tests {
     use super::{ITransactionParser, TransactionParser, RECEIVE_PACKET_MAGIC_NUMBER};
 
     #[test]
-    fn test_address() {
-        let test_number = Uint256::from(1_000_000_042u128);
-        let hash = test_number.to_be_bytes();
-        let ret: [u8; 20] = hash[hash.len() - 20..].try_into().unwrap();
-        println!("0x{}", HexBinary::from(&ret).to_hex());
+    fn test_load_address() {
+        //case 1: None address
+        let mut cell_builder = CellBuilder::new();
+        cell_builder.store_u8(8, 0).unwrap();
+        let res =
+            TransactionParser::load_address(&mut cell_builder.build().unwrap().parser()).unwrap();
+        assert_eq!(res, None);
+
+        // case 2: Happy case
+        let address: Vec<u8> = vec![
+            23, 12, 3, 5, 13, 30, 10, 3, 20, 28, 27, 5, 31, 12, 11, 15, 3, 1, 22, 13, 21, 3, 30,
+            20, 12, 3, 16, 0, 11, 14, 26, 4,
+        ];
+        let mut cell_builder = CellBuilder::new();
+        cell_builder.store_u8(8, address.len() as u8).unwrap();
+        cell_builder.store_slice(address.as_slice()).unwrap();
+        let res =
+            TransactionParser::load_address(&mut cell_builder.build().unwrap().parser()).unwrap();
+        assert_eq!(res.unwrap(), CanonicalAddr::from(address))
     }
 
     #[test]
-    fn test_load_packet_data_from_tx_invalid() {
-        let tx_boc = HexBinary::from_hex("b5ee9c720102140100036c0003b5772dfc6058ff935f1509e1581250a9a69fe5cd2f1f736eaa67f5ef1302940506d00002b38f30edb0110b3ab4393cbe2fb1708b43f55c6d24e909325544c94bb7de64cfd0fa2bdb7a900002b38f2a40b4366866a4a0005469dc4a680102030201e004050082729cc85b33466874bc28b8678bb2f9769358986535f948d63306bb4297e61ba1ecb785117fa81768757a416242202a4f2d412533ae25f9c4be7ef416ecfa1c152e02170444090e08871c186794d211121301b1680026199d4cf9ecc6786607ea6ab5d07ebb2b7300531ce1d62713126b93e9b547fb001cb7f18163fe4d7c542785604942a69a7f9734bc7dcdbaa99fd7bc4c0a50141b50e08871c0061739e200005671e5a3a404cd0cd47ec0060201dd090a0118af35dc85000000000000000007025dffff800fc61f856eea374b146c85e7fab3abd2d5021bbaf1b146217fd06a77de20a01be6030d4000000000cd0cefb10e0800438002dca7653b4c646d7d66400ffc787b1f6d70e8a404e3438ee55e6376927dfb19d00101200b0101200c00c94800e5bf8c0b1ff26be2a13c2b024a1534d3fcb9a5e3ee6dd54cfebde2605280a0db0005b94eca7698c8dafacc801ff8f0f63edae1d14809c6871dcabcc6ed24fbf63390df7d6d800608235a00005671e61db604cd0cd4946a993b6d800000000000000040019fe00396fe302c7fc9af8a84f0ac092854d34ff2e6978fb9b75533faf789814a02836b009280cf31dd9d4f328084b3b6dc433d204ee97852960f7c44ce2c4170ce15a07c00002b38f30edb0366866a4a600d01b9a64c12a3000000000000000100000000668677d8800fc61f856eea374b146c85e7fab3abd2d5021bbaf1b146217fd06a77de20a01bf0005b94eca7698c8dafacc801ff8f0f63edae1d14809c6871dcabcc6ed24fbf63380000c061a8200e0400100f101100126368616e6e656c2d30000000566f72616931717478346d6b77356b363635736e74376a6a397567356439303233686b7a6175656873303477009e44da2c3d09000000000000000000c100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc98b26b04c48eecc000000000004000000000004db981dbe2b040c835c86fb376b39824f59ff18cc098a56d73637003e7730a2f041d050ec").unwrap();
+    fn test_parse_packet_data() {
+        let seq = 1u64;
+        let token_origin = 2u32;
+        let amount = 3u128;
+        let timeout_timestamp = 4u64;
 
-        let tx_cells = BagOfCells::parse(&tx_boc).unwrap();
-        let tx_root = tx_cells.single_root().unwrap();
-        let transaction = Cell::load_transaction(tx_root, &mut 0, &mut tx_root.parser()).unwrap();
+        let mut cell_builder = CellBuilder::new();
         let tx_parser = TransactionParser::default();
+        let address: Vec<u8> = vec![
+            23, 12, 3, 5, 13, 30, 10, 3, 20, 28, 27, 5, 31, 12, 11, 15, 3, 1, 22, 13, 21, 3, 30,
+            20, 12, 3, 16, 0, 11, 14, 26, 4,
+        ];
 
-        for out_msg in transaction.out_msgs.into_values() {
-            if out_msg.data.is_none() {
-                continue;
+        // case 1: invalid no-op -> invalid packet
+        cell_builder
+            .store_slice(&SEND_TO_TON_MAGIC_NUMBER.to_be_bytes())
+            .unwrap();
+        let err = tx_parser
+            .parse_packet_data(&cell_builder.build().unwrap())
+            .unwrap_err();
+        assert_eq!(
+            err,
+            TonCellError::cell_parser_error("Not a receive packet from TON to CW")
+        );
+
+        // case 2: missing receiver
+
+        let mut cell_builder = CellBuilder::new();
+        cell_builder
+            .store_slice(&RECEIVE_PACKET_MAGIC_NUMBER.to_be_bytes())
+            .unwrap();
+        cell_builder.store_slice(&seq.to_be_bytes()).unwrap(); // seq
+        cell_builder
+            .store_slice(&token_origin.to_be_bytes())
+            .unwrap(); // token origin
+        cell_builder.store_slice(&amount.to_be_bytes()).unwrap(); // amount
+        cell_builder
+            .store_slice(&timeout_timestamp.to_be_bytes())
+            .unwrap(); // timeout
+
+        cell_builder.store_u8(8, 0u8).unwrap();
+        let err = tx_parser
+            .parse_packet_data(&cell_builder.build().unwrap())
+            .unwrap_err();
+        assert_eq!(
+            err,
+            TonCellError::cell_parser_error("receiver not contain in packet data")
+        );
+
+        // case3: missing ref
+        let mut cell_builder = CellBuilder::new();
+        cell_builder
+            .store_slice(&RECEIVE_PACKET_MAGIC_NUMBER.to_be_bytes())
+            .unwrap();
+        cell_builder.store_slice(&seq.to_be_bytes()).unwrap(); // seq
+        cell_builder
+            .store_slice(&token_origin.to_be_bytes())
+            .unwrap(); // token origin
+        cell_builder.store_slice(&amount.to_be_bytes()).unwrap(); // amount
+        cell_builder
+            .store_slice(&timeout_timestamp.to_be_bytes())
+            .unwrap(); // timeout
+
+        cell_builder.store_u8(8, address.len() as u8).unwrap(); //store receiver bytes len
+        cell_builder.store_slice(address.as_slice()).unwrap(); //store receiver
+        cell_builder
+            .store_address(
+                &TonAddress::from_str("EQAeNPObD65owWYLyQlPdnD8qKU9SmOKOrC3q567gbjm68Or").unwrap(),
+            )
+            .unwrap(); // denom
+
+        let err = tx_parser
+            .parse_packet_data(&cell_builder.build().unwrap())
+            .unwrap_err();
+        assert_eq!(
+            err,
+            TonCellError::cell_parser_error(
+                "Packet data does not have 1 references to parse packet data"
+            )
+        );
+
+        // case 4: Happy case
+        cell_builder
+            .store_reference(
+                &CellBuilder::new()
+                    .store_address(
+                        &TonAddress::from_str("EQCkkxPb0X4DAMBrOi8Tyf0wdqqVtTR9ekbDqB9ijP391nQh")
+                            .unwrap(),
+                    )
+                    .unwrap()
+                    .build()
+                    .unwrap()
+                    .to_arc(),
+            )
+            .unwrap();
+        let res = tx_parser
+            .parse_packet_data(&cell_builder.build().unwrap())
+            .unwrap()
+            .to_pretty()
+            .unwrap();
+        assert_eq!(
+            res,
+            BridgePacketData {
+                seq,
+                token_origin,
+                timeout_timestamp,
+                src_sender: "EQCkkxPb0X4DAMBrOi8Tyf0wdqqVtTR9ekbDqB9ijP391nQh".to_string(),
+                src_denom: "EQAeNPObD65owWYLyQlPdnD8qKU9SmOKOrC3q567gbjm68Or".to_string(),
+                amount: Uint128::from(amount),
+                receiver: CanonicalAddr::from(address),
+                memo: None
             }
-            let out_msg = out_msg.data.unwrap();
-            if out_msg.info.msg_type != MessageType::ExternalOut as u8 {
-                continue;
-            }
-
-            let cell = out_msg.body.cell_ref.unwrap().0.unwrap().cell;
-
-            tx_parser.parse_packet_data(&cell).unwrap_err();
-        }
+        );
     }
-
-    // TODO
-    #[test]
-    fn test_load_packet_data_from_tx_happy_case() {}
 
     #[test]
     fn test_parse_ack_packet() {
@@ -216,7 +317,7 @@ mod tests {
         assert_eq!(
             res,
             AckPacket {
-                seq: 1,
+                seq,
                 status: crate::types::Status::Success
             }
         )
