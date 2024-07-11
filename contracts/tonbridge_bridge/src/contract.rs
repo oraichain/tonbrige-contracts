@@ -233,7 +233,7 @@ fn on_packet_receive(
     let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
     let mut attrs: Vec<Attribute> = vec![attr("action", "send_to_cosmos")];
 
-    let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
+    let packet_data = tx_parser.parse_packet_data(cell)?.to_pretty()?;
 
     let mapping = ics20_denoms().load(deps.storage, &packet_data.src_denom)?;
 
@@ -259,7 +259,7 @@ pub fn on_acknowledgment(
     let mut msgs: Vec<CosmosMsg> = vec![];
     let mut attrs: Vec<Attribute> = vec![attr("action", "acknowledgment")];
 
-    let ack = tx_parser.parse_ack_data(&cell)?;
+    let ack = tx_parser.parse_ack_data(cell)?;
 
     // if not success, try refunds
     if ack.status.ne(&Status::Success) {
@@ -274,7 +274,7 @@ pub fn on_acknowledgment(
     }
 
     SEND_PACKET_COMMITMENT.remove(deps.storage, ack.seq);
-    attrs.push(attr("seq", &ack.seq.to_string()));
+    attrs.push(attr("seq", ack.seq.to_string()));
     attrs.push(attr("status", ack.status.to_string()));
 
     Ok((msgs, attrs))
