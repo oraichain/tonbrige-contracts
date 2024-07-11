@@ -83,10 +83,7 @@ pub fn build_ack_commitment(
 #[cfg(test)]
 mod tests {
 
-    use cosmwasm_std::{
-        testing::{mock_dependencies, MockApi},
-        Api, Uint128,
-    };
+    use cosmwasm_std::{CanonicalAddr, Uint128};
     use tonbridge_parser::types::Status;
 
     use crate::helper::build_ack_commitment;
@@ -100,64 +97,64 @@ mod tests {
         assert_eq!(is_expired(1, 1), false);
     }
 
-    // #[test]
-    // fn test_build_ack_commitment() {
-    //     MockApi::default();
-    //     let seq: u64 = 1;
-    //     let token_origin = 0x1f886e35;
-    //     let remote_amount = Uint128::from(1000u128);
-    //     let timeout_timestamp = 12345678;
-    //     let receiver = mock_dependencies()
-    //         .api
-    //         .addr_canonicalize("orai1hvr9d72r5um9lvt0rpkd4r75vrsqtw6yujhqs2")
-    //         .unwrap();
-    //     let remote_denom = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT";
-    //     let remote_sender = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT";
-    //     let status = Status::Success;
+    #[test]
+    fn test_build_ack_commitment() {
+        let seq: u64 = 1;
+        let token_origin = 0x1f886e35;
+        let remote_amount = Uint128::from(1000u128);
+        let timeout_timestamp = 12345678;
+        let receiver_raw: Vec<u8> = vec![
+            23, 12, 3, 5, 13, 30, 10, 3, 20, 28, 27, 5, 31, 12, 11, 15, 3, 1, 22, 13, 21, 3, 30,
+            20, 12, 3, 16, 0, 11, 14, 26, 4,
+        ];
+        let receiver = CanonicalAddr::from(receiver_raw);
+        let remote_denom = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT";
+        let remote_sender = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT";
+        let status = Status::Success;
 
-    //     let commitment = build_ack_commitment(
-    //         seq,
-    //         token_origin,
-    //         remote_amount,
-    //         timeout_timestamp,
-    //         receiver.as_slice(),
-    //         remote_denom,
-    //         remote_sender,
-    //         status,
-    //     )
-    //     .unwrap();
-    //     assert_eq!(
-    //         commitment,
-    //         vec![
-    //             30, 195, 51, 117, 201, 166, 123, 203, 42, 97, 207, 254, 143, 162, 253, 154, 26,
-    //             140, 22, 217, 121, 127, 114, 244, 194, 141, 25, 207, 42, 81, 170, 26
-    //         ]
-    //     )
-    // }
+        let commitment = build_ack_commitment(
+            seq,
+            token_origin,
+            remote_amount,
+            timeout_timestamp,
+            receiver.as_slice(),
+            remote_denom,
+            remote_sender,
+            status,
+        )
+        .unwrap();
+        assert_eq!(
+            commitment,
+            vec![
+                109, 202, 88, 184, 101, 35, 125, 237, 237, 215, 90, 74, 220, 121, 216, 139, 90, 95,
+                155, 76, 168, 211, 162, 152, 162, 203, 236, 176, 39, 121, 37, 197
+            ]
+        )
+    }
 
-    // #[test]
-    // fn test_build_bridge_to_ton_commitment() {
-    //     let sender_raw = mock_dependencies()
-    //         .as_ref()
-    //         .api
-    //         .addr_canonicalize("orai1hvr9d72r5um9lvt0rpkd4r75vrsqtw6yujhqs2")
-    //         .unwrap();
-    //     let commitment = build_bridge_to_ton_commitment(
-    //         1,
-    //         1576711861,
-    //         sender_raw.as_slice(),
-    //         "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT",
-    //         "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT",
-    //         Uint128::from(10000000000u128),
-    //         1719945916,
-    //     )
-    //     .unwrap();
-    //     assert_eq!(
-    //         commitment,
-    //         vec![
-    //             242, 70, 65, 240, 144, 22, 6, 195, 224, 167, 252, 122, 176, 172, 13, 126, 188, 134,
-    //             55, 69, 9, 216, 250, 98, 51, 125, 103, 181, 130, 117, 208, 103
-    //         ]
-    //     )
-    // }
+    #[test]
+    fn test_build_bridge_to_ton_commitment() {
+        let sender_raw: Vec<u8> = vec![
+            23, 12, 3, 5, 13, 30, 10, 3, 20, 28, 27, 5, 31, 12, 11, 15, 3, 1, 22, 13, 21, 3, 30,
+            20, 12, 3, 16, 0, 11, 14, 26, 4,
+        ];
+
+        let commitment = build_bridge_to_ton_commitment(
+            1,
+            1576711861,
+            &sender_raw,
+            "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT",
+            "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT",
+            Uint128::from(10000000000u128),
+            1719945916,
+        )
+        .unwrap();
+        assert_eq!(
+            commitment,
+            vec![
+                80, 173, 167, 0, 148, 212, 70, 12, 2, 222, 170, 71, 218, 190, 218, 221, 132, 153,
+                132, 21, 151, 233, 206, 238, 145, 171, 199, 119, 174, 253, 14, 98
+            ]
+        )
+    }
 }
