@@ -17,7 +17,9 @@ use tonbridge_bridge::msg::{
 
 use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
 use tonbridge_parser::to_bytes32;
-use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
+use tonbridge_parser::transaction_parser::{
+    ITransactionParser, TransactionParser, RECEIVE_PACKET_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER,
+};
 use tonbridge_parser::types::Status;
 use tonlib::cell::{BagOfCells, Cell};
 use tonlib::responses::{MaybeRefData, TransactionMessage};
@@ -95,14 +97,13 @@ pub fn execute(
             Bridge::handle_bridge_to_ton(deps, env, msg, amount, info.sender)
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
-        ExecuteMsg::ProcessTimeoutSendPacket {
-            masterchain_header_proof,
-            tx_boc,
-            tx_proof_unreceived,
-        } => {
-            process_timeout_send_packet(deps, masterchain_header_proof, tx_proof_unreceived, tx_boc)
-        }
-        ExecuteMsg::Acknowledgment { tx_proof, tx_boc } => acknowledgment(deps, tx_proof, tx_boc),
+        // ExecuteMsg::ProcessTimeoutSendPacket {
+        //     masterchain_header_proof,
+        //     tx_boc,
+        //     tx_proof_unreceived,
+        // } => {
+        //     process_timeout_send_packet(deps, masterchain_header_proof, tx_proof_unreceived, tx_boc)
+        // }
     }
 }
 
@@ -187,7 +188,7 @@ pub fn read_transaction(
         tx_proof.as_slice(),
         tx_boc.as_slice(),
     )?;
-    let tx_parser = TransactionParser::default();
+
     for out_msg in transaction.out_msgs.into_values() {
         let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
 
@@ -195,76 +196,88 @@ pub fn read_transaction(
             continue;
         }
         let cell = cell.unwrap();
-        let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
 
-        let mapping = ics20_denoms().load(deps.storage, &packet_data.src_denom)?;
+        // check type of transaction: packetReceive or ack
+        let op_code = cell.parser().load_u32(32)?;
+        println!("{:?}", op_code);
+        match op_code {
+            // ack
+            SEND_TO_TON_MAGIC_NUMBER => {
+                let mut res = on_acknowledgment(deps, &cell)?;
+                cosmos_msgs.append(&mut res.0);
+                attrs.append(&mut res.1);
+            }
+            // on receive packet
+            RECEIVE_PACKET_MAGIC_NUMBER => {
+                let mut res = on_packet_receive(deps, env, &cell)?;
+                cosmos_msgs.append(&mut res.0);
+                attrs.append(&mut res.1);
+            }
 
-        let mut res = Bridge::handle_packet_receive(
-            deps.storage,
-            deps.api,
-            &deps.querier,
-            env.block.time.seconds(),
-            packet_data,
-            mapping,
-        )?;
-        cosmos_msgs.append(&mut res.0);
-        attrs.append(&mut res.1);
-
+            _ => continue,
+        }
         // we assume that one transaction only has one matching external out msg. After handling it -> we stop reading
         break;
     }
     Ok(Response::new()
-        .add_messages(cosmos_msgs)
-        .add_attributes(vec![("action", "send_to_cosmos")])
-        .add_attributes(attrs))
+        .add_attributes(attrs)
+        .add_messages(cosmos_msgs))
 }
 
-pub fn acknowledgment(
+fn on_packet_receive(
     deps: DepsMut,
-    tx_proof: HexBinary,
-    tx_boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-    let bridge = Bridge::new(config.validator_contract_addr);
+    env: Env,
+    cell: &Cell,
+) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
+    let tx_parser = TransactionParser::default();
+    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    let mut attrs: Vec<Attribute> = vec![attr("action", "send_to_cosmos")];
 
-    let mut attrs: Vec<Attribute> = vec![];
-    let transaction = bridge.read_transaction(
+    let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
+
+    let mapping = ics20_denoms().load(deps.storage, &packet_data.src_denom)?;
+
+    let mut res = Bridge::handle_packet_receive(
         deps.storage,
+        deps.api,
         &deps.querier,
-        tx_proof.as_slice(),
-        tx_boc.as_slice(),
+        env.block.time.seconds(),
+        packet_data,
+        mapping,
     )?;
+    cosmos_msgs.append(&mut res.0);
+    attrs.append(&mut res.1);
+
+    Ok((cosmos_msgs, attrs))
+}
+
+pub fn on_acknowledgment(
+    deps: DepsMut,
+    cell: &Cell,
+) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
     let tx_parser = TransactionParser::default();
     let mut msgs: Vec<CosmosMsg> = vec![];
+    let mut attrs: Vec<Attribute> = vec![attr("action", "acknowledgment")];
 
-    for out_msg in transaction.out_msgs.into_values() {
-        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
-        if cell.is_none() {
-            continue;
-        }
-        let cell = cell.unwrap();
-        let ack = tx_parser.parse_ack_data(&cell)?;
+    let ack = tx_parser.parse_ack_data(&cell)?;
 
-        // if not success, try refunds
-        if ack.status.ne(&Status::Success) {
-            let send_packet = SEND_PACKET.load(deps.storage, ack.seq)?;
+    // if not success, try refunds
+    if ack.status.ne(&Status::Success) {
+        let send_packet = SEND_PACKET.load(deps.storage, ack.seq)?;
 
-            let refund_msg = send_packet.local_refund_asset.into_msg(
-                None,
-                &deps.querier,
-                deps.api.addr_validate(&send_packet.sender)?,
-            )?;
-            msgs.push(refund_msg);
-        }
-
-        SEND_PACKET_COMMITMENT.remove(deps.storage, ack.seq);
-        attrs.push(attr("seq", &ack.seq.to_string()));
-        attrs.push(attr("status", ack.status.to_string()));
+        let refund_msg = send_packet.local_refund_asset.into_msg(
+            None,
+            &deps.querier,
+            deps.api.addr_validate(&send_packet.sender)?,
+        )?;
+        msgs.push(refund_msg);
     }
-    Ok(Response::new()
-        .add_attributes(vec![("action", "acknowledgment")])
-        .add_attributes(attrs)
-        .add_messages(msgs))
+
+    SEND_PACKET_COMMITMENT.remove(deps.storage, ack.seq);
+    attrs.push(attr("seq", &ack.seq.to_string()));
+    attrs.push(attr("status", ack.status.to_string()));
+
+    Ok((msgs, attrs))
 }
 
 pub fn update_mapping_pair(

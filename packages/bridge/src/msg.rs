@@ -40,15 +40,11 @@ pub enum ExecuteMsg {
         swap_router_contract: Option<String>,
         token_fee: Option<Vec<TokenFee>>,
     },
-    ProcessTimeoutSendPacket {
-        masterchain_header_proof: HexBinary,
-        tx_proof_unreceived: HexBinary,
-        tx_boc: HexBinary, // in hex form
-    },
-    Acknowledgment {
-        tx_proof: HexBinary,
-        tx_boc: HexBinary, // in hex form
-    },
+    // ProcessTimeoutSendPacket {
+    //     masterchain_header_proof: HexBinary,
+    //     tx_proof_unreceived: HexBinary,
+    //     tx_boc: HexBinary, // in hex form
+    // },
 }
 
 #[cw_serde]
