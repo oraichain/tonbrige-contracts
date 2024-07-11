@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use cosmwasm_std::{
     coin, from_binary,
     testing::{mock_dependencies, mock_env},
@@ -7,29 +5,18 @@ use cosmwasm_std::{
 };
 
 use cw_multi_test::Executor;
-use oraiswap::{
-    asset::{Asset, AssetInfo},
-    router::RouterController,
-};
+use oraiswap::{asset::AssetInfo, router::RouterController};
 use tonbridge_bridge::{
     amount::Amount,
     msg::{ChannelResponse, DeletePairMsg, PairQuery, QueryMsg as BridgeQueryMsg, UpdatePairMsg},
-    state::{Config, MappingMetadata, Ratio, TimeoutSendPacket, TokenFee},
+    state::{Config, MappingMetadata, Ratio, TokenFee},
 };
-use tonbridge_parser::{
-    to_bytes32, transaction_parser::SEND_PACKET_TIMEOUT_MAGIC_NUMBER, EMPTY_HASH,
-};
-use tonlib::{
-    address::TonAddress,
-    cell::CellBuilder,
-    responses::{AnyCell, MaybeRefData, MessageType, TransactionMessage},
-};
+use tonbridge_parser::{to_bytes32, EMPTY_HASH};
 
 use crate::{
     channel::{decrease_channel_balance, increase_channel_balance},
-    contract::{build_timeout_send_packet_refund_msgs, is_tx_processed, query},
-    error::ContractError,
-    state::{PROCESSED_TXS, SEND_PACKET},
+    contract::{is_tx_processed, query},
+    state::PROCESSED_TXS,
 };
 
 use super::mock::{new_mock_app, MockApp};
@@ -394,114 +381,6 @@ fn test_update_channel_balance() {
 
     // cannot decrease channel balance because not enough balances
     decrease_channel_balance(deps.as_mut().storage, denom, Uint128::from(600000u128)).unwrap_err();
-}
-
-#[test]
-fn test_build_timeout_send_packet_refund_msgs() {
-    let mut deps = mock_dependencies();
-    let deps_mut = deps.as_mut();
-    let mut out_msg: MaybeRefData<TransactionMessage> = MaybeRefData::default();
-    let env = mock_env();
-    let latest_timestamp = env.block.time.seconds();
-    let bridge_addr = "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string();
-    let sender = "orai1rchnkdpsxzhquu63y6r4j4t57pnc9w8ehdhedx";
-    let seq = 1u64;
-
-    // case 1: out msg is invalid -> empty res
-    let res = build_timeout_send_packet_refund_msgs(
-        deps_mut.storage,
-        deps_mut.api,
-        &deps_mut.querier,
-        out_msg.clone(),
-        bridge_addr.clone(),
-        latest_timestamp as u32,
-    )
-    .unwrap();
-    assert_eq!(res.len(), 0);
-
-    let mut transaction_message = TransactionMessage::default();
-    transaction_message.info.msg_type = MessageType::ExternalOut as u8;
-    transaction_message.info.src = TonAddress::from_str(&bridge_addr.clone()).unwrap();
-    let mut any_cell = AnyCell::default();
-    let mut cell_builder = CellBuilder::new();
-    cell_builder
-        .store_slice(&SEND_PACKET_TIMEOUT_MAGIC_NUMBER.to_be_bytes())
-        .unwrap();
-    // sequence
-    cell_builder.store_slice(&seq.to_be_bytes()).unwrap();
-    let cell = cell_builder.build().unwrap();
-    any_cell.cell = cell;
-    transaction_message.body.cell_ref = Some((Some(any_cell.clone()), None));
-    out_msg.data = Some(transaction_message.clone());
-
-    // case 2: timeout packet not found -> no-op
-    let res = build_timeout_send_packet_refund_msgs(
-        deps_mut.storage,
-        deps_mut.api,
-        &deps_mut.querier,
-        out_msg.clone(),
-        bridge_addr.clone(),
-        latest_timestamp as u32,
-    )
-    .unwrap();
-    assert_eq!(res.len(), 0);
-
-    // case 3: packet has not timed out yet
-    SEND_PACKET
-        .save(
-            deps_mut.storage,
-            seq,
-            &TimeoutSendPacket {
-                local_refund_asset: Asset {
-                    info: AssetInfo::NativeToken {
-                        denom: "orai".to_string(),
-                    },
-                    amount: Uint128::zero(),
-                },
-                sender: bridge_addr.clone(),
-                timeout_timestamp: latest_timestamp + 1,
-            },
-        )
-        .unwrap();
-
-    let err = build_timeout_send_packet_refund_msgs(
-        deps_mut.storage,
-        deps_mut.api,
-        &deps_mut.querier,
-        out_msg.clone(),
-        bridge_addr.clone(),
-        latest_timestamp as u32,
-    )
-    .unwrap_err();
-    assert_eq!(err.to_string(), ContractError::NotExpired {}.to_string());
-
-    // case 4: happy case
-    SEND_PACKET
-        .save(
-            deps_mut.storage,
-            seq,
-            &TimeoutSendPacket {
-                local_refund_asset: Asset {
-                    info: AssetInfo::NativeToken {
-                        denom: "orai".to_string(),
-                    },
-                    amount: Uint128::zero(),
-                },
-                sender: sender.to_string(),
-                timeout_timestamp: latest_timestamp - 1,
-            },
-        )
-        .unwrap();
-    let res = build_timeout_send_packet_refund_msgs(
-        deps_mut.storage,
-        deps_mut.api,
-        &deps_mut.querier,
-        out_msg.clone(),
-        bridge_addr.clone(),
-        latest_timestamp as u32,
-    )
-    .unwrap();
-    assert_eq!(res.len(), 1);
 }
 
 #[test]

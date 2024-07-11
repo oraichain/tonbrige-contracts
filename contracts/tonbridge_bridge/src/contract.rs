@@ -1,9 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    from_binary, to_binary, Addr, Api, CosmosMsg, Empty, Order, QuerierWrapper, StdError, Storage,
-    Uint128,
-};
+use cosmwasm_std::{from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw_utils::{nonpayable, one_coin};
@@ -17,17 +14,14 @@ use tonbridge_bridge::msg::{
 
 use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
 use tonbridge_parser::to_bytes32;
-use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
-use tonlib::cell::{BagOfCells, Cell};
-use tonlib::responses::{MaybeRefData, TransactionMessage};
 
 use crate::adapter::{handle_bridge_to_ton, read_transaction};
-use crate::bridge::Bridge;
+
 use crate::error::ContractError;
-use crate::helper::is_expired;
+
 use crate::state::{
     ics20_denoms, ACK_COMMITMENT, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
-    SEND_PACKET, SEND_PACKET_COMMITMENT, TOKEN_FEE,
+    SEND_PACKET_COMMITMENT, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]

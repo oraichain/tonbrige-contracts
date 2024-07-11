@@ -6,12 +6,10 @@ use crate::types::{AckPacket, BridgePacketDataRaw, Status};
 
 pub trait ITransactionParser {
     fn parse_packet_data(&self, cell: &Cell) -> Result<BridgePacketDataRaw, TonCellError>;
-    fn parse_send_packet_timeout_data(&self, cell: &Cell) -> Result<u64, TonCellError>;
     fn parse_ack_data(&self, cell: &Cell) -> Result<AckPacket, TonCellError>;
     fn load_address(parser: &mut CellParser) -> Result<Option<CanonicalAddr>, TonCellError>;
 }
 
-pub const SEND_PACKET_TIMEOUT_MAGIC_NUMBER: u32 = 0x7079b6eb; // crc32("op::timeout_send_packet")
 pub const RECEIVE_PACKET_MAGIC_NUMBER: u32 = 0xa64c12a3; // crc32("op::send_to_cosmos")
 pub const SEND_TO_TON_MAGIC_NUMBER: u32 = 0xae89be5b; // crc32("op::send_to_ton")
 
@@ -77,16 +75,6 @@ impl ITransactionParser for TransactionParser {
             receiver: receiver.unwrap(),
             memo,
         })
-    }
-
-    fn parse_send_packet_timeout_data(&self, cell: &Cell) -> Result<u64, TonCellError> {
-        let mut parser = cell.parser();
-        let magic_number = parser.load_u32(32)?;
-        if magic_number != SEND_PACKET_TIMEOUT_MAGIC_NUMBER {
-            return Err(TonCellError::cell_parser_error("Not a send packet timeout"));
-        }
-        let packet_seq = parser.load_u64(64)?;
-        Ok(packet_seq)
     }
 
     fn parse_ack_data(&self, cell: &Cell) -> Result<AckPacket, TonCellError> {
