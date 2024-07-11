@@ -153,7 +153,7 @@ pub struct KeyBlockValidators {
     pub next: ValidatorSet,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BridgePacketDataRaw {
     pub seq: u64,
     pub token_origin: u32,

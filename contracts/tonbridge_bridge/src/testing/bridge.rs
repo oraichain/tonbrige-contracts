@@ -19,12 +19,13 @@ use tonbridge_bridge::{
     state::{Config, MappingMetadata, Ratio, TokenFee},
 };
 use tonbridge_parser::{
-    transaction_parser::SEND_TO_TON_MAGIC_NUMBER,
+    transaction_parser::{RECEIVE_PACKET_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
     types::{BridgePacketData, Status},
     OPCODE_2,
 };
 use tonlib::{
     address::TonAddress,
+    cell::CellBuilder,
     responses::{AnyCell, MaybeRefData, MessageType, TransactionMessage},
 };
 
@@ -938,3 +939,19 @@ fn test_bridge_ton_to_orai_with_fee() {
         .unwrap();
     assert_eq!(token_fee_balance.balance, Uint128::from(100u128));
 }
+
+// TODO
+// #[test]
+// fn test_on_ack() {
+//     let mut deps = mock_dependencies();
+//     let deps_mut = deps.as_mut();
+//     let seq = 1u64;
+//     let mut cell_builder = CellBuilder::new();
+
+//     // case 1: invalid no-op -> invalid packet
+//     cell_builder
+//         .store_slice(&RECEIVE_PACKET_MAGIC_NUMBER.to_be_bytes())
+//         .unwrap();
+
+//      let res =
+// }

@@ -199,7 +199,6 @@ pub fn read_transaction(
 
         // check type of transaction: packetReceive or ack
         let op_code = cell.parser().load_u32(32)?;
-        println!("{:?}", op_code);
         match op_code {
             // ack
             SEND_TO_TON_MAGIC_NUMBER => {
