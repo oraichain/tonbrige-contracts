@@ -7,7 +7,6 @@ use cosmwasm_std::{
 };
 
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20ReceiveMsg};
-use cw20_ics20_msg::amount::Amount;
 use cw_multi_test::Executor;
 
 use oraiswap::{asset::AssetInfo, router::RouterController};
@@ -30,7 +29,7 @@ use tonlib::{
 };
 
 use crate::{
-    bridge::{Bridge, DEFAULT_TIMEOUT},
+    bridge::Bridge,
     channel::increase_channel_balance,
     contract::{execute, instantiate},
     error::ContractError,

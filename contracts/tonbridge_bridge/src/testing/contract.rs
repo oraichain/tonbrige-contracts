@@ -5,13 +5,14 @@ use cosmwasm_std::{
     testing::{mock_dependencies, mock_env},
     to_binary, Addr, HexBinary, Uint128,
 };
-use cw20_ics20_msg::amount::Amount;
+
 use cw_multi_test::Executor;
 use oraiswap::{
     asset::{Asset, AssetInfo},
     router::RouterController,
 };
 use tonbridge_bridge::{
+    amount::Amount,
     msg::{ChannelResponse, DeletePairMsg, PairQuery, QueryMsg as BridgeQueryMsg, UpdatePairMsg},
     state::{Config, MappingMetadata, Ratio, TimeoutSendPacket, TokenFee},
 };

@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Api, Uint128};
 
+use oraiswap::asset::AssetInfo;
 use tonbridge_parser::{
     transaction_parser::{RECEIVE_PACKET_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
     types::Status,
@@ -12,6 +13,23 @@ use crate::error::ContractError;
 
 pub fn is_expired(now: u64, timestamp: u64) -> bool {
     now > timestamp
+}
+
+pub fn denom_to_asset_info(api: &dyn Api, denom: &str) -> AssetInfo {
+    if let Ok(contract_addr) = api.addr_validate(denom) {
+        AssetInfo::Token { contract_addr }
+    } else {
+        AssetInfo::NativeToken {
+            denom: denom.to_string(),
+        }
+    }
+}
+
+pub fn parse_asset_info_denom(asset_info: &AssetInfo) -> String {
+    match asset_info {
+        AssetInfo::Token { contract_addr } => format!("cw20:{}", contract_addr),
+        AssetInfo::NativeToken { denom } => denom.to_string(),
+    }
 }
 
 pub fn build_bridge_to_ton_commitment(

@@ -1,15 +1,15 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Addr, Api, Attribute, CosmosMsg, Empty, Order, QuerierWrapper,
-    StdError, Storage, Uint128,
+    from_binary, to_binary, Addr, Api, CosmosMsg, Empty, Order, QuerierWrapper, StdError, Storage,
+    Uint128,
 };
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
-use cw20_ics20_msg::amount::Amount;
 use cw_utils::{nonpayable, one_coin};
 use oraiswap::asset::AssetInfo;
 use oraiswap::router::RouterController;
+use tonbridge_bridge::amount::Amount;
 use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, DeletePairMsg, ExecuteMsg, InstantiateMsg, MigrateMsg,
     PairQuery, QueryMsg, UpdatePairMsg,
@@ -17,13 +17,11 @@ use tonbridge_bridge::msg::{
 
 use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
 use tonbridge_parser::to_bytes32;
-use tonbridge_parser::transaction_parser::{
-    ITransactionParser, TransactionParser, RECEIVE_PACKET_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER,
-};
-use tonbridge_parser::types::Status;
+use tonbridge_parser::transaction_parser::{ITransactionParser, TransactionParser};
 use tonlib::cell::{BagOfCells, Cell};
 use tonlib::responses::{MaybeRefData, TransactionMessage};
 
+use crate::adapter::{handle_bridge_to_ton, read_transaction};
 use crate::bridge::Bridge;
 use crate::error::ContractError;
 use crate::helper::is_expired;
@@ -94,7 +92,7 @@ pub fn execute(
         ExecuteMsg::BridgeToTon(msg) => {
             let coin = one_coin(&info)?;
             let amount = Amount::from_parts(coin.denom, coin.amount);
-            Bridge::handle_bridge_to_ton(deps, env, msg, amount, info.sender)
+            handle_bridge_to_ton(deps, env, msg, amount, info.sender)
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
         // ExecuteMsg::ProcessTimeoutSendPacket {
@@ -172,113 +170,6 @@ pub fn execute_update_config(
     Ok(Response::default().add_attribute("action", "update_config"))
 }
 
-pub fn read_transaction(
-    deps: DepsMut,
-    env: Env,
-    tx_proof: HexBinary,
-    tx_boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-    let bridge = Bridge::new(config.validator_contract_addr);
-    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-    let mut attrs: Vec<Attribute> = vec![];
-    let transaction = bridge.read_transaction(
-        deps.storage,
-        &deps.querier,
-        tx_proof.as_slice(),
-        tx_boc.as_slice(),
-    )?;
-
-    for out_msg in transaction.out_msgs.into_values() {
-        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
-
-        if cell.is_none() {
-            continue;
-        }
-        let cell = cell.unwrap();
-
-        // check type of transaction: packetReceive or ack
-        let op_code = cell.parser().load_u32(32)?;
-        match op_code {
-            // ack
-            SEND_TO_TON_MAGIC_NUMBER => {
-                let mut res = on_acknowledgment(deps, &cell)?;
-                cosmos_msgs.append(&mut res.0);
-                attrs.append(&mut res.1);
-            }
-            // on receive packet
-            RECEIVE_PACKET_MAGIC_NUMBER => {
-                let mut res = on_packet_receive(deps, env, &cell)?;
-                cosmos_msgs.append(&mut res.0);
-                attrs.append(&mut res.1);
-            }
-
-            _ => continue,
-        }
-        // we assume that one transaction only has one matching external out msg. After handling it -> we stop reading
-        break;
-    }
-    Ok(Response::new()
-        .add_attributes(attrs)
-        .add_messages(cosmos_msgs))
-}
-
-fn on_packet_receive(
-    deps: DepsMut,
-    env: Env,
-    cell: &Cell,
-) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
-    let tx_parser = TransactionParser::default();
-    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-    let mut attrs: Vec<Attribute> = vec![attr("action", "send_to_cosmos")];
-
-    let packet_data = tx_parser.parse_packet_data(cell)?.to_pretty()?;
-
-    let mapping = ics20_denoms().load(deps.storage, &packet_data.src_denom)?;
-
-    let mut res = Bridge::handle_packet_receive(
-        deps.storage,
-        deps.api,
-        &deps.querier,
-        env.block.time.seconds(),
-        packet_data,
-        mapping,
-    )?;
-    cosmos_msgs.append(&mut res.0);
-    attrs.append(&mut res.1);
-
-    Ok((cosmos_msgs, attrs))
-}
-
-pub fn on_acknowledgment(
-    deps: DepsMut,
-    cell: &Cell,
-) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
-    let tx_parser = TransactionParser::default();
-    let mut msgs: Vec<CosmosMsg> = vec![];
-    let mut attrs: Vec<Attribute> = vec![attr("action", "acknowledgment")];
-
-    let ack = tx_parser.parse_ack_data(cell)?;
-
-    // if not success, try refunds
-    if ack.status.ne(&Status::Success) {
-        let send_packet = SEND_PACKET.load(deps.storage, ack.seq)?;
-
-        let refund_msg = send_packet.local_refund_asset.into_msg(
-            None,
-            &deps.querier,
-            deps.api.addr_validate(&send_packet.sender)?,
-        )?;
-        msgs.push(refund_msg);
-    }
-
-    SEND_PACKET_COMMITMENT.remove(deps.storage, ack.seq);
-    attrs.push(attr("seq", ack.seq.to_string()));
-    attrs.push(attr("status", ack.status.to_string()));
-
-    Ok((msgs, attrs))
-}
-
 pub fn update_mapping_pair(
     deps: DepsMut,
     caller: &Addr,
@@ -328,10 +219,10 @@ pub fn execute_receive(
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
 
-    let amount = Amount::cw20(wrapper.amount, info.sender);
+    let amount = Amount::cw20(wrapper.amount.into(), info.sender.as_str());
     let msg: BridgeToTonMsg = from_binary(&wrapper.msg)?;
     let sender = deps.api.addr_validate(&wrapper.sender)?;
-    Bridge::handle_bridge_to_ton(deps, env, msg, amount, sender)
+    handle_bridge_to_ton(deps, env, msg, amount, sender)
 }
 
 pub fn process_timeout_send_packet(

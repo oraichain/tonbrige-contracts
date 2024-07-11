@@ -31,7 +31,6 @@ tonbridge-parser = { workspace = true }
 tonbridge-validator = { workspace = true }
 thiserror = { workspace = true }
 tonbridge-bridge = { workspace = true }
-cw20-ics20-msg = { workspace = true }
 tonlib = { workspace = true }
 oraiswap = { workspace = true }
 

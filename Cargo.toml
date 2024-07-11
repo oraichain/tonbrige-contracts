@@ -39,7 +39,6 @@ tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./contracts/tonbridge_validator" }
 
 oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "f2c1cec" }
-cw20-ics20-msg = { git = "https://github.com/oraichain/ibc-bridge-wasm.git", rev = "0e0258c" }
 tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "eb28f37993939a0ee0b39db7d2c8db4aa02fe0fc", default-features = false }
 cw-multi-test = "0.16.6"
 
