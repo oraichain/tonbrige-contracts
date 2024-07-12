@@ -1,10 +1,12 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, HexBinary, Uint128, Uint256};
 use cw20::Cw20ReceiveMsg;
-use cw20_ics20_msg::amount::Amount;
 use oraiswap::asset::AssetInfo;
 
-use crate::state::{MappingMetadata, ReceivePacket, TokenFee};
+use crate::{
+    amount::Amount,
+    state::{MappingMetadata, TokenFee},
+};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -40,23 +42,15 @@ pub enum ExecuteMsg {
         swap_router_contract: Option<String>,
         token_fee: Option<Vec<TokenFee>>,
     },
-    ProcessTimeoutSendPacket {
-        masterchain_header_proof: HexBinary,
-        tx_proof_unreceived: HexBinary,
-        tx_boc: HexBinary, // in hex form
-    },
-    ProcessTimeoutRecievePacket {
-        receive_packet: HexBinary,
-    },
-    Acknowledgment {
-        tx_proof: HexBinary,
-        tx_boc: HexBinary, // in hex form
-    },
+    // ProcessTimeoutSendPacket {
+    //     masterchain_header_proof: HexBinary,
+    //     tx_proof_unreceived: HexBinary,
+    //     tx_boc: HexBinary, // in hex form
+    // },
 }
 
 #[cw_serde]
 pub struct UpdatePairMsg {
-    pub local_channel_id: String,
     /// native denom of the remote chain. Eg: orai
     pub denom: String,
     /// asset info of the local chain.
@@ -64,19 +58,17 @@ pub struct UpdatePairMsg {
     pub remote_decimals: u8,
     pub local_asset_info_decimals: u8,
     pub opcode: HexBinary,
-    pub crc_src: u32,
+    pub token_origin: u32,
 }
 
 #[cw_serde]
 pub struct DeletePairMsg {
-    pub local_channel_id: String,
     /// native denom of the remote chain. Eg: orai
     pub denom: String,
 }
 
 #[cw_serde]
 pub struct BridgeToTonMsg {
-    pub local_channel_id: String, // default channel-0
     pub to: String,
     pub denom: String,
     pub timeout: Option<u64>,
@@ -97,57 +89,21 @@ pub enum QueryMsg {
     IsTxProcessed { tx_hash: HexBinary },
     /// Returns the details of the name channel, error if not created.
     #[returns(ChannelResponse)]
-    ChannelStateData { channel_id: String },
+    ChannelStateData {},
     #[returns(crate::state::Ratio)]
     TokenFee { remote_token_denom: String },
     #[returns(PairQuery)]
     PairMapping { key: String },
-    #[returns(Vec<ReceivePacket>)]
-    QueryTimeoutReceivePackets {},
     #[returns(Uint256)]
-    SendPacketCommitment { channel: String, seq: u64 },
+    SendPacketCommitment { seq: u64 },
+    #[returns(Uint256)]
+    AckCommitment { seq: u64 },
 }
 
 #[cw_serde]
 pub struct PairQuery {
     pub key: String,
     pub pair_mapping: MappingMetadata,
-}
-
-/// The format for sending an ics20 packet.
-/// Proto defined here: https://github.com/cosmos/cosmos-sdk/blob/v0.42.0/proto/ibc/applications/transfer/v1/transfer.proto#L11-L20
-/// This is compatible with the JSON serialization
-#[cw_serde]
-#[derive(Default)]
-pub struct Ics20Packet {
-    /// amount of tokens to transfer is encoded as a string
-    pub amount: Uint128,
-    /// the token denomination to be transferred
-    pub denom: String,
-    /// the recipient address on the destination chain
-    pub receiver: String,
-    /// the sender address
-    pub sender: String,
-    /// optional memo
-    pub memo: Option<String>,
-}
-
-impl Ics20Packet {
-    pub fn new<T: Into<String>>(
-        amount: Uint128,
-        denom: T,
-        sender: &str,
-        receiver: &str,
-        memo: Option<String>,
-    ) -> Self {
-        Ics20Packet {
-            denom: denom.into(),
-            amount,
-            sender: sender.to_string(),
-            receiver: receiver.to_string(),
-            memo,
-        }
-    }
 }
 
 #[cw_serde]

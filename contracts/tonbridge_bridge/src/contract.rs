@@ -1,35 +1,27 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    attr, from_binary, to_binary, Addr, Api, Attribute, CosmosMsg, Empty, Order, QuerierWrapper,
-    StdError, Storage, Uint128,
-};
+use cosmwasm_std::{from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
-use cw20_ics20_msg::amount::Amount;
 use cw_utils::{nonpayable, one_coin};
 use oraiswap::asset::AssetInfo;
 use oraiswap::router::RouterController;
+use tonbridge_bridge::amount::Amount;
 use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, DeletePairMsg, ExecuteMsg, InstantiateMsg, MigrateMsg,
     PairQuery, QueryMsg, UpdatePairMsg,
 };
-use tonbridge_bridge::parser::{
-    build_commitment_key, get_key_ics20_ibc_denom, parse_ibc_wasm_port_id,
-};
-use tonbridge_bridge::state::{Config, MappingMetadata, ReceivePacket, TokenFee};
-use tonbridge_parser::to_bytes32;
-use tonbridge_parser::transaction_parser::{get_channel_id, ITransactionParser, TransactionParser};
-use tonlib::cell::{BagOfCells, Cell, TonCellError};
-use tonlib::responses::{MaybeRefData, TransactionMessage};
 
-use crate::bridge::{Bridge, RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER};
+use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
+use tonbridge_parser::to_bytes32;
+
+use crate::adapter::{handle_bridge_to_ton, read_transaction};
+
 use crate::error::ContractError;
-use crate::helper::is_expired;
+
 use crate::state::{
-    ics20_denoms, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
-    SEND_PACKET_COMMITMENT, TIMEOUT_RECEIVE_PACKET, TIMEOUT_RECEIVE_PACKET_COMMITMENT,
-    TIMEOUT_SEND_PACKET, TOKEN_FEE,
+    ics20_denoms, ACK_COMMITMENT, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
+    SEND_PACKET_COMMITMENT, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -89,25 +81,14 @@ pub fn execute(
         ExecuteMsg::ReadTransaction { tx_proof, tx_boc } => {
             read_transaction(deps, env, tx_proof, tx_boc)
         }
-        ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, env, &info.sender, msg),
-        ExecuteMsg::DeleteMappingPair(msg) => execute_delete_mapping_pair(deps, env, info, msg),
+        ExecuteMsg::UpdateMappingPair(msg) => update_mapping_pair(deps, &info.sender, msg),
+        ExecuteMsg::DeleteMappingPair(msg) => execute_delete_mapping_pair(deps, info, msg),
         ExecuteMsg::BridgeToTon(msg) => {
             let coin = one_coin(&info)?;
             let amount = Amount::from_parts(coin.denom, coin.amount);
-            Bridge::handle_bridge_to_ton(deps, env, msg, amount, info.sender)
+            handle_bridge_to_ton(deps, env, msg, amount, info.sender)
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
-        ExecuteMsg::ProcessTimeoutSendPacket {
-            masterchain_header_proof,
-            tx_boc,
-            tx_proof_unreceived,
-        } => {
-            process_timeout_send_packet(deps, masterchain_header_proof, tx_proof_unreceived, tx_boc)
-        }
-        ExecuteMsg::ProcessTimeoutRecievePacket { receive_packet } => {
-            process_timeout_receive_packet(deps, receive_packet)
-        }
-        ExecuteMsg::Acknowledgment { tx_proof, tx_boc } => acknowledgment(deps, tx_proof, tx_boc),
     }
 }
 
@@ -176,123 +157,27 @@ pub fn execute_update_config(
     Ok(Response::default().add_attribute("action", "update_config"))
 }
 
-pub fn read_transaction(
-    deps: DepsMut,
-    env: Env,
-    tx_proof: HexBinary,
-    tx_boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-    let bridge = Bridge::new(config.validator_contract_addr);
-    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-    let mut attrs: Vec<Attribute> = vec![];
-    let transaction = bridge.read_transaction(
-        deps.storage,
-        &deps.querier,
-        tx_proof.as_slice(),
-        tx_boc.as_slice(),
-    )?;
-    let tx_parser = TransactionParser::default();
-    for out_msg in transaction.out_msgs.into_values() {
-        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
-
-        if cell.is_none() {
-            continue;
-        }
-        let cell = cell.unwrap();
-        let packet_data = tx_parser.parse_packet_data(&cell)?.to_pretty()?;
-
-        let mapping = ics20_denoms().load(
-            deps.storage,
-            &get_key_ics20_ibc_denom(
-                &parse_ibc_wasm_port_id(env.contract.address.as_str()),
-                &packet_data.src_channel,
-                &packet_data.src_denom,
-            ),
-        )?;
-
-        let mut res = Bridge::handle_packet_receive(
-            deps.storage,
-            deps.api,
-            &deps.querier,
-            env.block.time.seconds(),
-            packet_data,
-            mapping,
-        )?;
-        cosmos_msgs.append(&mut res.0);
-        attrs.append(&mut res.1);
-
-        // we assume that one transaction only has one matching external out msg. After handling it -> we stop reading
-        break;
-    }
-    Ok(Response::new()
-        .add_messages(cosmos_msgs)
-        .add_attributes(vec![("action", "bridge_to_cosmos")])
-        .add_attributes(attrs))
-}
-
-pub fn acknowledgment(
-    deps: DepsMut,
-    tx_proof: HexBinary,
-    tx_boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-    let bridge = Bridge::new(config.validator_contract_addr);
-
-    let mut attrs: Vec<Attribute> = vec![];
-    let transaction = bridge.read_transaction(
-        deps.storage,
-        &deps.querier,
-        tx_proof.as_slice(),
-        tx_boc.as_slice(),
-    )?;
-    let tx_parser = TransactionParser::default();
-    for out_msg in transaction.out_msgs.into_values() {
-        let cell = Bridge::validate_transaction_out_msg(out_msg, config.bridge_adapter.clone());
-        if cell.is_none() {
-            continue;
-        }
-        let cell = cell.unwrap();
-        let seq = tx_parser.parse_ack_data(&cell)?;
-
-        // remove packet commitment
-        // TODO: mapping real channel, current default channel-0
-        let commitment_key = build_commitment_key("channel-0", seq);
-        SEND_PACKET_COMMITMENT.remove(deps.storage, &commitment_key);
-        attrs.push(attr("seq", &seq.to_string()));
-    }
-    Ok(Response::new()
-        .add_attributes(vec![("action", "acknowledgment")])
-        .add_attributes(attrs))
-}
-
 pub fn update_mapping_pair(
     deps: DepsMut,
-    env: Env,
     caller: &Addr,
     msg: UpdatePairMsg,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), caller)?;
-    let ibc_denom = get_key_ics20_ibc_denom(
-        &parse_ibc_wasm_port_id(env.contract.address.as_str()),
-        &msg.local_channel_id,
-        &msg.denom,
-    );
 
     // if pair already exists in list, remove it and create a new one
-    if ics20_denoms().load(deps.storage, &ibc_denom).is_ok() {
-        ics20_denoms().remove(deps.storage, &ibc_denom)?;
+    if ics20_denoms().load(deps.storage, &msg.denom).is_ok() {
+        ics20_denoms().remove(deps.storage, &msg.denom)?;
     }
 
     ics20_denoms().save(
         deps.storage,
-        &ibc_denom,
+        &msg.denom,
         &MappingMetadata {
             asset_info: msg.local_asset_info.clone(),
             remote_decimals: msg.remote_decimals,
             asset_info_decimals: msg.local_asset_info_decimals,
             opcode: to_bytes32(&msg.opcode)?,
-            crc_src: msg.crc_src,
+            token_origin: msg.token_origin,
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
@@ -300,23 +185,15 @@ pub fn update_mapping_pair(
 
 pub fn execute_delete_mapping_pair(
     deps: DepsMut,
-    env: Env,
     info: MessageInfo,
     mapping_pair_msg: DeletePairMsg,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), &info.sender)?;
 
-    let ibc_denom = get_key_ics20_ibc_denom(
-        &parse_ibc_wasm_port_id(env.contract.address.as_str()),
-        &mapping_pair_msg.local_channel_id,
-        &mapping_pair_msg.denom,
-    );
-
-    ics20_denoms().remove(deps.storage, &ibc_denom)?;
+    ics20_denoms().remove(deps.storage, &mapping_pair_msg.denom)?;
 
     let res = Response::new()
         .add_attribute("action", "execute_delete_mapping_pair")
-        .add_attribute("local_channel_id", mapping_pair_msg.local_channel_id)
         .add_attribute("original_denom", mapping_pair_msg.denom);
     Ok(res)
 }
@@ -329,152 +206,10 @@ pub fn execute_receive(
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
 
-    let amount = Amount::cw20(wrapper.amount, info.sender);
+    let amount = Amount::cw20(wrapper.amount.into(), info.sender.as_str());
     let msg: BridgeToTonMsg = from_binary(&wrapper.msg)?;
     let sender = deps.api.addr_validate(&wrapper.sender)?;
-    Bridge::handle_bridge_to_ton(deps, env, msg, amount, sender)
-}
-
-pub fn process_timeout_send_packet(
-    deps: DepsMut,
-    latest_masterchain_header_proof: HexBinary,
-    tx_proof_unreceived: HexBinary,
-    tx_boc: HexBinary,
-) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-    let bridge = Bridge::new(config.validator_contract_addr);
-
-    let header_cells = BagOfCells::parse_hex(&latest_masterchain_header_proof.to_hex())?;
-    let block_cell = header_cells.single_root()?.reference(0)?;
-
-    // TODO: need to update latest client state of TON every time we have a new incoming tx
-    // so that we can verify the logical time against the latest_masterchain_header_proof
-    let block_info = Cell::load_block(block_cell)?;
-    let masterchain_block_latest_timestamp =
-        block_info.info.to_owned().unwrap_or_default().gen_utime;
-
-    let transaction = bridge.read_transaction(
-        deps.storage,
-        &deps.querier,
-        tx_proof_unreceived.as_slice(),
-        tx_boc.as_slice(),
-    )?;
-
-    for out_msg in transaction.out_msgs.into_values() {
-        let refund_msgs = build_timeout_send_packet_refund_msgs(
-            deps.storage,
-            deps.api,
-            &deps.querier,
-            out_msg,
-            config.bridge_adapter.clone(),
-            masterchain_block_latest_timestamp,
-        )?;
-        if refund_msgs.is_empty() {
-            continue;
-        }
-
-        return Ok(Response::new()
-            .add_attribute("action", "process_timeout_send_packet")
-            .add_messages(refund_msgs));
-    }
-    Err(ContractError::Std(StdError::generic_err(
-        "The given transaction has no timeout message",
-    )))
-}
-
-// called when there is a TON bridge transaction to CW, but it has expired
-// -> relayer triggers this function for the TON side to refund to the sender.
-pub fn process_timeout_receive_packet(
-    deps: DepsMut,
-    data: HexBinary,
-) -> Result<Response, ContractError> {
-    let mut cell = Cell::default();
-    cell.data = data.as_slice().to_vec();
-    cell.bit_len = cell.data.len() * 8;
-
-    let mut parser = cell.parser();
-
-    let magic_number = parser.load_u32(32)?;
-    if magic_number != RECEIVE_PACKET_TIMEOUT_MAGIC_NUMBER {
-        return Err(ContractError::TonCellError(
-            TonCellError::cell_parser_error("Not a receive packet timeout"),
-        ));
-    }
-    let seq = parser.load_u64(64)?;
-    let src_sender = parser.load_address()?;
-    let src_denom = parser.load_address()?;
-    // assume that the largest channel id is 65536 = 2^16
-    let src_channel_num = parser.load_u16(16)?;
-    let src_channel = get_channel_id(src_channel_num);
-    let amount = u128::from_be_bytes(parser.load_bytes(16)?.as_slice().try_into()?);
-    let timeout_timestamp = parser.load_u64(64)?;
-
-    let commitment_key = build_commitment_key(&src_channel, seq);
-    let timeout_receive_packet = TIMEOUT_RECEIVE_PACKET.load(deps.storage, &commitment_key)?;
-
-    if timeout_receive_packet.ne(&ReceivePacket {
-        magic: magic_number,
-        seq,
-        timeout_timestamp,
-        src_sender: src_sender.to_base64_url(),
-        src_denom: src_denom.to_base64_url(),
-        src_channel,
-        amount: Uint128::from(amount),
-    }) {
-        return Err(ContractError::InvalidSendPacketBoc {});
-    }
-
-    // after finished verifying the boc, we remove the packet to prevent replay attack
-    TIMEOUT_RECEIVE_PACKET.remove(deps.storage, &commitment_key);
-    TIMEOUT_RECEIVE_PACKET_COMMITMENT.remove(deps.storage, &commitment_key);
-
-    Ok(Response::new().add_attribute("action", "process_timeout_recv_packet"))
-}
-
-pub fn build_timeout_send_packet_refund_msgs(
-    storage: &mut dyn Storage,
-    api: &dyn Api,
-    querier: &QuerierWrapper,
-    out_msg: MaybeRefData<TransactionMessage>,
-    bridge_adapter: String,
-    latest_masterchain_block_timestamp: u32,
-) -> Result<Vec<CosmosMsg>, ContractError> {
-    let tx_parser = TransactionParser::default();
-    let cell = Bridge::validate_transaction_out_msg(out_msg, bridge_adapter);
-    if cell.is_none() {
-        return Ok(vec![]);
-    }
-    let cell = cell.unwrap();
-    let packet_seq_timeout = tx_parser.parse_send_packet_timeout_data(&cell)?;
-
-    // TODO: mapping real channel, current default channel-0
-    let commitment_key = build_commitment_key("channel-0", packet_seq_timeout);
-    let timeout_packet = TIMEOUT_SEND_PACKET.may_load(storage, &commitment_key)?;
-
-    // no-op to prevent error spamming from the relayer
-    if timeout_packet.is_none() {
-        return Ok(vec![]);
-    }
-    let timeout_packet = timeout_packet.unwrap();
-    if !is_expired(
-        latest_masterchain_block_timestamp as u64,
-        timeout_packet.timeout_timestamp,
-    ) {
-        return Err(ContractError::NotExpired {});
-    }
-    let refund_msg = timeout_packet.local_refund_asset.into_msg(
-        None,
-        querier,
-        api.addr_validate(&timeout_packet.sender)?,
-    )?;
-
-    // TODO: mapping real channel, current default channel-0
-    let commitment_key = build_commitment_key("channel-0", packet_seq_timeout);
-
-    TIMEOUT_SEND_PACKET.remove(storage, &commitment_key);
-    SEND_PACKET_COMMITMENT.remove(storage, &commitment_key);
-
-    Ok(vec![refund_msg])
+    handle_bridge_to_ton(deps, env, msg, amount, sender)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -486,12 +221,12 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&TOKEN_FEE.load(deps.storage, &remote_token_denom)?)
         }
         QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
-        QueryMsg::ChannelStateData { channel_id } => to_binary(&query_channel(deps, channel_id)?),
+        QueryMsg::ChannelStateData {} => to_binary(&query_channel(deps)?),
         QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
-        QueryMsg::QueryTimeoutReceivePackets {} => to_binary(&query_timeout_receive_packets(deps)?),
-        QueryMsg::SendPacketCommitment { channel, seq } => to_binary(
-            &SEND_PACKET_COMMITMENT.load(deps.storage, &build_commitment_key(&channel, seq))?,
-        ),
+        QueryMsg::SendPacketCommitment { seq } => {
+            to_binary(&SEND_PACKET_COMMITMENT.load(deps.storage, seq)?)
+        }
+        QueryMsg::AckCommitment { seq } => to_binary(&ACK_COMMITMENT.load(deps.storage, seq)?),
     }
 }
 
@@ -507,9 +242,8 @@ pub fn get_config(deps: Deps) -> StdResult<Config> {
 }
 
 // make public for ibc tests
-pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelResponse> {
+pub fn query_channel(deps: Deps) -> StdResult<ChannelResponse> {
     let state = REMOTE_INITIATED_CHANNEL_STATE
-        .prefix(&channel_id)
         .range(deps.storage, None, None, Order::Ascending)
         .map(|r| {
             // this denom is
@@ -528,13 +262,6 @@ pub fn query_channel(deps: Deps, channel_id: String) -> StdResult<ChannelRespons
         balances,
         total_sent,
     })
-}
-
-pub fn query_timeout_receive_packets(deps: Deps) -> StdResult<Vec<ReceivePacket>> {
-    TIMEOUT_RECEIVE_PACKET
-        .range(deps.storage, None, None, Order::Ascending)
-        .map(|data| -> StdResult<ReceivePacket> { Ok(data?.1) })
-        .collect()
 }
 
 fn get_mapping_from_key(deps: Deps, ibc_denom: String) -> StdResult<PairQuery> {

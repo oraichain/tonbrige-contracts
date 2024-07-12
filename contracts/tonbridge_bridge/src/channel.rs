@@ -4,11 +4,10 @@ use crate::state::REMOTE_INITIATED_CHANNEL_STATE;
 
 pub fn increase_channel_balance(
     storage: &mut dyn Storage,
-    channel_id: &str,
     denom: &str, // should be ibc denom
     amount: Uint128,
 ) -> StdResult<()> {
-    let store = REMOTE_INITIATED_CHANNEL_STATE.key((channel_id, denom));
+    let store = REMOTE_INITIATED_CHANNEL_STATE.key(denom);
     // whatever error or not found, return default
     let mut state = store.load(storage).unwrap_or_default();
     state.outstanding += amount;
@@ -19,11 +18,10 @@ pub fn increase_channel_balance(
 
 pub fn decrease_channel_balance(
     storage: &mut dyn Storage,
-    channel_id: &str,
     denom: &str, // should be ibc denom
     amount: Uint128,
 ) -> StdResult<()> {
-    let store = REMOTE_INITIATED_CHANNEL_STATE.key((channel_id, denom));
+    let store = REMOTE_INITIATED_CHANNEL_STATE.key(denom);
     let Ok(mut state) = store.load(storage) else {
         return Err(StdError::generic_err("Channel does not exist"));
     };

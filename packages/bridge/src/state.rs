@@ -13,7 +13,7 @@ pub struct MappingMetadata {
     pub remote_decimals: u8,
     pub asset_info_decimals: u8,
     pub opcode: Bytes32,
-    pub crc_src: u32, // to determine the source of token
+    pub token_origin: u32, // to determine the source of token
 }
 
 #[cw_serde]
@@ -57,14 +57,4 @@ pub struct TimeoutSendPacket {
     pub local_refund_asset: Asset,
     pub sender: String,
     pub timeout_timestamp: u64,
-}
-#[cw_serde]
-pub struct ReceivePacket {
-    pub magic: u32, // crc32
-    pub seq: u64,
-    pub timeout_timestamp: u64,
-    pub src_sender: String,
-    pub src_denom: String,
-    pub src_channel: String,
-    pub amount: Uint128,
 }
