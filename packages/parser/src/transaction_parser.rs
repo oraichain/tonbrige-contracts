@@ -101,15 +101,16 @@ mod tests {
 
     use std::str::FromStr;
 
-    use cosmwasm_std::{CanonicalAddr, Uint128};
+    use cosmwasm_std::{CanonicalAddr, HexBinary, Uint128};
     use tonlib::{
         address::TonAddress,
-        cell::{CellBuilder, TonCellError},
+        cell::{BagOfCells, Cell, CellBuilder, TonCellError},
+        responses::MessageType,
     };
 
     use crate::{
         transaction_parser::SEND_TO_TON_MAGIC_NUMBER,
-        types::{AckPacket, BridgePacketData},
+        types::{AckPacket, BridgePacketData, Status},
     };
 
     use super::{ITransactionParser, TransactionParser, RECEIVE_PACKET_MAGIC_NUMBER};
@@ -309,5 +310,34 @@ mod tests {
                 status: crate::types::Status::Success
             }
         )
+    }
+
+    #[test]
+    fn test_parse_ack_from_boc() {
+        let tx_boc = "b5ee9c72010211010003010003b572b5a568181d18297026b02442340fffccf120afdb7606c7fbaa9d9787f92447e00002b627c86d301af74e8e646a00f4eccfba31ec041dda7acb120387acc35d2d9ab974365e6e11b00002b627bb133816690e235000546cb632a80102030201e004050082726082e6b7a2eab9963ddaf62b296efce33786b7188720641ac73fe4248ea28a369843a0f96fb541a341e88ac232698045c753be605710590ead2d845cbd89710002170450890cc053f8186b8b14110f1001b16801dbca20284058a8f0ed1b13985948fe50d91fff9eebe8a0f9757dfae30d316e03000ad695a0607460a5c09ac09108d03fff33c482bf6dd81b1feeaa765e1fe4911f90cc053f8006148420000056c4f8939404cd21c448c0060201dd0a0b01181ae4fbbb0000000000000000070143c0053b7fd39b412240b430f87c07fa998947b7553eee39e15b0f0735b3d7147f68e8080193ae89be5b00000000000000071f886e350000000000000000000000003b9aca00000000006690efc28002dca7653b4c646d7d66400ffc787b1f6d70e8a404e3438ee55e6376927dfb19c409002a14d931bb907b6e9bc806af38d7240bf6f7a2765d680101200c0101200d00b1680056b4ad0303a3052e04d604884681fff99e2415fb6ec0d8ff7553b2f0ff2488fd0005b94eca7698c8dafacc801ff8f0f63edae1d14809c6871dcabcc6ed24fbf63390ee6b28000608235a000056c4f90da604cd21c46a40019fe0015ad2b40c0e8c14b8135812211a07ffe6789057edbb0363fdd54ecbc3fc9223f300da7a8d19481a973dd6fb67eb4380a528928cf6a18a2858862631e7293f59806600002b627c86d3036690e235600e0019ae89be5b000000000000000720009e47634c3d09000000000000000000f700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc986b5304c2562cc000000000004000000000005f87991754949694039a4accb1ddc186027164e56db2ef679fcae10c4e252b0e640d02cec";
+        let tx_cells = BagOfCells::parse(&HexBinary::from_hex(tx_boc).unwrap()).unwrap();
+        let tx_root = tx_cells.single_root().unwrap();
+        let transaction = Cell::load_transaction(tx_root, &mut 0, &mut tx_root.parser()).unwrap();
+        let tx_parser = TransactionParser::default();
+
+        for out_msg in transaction.out_msgs.into_values() {
+            if out_msg.data.is_none() {
+                continue;
+            }
+            let out_msg = out_msg.data.unwrap();
+            if out_msg.info.msg_type != MessageType::ExternalOut as u8 {
+                continue;
+            }
+
+            let cell = out_msg.body.cell_ref.unwrap().0.unwrap().cell;
+            let packet_data = tx_parser.parse_ack_data(&cell).unwrap();
+            assert_eq!(
+                packet_data,
+                AckPacket {
+                    seq: 7,
+                    status: Status::Success
+                }
+            )
+        }
     }
 }
