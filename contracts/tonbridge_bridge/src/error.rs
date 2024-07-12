@@ -52,4 +52,7 @@ pub enum ContractError {
 
     #[error("The BOC does not match with the send packet")]
     InvalidSendPacketBoc {},
+
+    #[error("Duplicate receive packet sequence")]
+    ReceiveSeqDuplicated {},
 }

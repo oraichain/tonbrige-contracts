@@ -150,6 +150,11 @@ pub fn handle_packet_receive(
     data: BridgePacketData,
     mapping: MappingMetadata,
 ) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
+    // check unique sequence
+    if ACK_COMMITMENT.may_load(storage, data.seq)?.is_some() {
+        return Err(ContractError::ReceiveSeqDuplicated {});
+    }
+
     let config = CONFIG.load(storage)?;
 
     let recipient = api.addr_humanize(&data.receiver)?;
