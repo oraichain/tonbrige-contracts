@@ -171,17 +171,17 @@ pub fn verify_masterchain_block_by_validator_signatures(
             Vdata { node_id, r, s }
         })
         .collect::<Vec<Vdata>>();
-    validator.verify_masterchain_block_by_validator_signatures(
+    let root_hash = validator.verify_masterchain_block_by_validator_signatures(
         deps.storage,
         deps.api,
         block_header_proof,
         to_bytes32(&file_hash)?,
         &vdata_bytes,
     )?;
-    Ok(Response::new().add_attributes(vec![(
-        "action",
-        "verify_masterchain_block_by_validator_signatures",
-    )]))
+    Ok(Response::new().add_attributes(vec![
+        ("action", "verify_masterchain_block_by_validator_signatures"),
+        ("root_hash", &root_hash.to_hex()),
+    ]))
 }
 
 pub fn verify_shard_blocks(
@@ -190,9 +190,13 @@ pub fn verify_shard_blocks(
     mc_block_root_hash: HexBinary,
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
-    validator.verify_shard_blocks(deps.storage, shard_proof_links, mc_block_root_hash)?;
+    let attrs =
+        validator.verify_shard_blocks(deps.storage, shard_proof_links, mc_block_root_hash)?;
+
     // validator.read_shard_state_unsplit(deps.storage, shard_state_boc.as_slice(), root_hash)?;
-    Ok(Response::new().add_attributes(vec![("action", "verify_shard_blocks")]))
+    Ok(Response::new()
+        .add_attribute("action", "verify_shard_blocks")
+        .add_attributes(attrs))
 }
 
 // this entrypoint is used mostly for testing or initialization
@@ -205,7 +209,10 @@ pub fn set_verified_block(
 ) -> Result<Response, ContractError> {
     let validator = VALIDATOR.load(deps.storage)?;
     validator.set_verified_block(deps, caller, to_bytes32(&root_hash)?, seq_no)?;
-    Ok(Response::new().add_attributes(vec![("action", "set_verified_block")]))
+    Ok(Response::new().add_attributes(vec![
+        ("action", "set_verified_block"),
+        ("root_hash", &root_hash.to_hex()),
+    ]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

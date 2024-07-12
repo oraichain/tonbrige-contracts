@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Api, DepsMut, HexBinary, StdError, StdResult, Storage};
+use cosmwasm_std::{attr, Addr, Api, Attribute, DepsMut, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
     to_bytes32,
     types::{Bytes32, ValidatorDescription, ValidatorSet, Vdata, VerifiedBlockInfo},
@@ -112,7 +112,7 @@ impl Validator {
         block_header_proof: HexBinary,
         file_hash: Bytes32,
         vdata: &[Vdata],
-    ) -> Result<(), ContractError> {
+    ) -> Result<HexBinary, ContractError> {
         let block_header_proof = BagOfCells::parse(block_header_proof.as_slice())?;
         let root_hash_from_block_header = block_header_proof.root(0)?.reference(0)?.get_hash(0);
         let current_weight = self.signature_validator.verify_validators(
@@ -141,7 +141,7 @@ impl Validator {
             root_hash_from_block_header.as_slice().try_into()?,
             &verified_block_info,
         )?;
-        Ok(())
+        Ok(HexBinary::from(root_hash_from_block_header))
     }
 
     pub fn verify_shard_blocks(
@@ -149,12 +149,13 @@ impl Validator {
         storage: &mut dyn Storage,
         shard_proof_links: Vec<HexBinary>,
         mc_block_root_hash: HexBinary,
-    ) -> Result<(), ContractError> {
+    ) -> Result<Vec<Attribute>, ContractError> {
         if !self.is_verified_block(storage, to_bytes32(&mc_block_root_hash)?)? {
             return Err(ContractError::Std(StdError::generic_err(
                 "masterchain block root hash is not verified",
             )));
         }
+        let mut attrs: Vec<Attribute> = vec![];
         for (i, proof_link) in shard_proof_links.iter().enumerate() {
             let cells = BagOfCells::parse(proof_link.as_slice())?;
 
@@ -189,6 +190,10 @@ impl Validator {
                             shard.root_hash.as_slice().try_into()?,
                             &verified_block,
                         )?;
+                        attrs.push(attr(
+                            "root_hash",
+                            HexBinary::from(shard.root_hash.clone()).to_hex(),
+                        ));
                     }
                 }
             } else {
@@ -218,6 +223,10 @@ impl Validator {
                         prev_blk.root_hash.as_slice().try_into()?,
                         &verified_block,
                     )?;
+                    attrs.push(attr(
+                        "root_hash",
+                        HexBinary::from(prev_blk.root_hash).to_hex(),
+                    ));
                 }
                 if let Some(prev_blk) = prev_ref.second_prev {
                     let verified_block = VerifiedBlockInfo {
@@ -232,10 +241,14 @@ impl Validator {
                         prev_blk.root_hash.as_slice().try_into()?,
                         &verified_block,
                     )?;
+                    attrs.push(attr(
+                        "root_hash",
+                        HexBinary::from(prev_blk.root_hash).to_hex(),
+                    ));
                 }
             }
         }
-        Ok(())
+        Ok(attrs)
     }
 
     pub fn set_verified_block(
