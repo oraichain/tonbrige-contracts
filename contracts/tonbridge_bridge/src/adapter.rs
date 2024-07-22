@@ -15,7 +15,7 @@ use tonbridge_parser::{
         SEND_TO_TON_MAGIC_NUMBER,
     },
     types::{BridgePacketData, Status},
-    OPCODE_1, OPCODE_2,
+    OPCODE_1,
 };
 use tonlib::cell::Cell;
 
