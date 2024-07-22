@@ -45,7 +45,8 @@ fn test_instantiate_contract() {
             relayer_fee: Uint128::zero(),
             token_fee_receiver: Addr::unchecked("token_fee"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee"),
-            swap_router_contract: RouterController("router".to_string())
+            swap_router_contract: RouterController("router".to_string()),
+            token_factory_addr: None
         }
     );
     let _owner: Addr = app
@@ -168,7 +169,8 @@ fn test_update_config() {
             relayer_fee: Uint128::one(),
             token_fee_receiver: Addr::unchecked("new_token_fee"),
             relayer_fee_receiver: Addr::unchecked("new_relayer_fee"),
-            swap_router_contract: RouterController("new_router".to_string())
+            swap_router_contract: RouterController("new_router".to_string()),
+            token_factory_addr: None
         }
     );
 }

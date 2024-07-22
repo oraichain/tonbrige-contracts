@@ -9,6 +9,7 @@ pub const OPCODE_1: Bytes32 = [
 pub const OPCODE_2: Bytes32 = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
 ];
+
 pub const EMPTY_HASH: Bytes32 = [0; 32];
 
 pub fn sha256(data: &[u8]) -> Bytes32 {

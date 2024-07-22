@@ -41,6 +41,7 @@ pub fn instantiate(
             relayer_fee_receiver: msg.relayer_fee_receiver,
             relayer_fee: msg.relayer_fee.unwrap_or_default(),
             swap_router_contract: RouterController(msg.swap_router_contract),
+            token_factory_addr: msg.token_factory_addr,
         },
     )?;
     OWNER.set(deps, Some(info.sender))?;

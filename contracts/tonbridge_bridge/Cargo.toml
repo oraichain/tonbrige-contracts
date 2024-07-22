@@ -33,6 +33,8 @@ thiserror = { workspace = true }
 tonbridge-bridge = { workspace = true }
 tonlib = { workspace = true }
 oraiswap = { workspace = true }
+token-bindings = { workspace = true }
+tokenfactory = { workspace = true }
 
 
 [dev-dependencies]

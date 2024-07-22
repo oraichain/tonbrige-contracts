@@ -96,6 +96,7 @@ impl MockApp {
                     relayer_fee_receiver: Addr::unchecked("relayer_fee"),
                     relayer_fee: None,
                     swap_router_contract: "router".to_string(),
+                    token_factory_addr: None,
                 },
                 &vec![],
                 "bridge".to_string(),

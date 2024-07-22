@@ -50,6 +50,7 @@ pub struct Config {
     pub token_fee_receiver: Addr,
     pub relayer_fee_receiver: Addr,
     pub swap_router_contract: RouterController,
+    pub token_factory_addr: Option<Addr>,
 }
 
 #[cw_serde]
@@ -57,4 +58,5 @@ pub struct TimeoutSendPacket {
     pub local_refund_asset: Asset,
     pub sender: String,
     pub timeout_timestamp: u64,
+    pub opcode: Bytes32,
 }

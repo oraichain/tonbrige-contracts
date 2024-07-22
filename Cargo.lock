@@ -511,6 +511,8 @@ dependencies = [
  "cw20-base",
  "oraiswap",
  "thiserror",
+ "token-bindings",
+ "tokenfactory",
  "tonbridge-bridge",
  "tonbridge-parser",
  "tonbridge-validator",
@@ -2339,6 +2341,33 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "token-bindings"
+version = "0.11.0"
+source = "git+https://github.com/oraichain/token-bindings.git?rev=e85d734#e85d7348b07c3d0403c60435c0a7d291af81f987"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+]
+
+[[package]]
+name = "tokenfactory"
+version = "0.11.0"
+source = "git+https://github.com/oraichain/token-bindings.git?rev=e85d734#e85d7348b07c3d0403c60435c0a7d291af81f987"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-storage-plus 0.16.0",
+ "cw2 1.1.0",
+ "schemars",
+ "serde",
+ "thiserror",
+ "token-bindings",
+]
 
 [[package]]
 name = "tokio"

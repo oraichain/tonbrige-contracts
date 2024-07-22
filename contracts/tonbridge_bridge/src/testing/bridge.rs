@@ -341,6 +341,7 @@ fn test_bridge_native_to_ton() {
             relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
             relayer_fee: None,
             swap_router_contract: "swap_router_contract".to_string(),
+            token_factory_addr: None,
         },
     )
     .unwrap();
@@ -484,6 +485,7 @@ fn test_bridge_cw20_to_ton() {
             relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
             relayer_fee: None,
             swap_router_contract: "swap_router_contract".to_string(),
+            token_factory_addr: None,
         },
     )
     .unwrap();
@@ -582,6 +584,7 @@ fn test_bridge_to_ton_with_fee() {
             relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
             relayer_fee: Some(Uint128::from(1000u128)),
             swap_router_contract: "swap_router_contract".to_string(),
+            token_factory_addr: None,
         },
     )
     .unwrap();

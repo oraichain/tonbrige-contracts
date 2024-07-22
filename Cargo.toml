@@ -41,6 +41,8 @@ cw-tonbridge-validator = { path = "./contracts/tonbridge_validator" }
 oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "f2c1cec" }
 tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "eb28f37993939a0ee0b39db7d2c8db4aa02fe0fc", default-features = false }
 cw-multi-test = "0.16.6"
+token-bindings = { git = "https://github.com/oraichain/token-bindings.git", rev = "e85d734" }
+tokenfactory = { git = "https://github.com/oraichain/token-bindings.git", rev = "e85d734" }
 
 [patch.crates-io]
 curve25519-dalek = { git = 'https://github.com/dalek-cryptography/curve25519-dalek.git' }

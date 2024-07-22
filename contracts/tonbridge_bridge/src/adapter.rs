@@ -1,9 +1,9 @@
 use cosmwasm_std::{
     attr, Addr, Api, Attribute, CosmosMsg, DepsMut, Env, HexBinary, QuerierWrapper, Response,
-    StdError, Storage, Uint256,
+    Storage, Uint256,
 };
-use cw20::{Cw20Contract, Cw20ExecuteMsg};
-use oraiswap::asset::{Asset, AssetInfo};
+
+use oraiswap::asset::Asset;
 use tonbridge_bridge::{
     amount::{convert_local_to_remote, convert_remote_to_local, Amount},
     msg::BridgeToTonMsg,
@@ -25,7 +25,8 @@ use crate::{
     error::ContractError,
     fee::process_deduct_fee,
     helper::{
-        build_ack_commitment, build_bridge_to_ton_commitment, is_expired, parse_asset_info_denom,
+        build_ack_commitment, build_bridge_to_ton_commitment, build_burn_asset_msg,
+        build_mint_asset_msg, is_expired, parse_asset_info_denom,
     },
     state::{
         ics20_denoms, ACK_COMMITMENT, CONFIG, LAST_PACKET_SEQ, SEND_PACKET, SEND_PACKET_COMMITMENT,
@@ -126,12 +127,20 @@ pub fn on_acknowledgment(
     if ack.status.ne(&Status::Success) {
         let send_packet = SEND_PACKET.load(deps.storage, ack.seq)?;
 
-        let refund_msg = send_packet.local_refund_asset.into_msg(
-            None,
-            &deps.querier,
-            deps.api.addr_validate(&send_packet.sender)?,
-        )?;
-        msgs.push(refund_msg);
+        if send_packet.opcode == OPCODE_1 {
+            let config = CONFIG.load(deps.storage)?;
+            msgs.push(build_mint_asset_msg(
+                config.token_factory_addr,
+                &send_packet.local_refund_asset,
+                send_packet.sender,
+            )?);
+        } else {
+            msgs.push(send_packet.local_refund_asset.into_msg(
+                None,
+                &deps.querier,
+                deps.api.addr_validate(&send_packet.sender)?,
+            )?);
+        }
     }
 
     SEND_PACKET_COMMITMENT.remove(deps.storage, ack.seq);
@@ -243,21 +252,12 @@ pub fn handle_packet_receive(
         amount: local_amount,
     };
     if mapping.opcode == OPCODE_1 {
-        let msg = match msg.info {
-            AssetInfo::NativeToken { denom: _ } => {
-                return Err(ContractError::Std(StdError::generic_err(
-                    "Cannot mint a native token",
-                )))
-            }
-            AssetInfo::Token { contract_addr } => {
-                Cw20Contract(contract_addr).call(Cw20ExecuteMsg::Mint {
-                    recipient: recipient.to_string(),
-                    amount: local_amount,
-                })
-            }
-        }?;
-        cosmos_msgs.push(msg);
-    } else if mapping.opcode == OPCODE_2 {
+        cosmos_msgs.push(build_mint_asset_msg(
+            config.token_factory_addr,
+            &msg,
+            recipient.to_string(),
+        )?);
+    } else {
         cosmos_msgs.push(msg.into_msg(None, querier, recipient.clone())?);
     }
 
@@ -336,6 +336,17 @@ pub fn handle_bridge_to_ton(
     // try decrease channel balance
     decrease_channel_balance(deps.storage, &msg.denom, remote_amount)?;
 
+    if mapping.opcode == OPCODE_1 {
+        cosmos_msgs.push(build_burn_asset_msg(
+            config.token_factory_addr,
+            &Asset {
+                info: mapping.asset_info.clone(),
+                amount: local_amount,
+            },
+            env.contract.address.to_string(),
+        )?);
+    }
+
     let last_packet_seq = LAST_PACKET_SEQ.may_load(deps.storage)?.unwrap_or_default() + 1;
 
     let sender_raw = deps.api.addr_canonicalize(sender.as_str())?;
@@ -366,6 +377,7 @@ pub fn handle_bridge_to_ton(
                 amount: local_amount,
             },
             timeout_timestamp,
+            opcode: mapping.opcode,
         },
     )?;
     LAST_PACKET_SEQ.save(deps.storage, &last_packet_seq)?;
