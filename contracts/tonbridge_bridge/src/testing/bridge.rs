@@ -14,6 +14,9 @@ use oraiswap::{
     asset::{Asset, AssetInfo},
     router::RouterController,
 };
+use token_bindings::{
+    DenomsByCreatorResponse, Metadata, MetadataResponse, TokenFactoryMsg, TokenFactoryMsgOptions,
+};
 use tonbridge_bridge::{
     amount::Amount,
     msg::{
@@ -873,37 +876,146 @@ fn test_build_burn_msg_by_token_factory() {
     );
 }
 
+// note: you have to comment decrease_channel_balance in line 337 of adapter.rs to pass this test
+#[test]
+fn test_bridge_to_ton_by_token_factory_denom() {
+    let MockApp {
+        mut app,
+        owner,
+        bridge_addr,
+        token_factory_addr,
+        ..
+    } = new_mock_app();
+
+    let sender = Addr::unchecked("orai1ehmhqcn8erf3dgavrca69zgp4rtxj5kqgtcnyd");
+    let subdenom = "ton";
+
+    let create = TokenFactoryMsg::Token(TokenFactoryMsgOptions::CreateDenom {
+        subdenom: subdenom.to_string(),
+        metadata: Some(Metadata {
+            description: Some("Awesome token, get it now!".to_string()),
+            denom_units: vec![],
+            base: None,
+            display: Some("Ton".to_string()),
+            name: Some("Ton".to_string()),
+            symbol: Some("Ton".to_string()),
+        }),
+    });
+    app.app.execute(sender.clone(), create.into()).unwrap();
+
+    let denom_created: token_bindings::FullDenomResponse = app
+        .query(
+            token_factory_addr.clone(),
+            &tokenfactory::msg::QueryMsg::GetDenom {
+                subdenom: "ton".to_string(),
+                creator_address: sender.to_string(),
+            },
+        )
+        .unwrap();
+    let denom = denom_created.denom;
+
+    let mint = TokenFactoryMsg::Token(TokenFactoryMsgOptions::MintTokens {
+        denom: denom.to_string(),
+        amount: Uint128::from(5u128),
+        mint_to_address: sender.to_string(),
+    });
+    app.app.execute(sender.clone(), mint.into()).unwrap();
+
+    let sender_balance = app.query_balance(sender.clone(), denom.clone()).unwrap();
+    assert_eq!(sender_balance.u128(), 5);
+
+    let change_admin = TokenFactoryMsg::Token(TokenFactoryMsgOptions::ChangeAdmin {
+        denom: denom.to_string(),
+        new_admin_address: bridge_addr.to_string(),
+    });
+    app.app
+        .execute(sender.clone(), change_admin.into())
+        .unwrap();
+
+    // creator can not mint their token anymore
+    let mint = TokenFactoryMsg::Token(TokenFactoryMsgOptions::MintTokens {
+        denom: denom.to_string(),
+        amount: Uint128::from(5u128),
+        mint_to_address: bridge_addr.to_string(),
+    });
+    let err = app.app.execute(sender.clone(), mint.into()).unwrap_err();
+    assert_eq!(err.to_string(), "Not admin of token, cannot perfrom action");
+
+    // update mapping pair
+    let opcode =
+        HexBinary::from_hex("0000000000000000000000000000000000000000000000000000000000000001")
+            .unwrap();
+    app.app
+        .execute(
+            owner.clone(),
+            cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+                contract_addr: bridge_addr.to_string(),
+                msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
+                    UpdatePairMsg {
+                        denom: TonAddress::null().to_string(),
+                        local_asset_info: AssetInfo::NativeToken {
+                            denom: denom.to_string(),
+                        },
+                        remote_decimals: 6,
+                        local_asset_info_decimals: 6,
+                        opcode,
+                        token_origin: 529034805,
+                    },
+                ))
+                .unwrap(),
+                funds: vec![],
+            }),
+        )
+        .unwrap();
+
+    // try bridge to ton
+    app.app
+        .execute(
+            sender.clone(),
+            cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+                contract_addr: bridge_addr.to_string(),
+                msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::BridgeToTon(
+                    BridgeToTonMsg {
+                        denom: TonAddress::null().to_string(),
+                        timeout: None,
+                        to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
+                    },
+                ))
+                .unwrap(),
+                funds: vec![coin(3, denom.clone())],
+            }),
+        )
+        .unwrap();
+    let sender_balance = app.query_balance(sender.clone(), denom.clone()).unwrap();
+    assert_eq!(sender_balance.u128(), 2);
+}
+
 // FIXME: Wrong canonical address length
 // #[test]
 // fn test_bridge_ton_to_orai_with_fee() {
 //     let MockApp {
 //         mut app,
 //         owner,
+//         validator_addr,
 //         bridge_addr,
 //         cw20_addr,
-//         validator_addr,
 //         ..
 //     } = new_mock_app();
 //     // update bridge adapter contract
 //     app.execute(
 //         owner.clone(),
-//         cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-//             contract_addr: bridge_addr.to_string(),
-//             msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
-//                 validator_contract_addr: None,
-//                 bridge_adapter: Some(
-//                     "EQCWH9kCKpCTpswaygq-Ah7h-1vH3xZ3gJq7-SM6ZkYiOgHH".to_string(),
-//                 ),
-//                 relayer_fee_token: None,
-//                 token_fee_receiver: None,
-//                 relayer_fee_receiver: None,
-//                 relayer_fee: None,
-//                 swap_router_contract: None,
-//                 token_fee: None,
-//             })
-//             .unwrap(),
-//             funds: vec![],
-//         }),
+//         bridge_addr.clone(),
+//         &tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
+//             validator_contract_addr: None,
+//             bridge_adapter: Some("EQCWH9kCKpCTpswaygq-Ah7h-1vH3xZ3gJq7-SM6ZkYiOgHH".to_string()),
+//             relayer_fee_token: None,
+//             token_fee_receiver: None,
+//             relayer_fee_receiver: None,
+//             relayer_fee: None,
+//             swap_router_contract: None,
+//             token_fee: None,
+//         },
+//         &[],
 //     )
 //     .unwrap();
 
@@ -917,59 +1029,61 @@ fn test_build_burn_msg_by_token_factory() {
 //     let token_denom = "EQBynBO23ywHy_CgarY9NK9FTz0yDsG82PtcbSTQgGoXwiuA";
 //     let packet_timeout_timestamp = 1720691622u64;
 
-//     let mut block_info = app.block_info();
+//     let mut block_info = app.app.block_info();
 //     block_info.time = Timestamp::from_seconds(packet_timeout_timestamp - 10);
-//     app.set_block(block_info);
+//     app.app.set_block(block_info);
 //     // update fee
-//     app.execute(
-//         owner.clone(),
-//         cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-//             contract_addr: bridge_addr.to_string(),
-//             msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
-//                 validator_contract_addr: None,
-//                 bridge_adapter: None,
-//                 relayer_fee_token: Some(AssetInfo::Token {
-//                     contract_addr: cw20_addr.clone(),
-//                 }),
-//                 token_fee_receiver: None,
-//                 relayer_fee_receiver: None,
-//                 relayer_fee: Some(Uint128::from(1000u128)),
-//                 swap_router_contract: None,
-//                 token_fee: Some(vec![TokenFee {
-//                     token_denom: token_denom.to_string(),
-//                     ratio: Ratio {
-//                         nominator: 1,
-//                         denominator: 1000,
-//                     },
-//                 }]),
-//             })
-//             .unwrap(),
-//             funds: vec![],
-//         }),
-//     )
-//     .unwrap();
+//     app.app
+//         .execute(
+//             owner.clone(),
+//             cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+//                 contract_addr: bridge_addr.to_string(),
+//                 msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
+//                     validator_contract_addr: None,
+//                     bridge_adapter: None,
+//                     relayer_fee_token: Some(AssetInfo::Token {
+//                         contract_addr: cw20_addr.clone(),
+//                     }),
+//                     token_fee_receiver: None,
+//                     relayer_fee_receiver: None,
+//                     relayer_fee: Some(Uint128::from(1000u128)),
+//                     swap_router_contract: None,
+//                     token_fee: Some(vec![TokenFee {
+//                         token_denom: token_denom.to_string(),
+//                         ratio: Ratio {
+//                             nominator: 1,
+//                             denominator: 1000,
+//                         },
+//                     }]),
+//                 })
+//                 .unwrap(),
+//                 funds: vec![],
+//             }),
+//         )
+//         .unwrap();
 
-//     app.execute(
-//         owner.clone(),
-//         cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-//             contract_addr: bridge_addr.to_string(),
-//             msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
-//                 UpdatePairMsg {
-//                     denom: token_denom.to_string(),
-//                     local_asset_info: AssetInfo::Token {
-//                         contract_addr: Addr::unchecked(cw20_addr.clone()),
+//     app.app
+//         .execute(
+//             owner.clone(),
+//             cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+//                 contract_addr: bridge_addr.to_string(),
+//                 msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
+//                     UpdatePairMsg {
+//                         denom: token_denom.to_string(),
+//                         local_asset_info: AssetInfo::Token {
+//                             contract_addr: Addr::unchecked(cw20_addr.clone()),
+//                         },
+//                         remote_decimals: 6,
+//                         local_asset_info_decimals: 6,
+//                         opcode,
+//                         token_origin: 529034805,
 //                     },
-//                     remote_decimals: 6,
-//                     local_asset_info_decimals: 6,
-//                     opcode,
-//                     token_origin: 529034805,
-//                 },
-//             ))
-//             .unwrap(),
-//             funds: vec![],
-//         }),
-//     )
-//     .unwrap();
+//                 ))
+//                 .unwrap(),
+//                 funds: vec![],
+//             }),
+//         )
+//         .unwrap();
 
 //     // shard block with block hash
 //     let block_hash =
@@ -977,36 +1091,39 @@ fn test_build_burn_msg_by_token_factory() {
 //             .unwrap();
 
 //     // set verified for simplicity
-//     app.execute(
-//         owner.clone(),
-//         cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-//             contract_addr: validator_addr.to_string(),
-//             msg: to_json_binary(&tonbridge_validator::msg::ExecuteMsg::SetVerifiedBlock {
-//                 root_hash: block_hash,
-//                 seq_no: 1,
-//             })
-//             .unwrap(),
-//             funds: vec![],
-//         }),
-//     )
-//     .unwrap();
+//     app.app
+//         .execute(
+//             owner.clone(),
+//             cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+//                 contract_addr: validator_addr.to_string(),
+//                 msg: to_json_binary(&tonbridge_validator::msg::ExecuteMsg::SetVerifiedBlock {
+//                     root_hash: block_hash,
+//                     seq_no: 1,
+//                 })
+//                 .unwrap(),
+//                 funds: vec![],
+//             }),
+//         )
+//         .unwrap();
 
-//     app.execute(
-//         owner.clone(),
-//         cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-//             contract_addr: bridge_addr.to_string(),
-//             msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::ReadTransaction {
-//                 tx_proof,
-//                 tx_boc,
-//             })
-//             .unwrap(),
-//             funds: vec![],
-//         }),
-//     )
-//     .unwrap();
+//     app.app
+//         .execute(
+//             owner.clone(),
+//             cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+//                 contract_addr: bridge_addr.to_string(),
+//                 msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::ReadTransaction {
+//                     tx_proof,
+//                     tx_boc,
+//                 })
+//                 .unwrap(),
+//                 funds: vec![],
+//             }),
+//         )
+//         .unwrap();
 
 //     // try query fee balance
 //     let relayer_balance: BalanceResponse = app
+//         .app
 //         .wrap()
 //         .query_wasm_smart(
 //             cw20_addr.clone(),
@@ -1017,6 +1134,7 @@ fn test_build_burn_msg_by_token_factory() {
 //         .unwrap();
 //     assert_eq!(relayer_balance.balance, Uint128::from(1000u128));
 //     let token_fee_balance: BalanceResponse = app
+//         .app
 //         .wrap()
 //         .query_wasm_smart(
 //             cw20_addr.clone(),

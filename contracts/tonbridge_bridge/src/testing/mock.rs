@@ -64,6 +64,8 @@ impl MockApp {
             )
             .unwrap();
 
+        let token_factory_addr = app.create_tokenfactory(admin.clone()).unwrap();
+
         let bridge_addr = app
             .instantiate(
                 bridge_id,
@@ -78,7 +80,7 @@ impl MockApp {
                     relayer_fee_receiver: Addr::unchecked("relayer_fee"),
                     relayer_fee: None,
                     swap_router_contract: "router".to_string(),
-                    token_factory_addr: None,
+                    token_factory_addr: Some(token_factory_addr.clone()),
                 },
                 &vec![],
                 "bridge",
@@ -106,8 +108,6 @@ impl MockApp {
                 "dummy",
             )
             .unwrap();
-
-        let token_factory_addr = app.create_tokenfactory(admin.clone()).unwrap();
 
         Self {
             app,
