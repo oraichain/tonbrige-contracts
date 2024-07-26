@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{to_binary, Addr, Api, CosmosMsg, StdError, Uint128, WasmMsg};
+use cosmwasm_std::{to_json_binary, Addr, Api, CosmosMsg, StdError, Uint128, WasmMsg};
 
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
 use oraiswap::asset::{Asset, AssetInfo};
@@ -113,7 +113,7 @@ pub fn build_mint_asset_msg(
             }
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: token_factory.unwrap().to_string(),
-                msg: to_binary(&tokenfactory::msg::ExecuteMsg::MintTokens {
+                msg: to_json_binary(&tokenfactory::msg::ExecuteMsg::MintTokens {
                     denom: denom.to_owned(),
                     amount: asset.amount,
                     mint_to_address: receiver,
@@ -146,7 +146,7 @@ pub fn build_burn_asset_msg(
             }
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: token_factory.unwrap().to_string(),
-                msg: to_binary(&tokenfactory::msg::ExecuteMsg::BurnTokens {
+                msg: to_json_binary(&tokenfactory::msg::ExecuteMsg::BurnTokens {
                     denom: denom.to_owned(),
                     amount: asset.amount,
                     burn_from_address: from_address,

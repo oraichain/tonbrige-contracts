@@ -1,7 +1,7 @@
 use crate::msg::{ExecuteMsg, QueryMsg};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{
-    to_binary, Addr, CosmosMsg, CustomQuery, HexBinary, QuerierWrapper, QueryRequest, StdResult,
+    to_json_binary, Addr, CosmosMsg, CustomQuery, HexBinary, QuerierWrapper, QueryRequest, StdResult,
     WasmMsg, WasmQuery,
 };
 
@@ -16,7 +16,7 @@ impl ValidatorWrapper {
     }
 
     pub fn call<T: Into<ExecuteMsg>>(&self, msg: T) -> StdResult<CosmosMsg> {
-        let msg = to_binary(&msg.into())?;
+        let msg = to_json_binary(&msg.into())?;
         Ok(WasmMsg::Execute {
             contract_addr: self.addr().into(),
             msg,
@@ -28,7 +28,7 @@ impl ValidatorWrapper {
     fn encode_smart_query<CQ: CustomQuery>(&self, msg: QueryMsg) -> StdResult<QueryRequest<CQ>> {
         Ok(WasmQuery::Smart {
             contract_addr: self.addr().into(),
-            msg: to_binary(&msg)?,
+            msg: to_json_binary(&msg)?,
         }
         .into())
     }

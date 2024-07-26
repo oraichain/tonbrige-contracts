@@ -1,10 +1,8 @@
 use cosmwasm_std::{
-    coin, from_binary,
+    coin, from_json,
     testing::{mock_dependencies, mock_env},
-    to_binary, Addr, HexBinary, Uint128,
+    Addr, HexBinary, Uint128,
 };
-
-use cw_multi_test::Executor;
 use oraiswap::{asset::AssetInfo, router::RouterController};
 use tonbridge_bridge::{
     amount::Amount,
@@ -31,7 +29,7 @@ fn test_instantiate_contract() {
     } = new_mock_app();
 
     let config: Config = app
-        .wrap()
+        .as_querier()
         .query_wasm_smart(bridge_addr.clone(), &BridgeQueryMsg::Config {})
         .unwrap();
     assert_eq!(
@@ -50,7 +48,7 @@ fn test_instantiate_contract() {
         }
     );
     let _owner: Addr = app
-        .wrap()
+        .as_querier()
         .query_wasm_smart(bridge_addr.clone(), &BridgeQueryMsg::Owner {})
         .unwrap();
     assert_eq!(owner, _owner);
@@ -68,32 +66,26 @@ fn test_update_owner() {
     // update failed, not admin
     app.execute(
         Addr::unchecked("alice"),
-        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-            contract_addr: bridge_addr.to_string(),
-            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateOwner {
-                new_owner: Addr::unchecked("alice"),
-            })
-            .unwrap(),
-            funds: vec![],
-        }),
+        Addr::unchecked(bridge_addr.as_str()),
+        &tonbridge_bridge::msg::ExecuteMsg::UpdateOwner {
+            new_owner: Addr::unchecked("alice"),
+        },
+        &[],
     )
     .unwrap_err();
 
     // update success
     app.execute(
         owner,
-        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-            contract_addr: bridge_addr.to_string(),
-            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateOwner {
-                new_owner: Addr::unchecked("alice"),
-            })
-            .unwrap(),
-            funds: vec![],
-        }),
+        Addr::unchecked(bridge_addr.as_str()),
+        &tonbridge_bridge::msg::ExecuteMsg::UpdateOwner {
+            new_owner: Addr::unchecked("alice"),
+        },
+        &[],
     )
     .unwrap();
     let _owner: Addr = app
-        .wrap()
+        .as_querier()
         .query_wasm_smart(bridge_addr.clone(), &BridgeQueryMsg::Owner {})
         .unwrap();
     assert_eq!(_owner, Addr::unchecked("alice"));
@@ -111,51 +103,43 @@ fn test_update_config() {
     // update failed, not admin
     app.execute(
         Addr::unchecked("alice"),
-        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-            contract_addr: bridge_addr.to_string(),
-            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
-                validator_contract_addr: None,
-                bridge_adapter: None,
-                relayer_fee_token: None,
-                token_fee_receiver: None,
-                relayer_fee_receiver: None,
-                relayer_fee: None,
-                swap_router_contract: None,
-                token_fee: None,
-            })
-            .unwrap(),
-            funds: vec![],
-        }),
+        Addr::unchecked(bridge_addr.as_str()),
+        &tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
+            validator_contract_addr: None,
+            bridge_adapter: None,
+            relayer_fee_token: None,
+            token_fee_receiver: None,
+            relayer_fee_receiver: None,
+            relayer_fee: None,
+            swap_router_contract: None,
+            token_fee: None,
+        },
+        &[],
     )
     .unwrap_err();
 
     // update success
     app.execute(
         owner,
-        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-            contract_addr: bridge_addr.to_string(),
-            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
-                validator_contract_addr: Some(Addr::unchecked("contract1")),
-                bridge_adapter: Some(
-                    "DQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
-                ),
-                relayer_fee_token: Some(AssetInfo::NativeToken {
-                    denom: "atom".to_string(),
-                }),
-                relayer_fee: Some(Uint128::one()),
-                token_fee_receiver: Some(Addr::unchecked("new_token_fee")),
-                relayer_fee_receiver: Some(Addr::unchecked("new_relayer_fee")),
-                swap_router_contract: Some("new_router".to_string()),
-                token_fee: None,
-            })
-            .unwrap(),
-            funds: vec![],
-        }),
+        Addr::unchecked(bridge_addr.as_str()),
+        &tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
+            validator_contract_addr: Some(Addr::unchecked("contract1")),
+            bridge_adapter: Some("DQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string()),
+            relayer_fee_token: Some(AssetInfo::NativeToken {
+                denom: "atom".to_string(),
+            }),
+            relayer_fee: Some(Uint128::one()),
+            token_fee_receiver: Some(Addr::unchecked("new_token_fee")),
+            relayer_fee_receiver: Some(Addr::unchecked("new_relayer_fee")),
+            swap_router_contract: Some("new_router".to_string()),
+            token_fee: None,
+        },
+        &[],
     )
     .unwrap();
 
     let config: Config = app
-        .wrap()
+        .as_querier()
         .query_wasm_smart(bridge_addr.clone(), &BridgeQueryMsg::Config {})
         .unwrap();
     assert_eq!(
@@ -186,32 +170,29 @@ fn test_update_token_fee() {
 
     app.execute(
         owner,
-        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-            contract_addr: bridge_addr.to_string(),
-            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
-                validator_contract_addr: None,
-                bridge_adapter: None,
-                relayer_fee_token: None,
-                token_fee_receiver: None,
-                relayer_fee_receiver: None,
-                relayer_fee: None,
-                swap_router_contract: None,
-                token_fee: Some(vec![TokenFee {
-                    token_denom: "orai".to_string(),
-                    ratio: Ratio {
-                        nominator: 1,
-                        denominator: 1000,
-                    },
-                }]),
-            })
-            .unwrap(),
-            funds: vec![],
-        }),
+        Addr::unchecked(bridge_addr.as_str()),
+        &tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
+            validator_contract_addr: None,
+            bridge_adapter: None,
+            relayer_fee_token: None,
+            token_fee_receiver: None,
+            relayer_fee_receiver: None,
+            relayer_fee: None,
+            swap_router_contract: None,
+            token_fee: Some(vec![TokenFee {
+                token_denom: "orai".to_string(),
+                ratio: Ratio {
+                    nominator: 1,
+                    denominator: 1000,
+                },
+            }]),
+        },
+        &[],
     )
     .unwrap();
 
     let ratio: Ratio = app
-        .wrap()
+        .as_querier()
         .query_wasm_smart(
             bridge_addr.clone(),
             &BridgeQueryMsg::TokenFee {
@@ -246,53 +227,43 @@ fn test_register_mapping_pair() {
     // register failed, no admin
     app.execute(
         Addr::unchecked("alice"),
-        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-            contract_addr: bridge_addr.to_string(),
-            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
-                UpdatePairMsg {
-                    denom: ibc_denom.to_string(),
-                    local_asset_info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked(cw20_addr.clone()),
-                    },
-                    remote_decimals: 6,
-                    local_asset_info_decimals: 6,
-                    opcode: opcode.clone(),
-                    token_origin: 529034805,
-                },
-            ))
-            .unwrap(),
-            funds: vec![],
+        Addr::unchecked(bridge_addr.as_str()),
+        &tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
+            denom: ibc_denom.to_string(),
+            local_asset_info: AssetInfo::Token {
+                contract_addr: Addr::unchecked(cw20_addr.clone()),
+            },
+            remote_decimals: 6,
+            local_asset_info_decimals: 6,
+            opcode: opcode.clone(),
+            token_origin: 529034805,
         }),
+        &[],
     )
     .unwrap_err();
 
     // register success
     app.execute(
         owner.clone(),
-        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-            contract_addr: bridge_addr.to_string(),
-            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(
-                UpdatePairMsg {
-                    denom: ibc_denom.to_string(),
-                    local_asset_info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked(cw20_addr.clone()),
-                    },
-                    remote_decimals: 6,
-                    local_asset_info_decimals: 6,
-                    opcode: opcode.clone(),
-                    token_origin: 529034805,
-                },
-            ))
-            .unwrap(),
-            funds: vec![],
+        Addr::unchecked(bridge_addr.as_str()),
+        &tonbridge_bridge::msg::ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
+            denom: ibc_denom.to_string(),
+            local_asset_info: AssetInfo::Token {
+                contract_addr: Addr::unchecked(cw20_addr.clone()),
+            },
+            remote_decimals: 6,
+            local_asset_info_decimals: 6,
+            opcode: opcode.clone(),
+            token_origin: 529034805,
         }),
+        &[],
     )
     .unwrap();
 
     // query mapping
 
     let res: PairQuery = app
-        .wrap()
+        .as_querier()
         .query_wasm_smart(
             bridge_addr.clone(),
             &BridgeQueryMsg::PairMapping {
@@ -319,16 +290,11 @@ fn test_register_mapping_pair() {
     // try remove
     app.execute(
         owner.clone(),
-        cosmwasm_std::CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
-            contract_addr: bridge_addr.to_string(),
-            msg: to_binary(&tonbridge_bridge::msg::ExecuteMsg::DeleteMappingPair(
-                DeletePairMsg {
-                    denom: "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl".to_string(),
-                },
-            ))
-            .unwrap(),
-            funds: vec![],
+        Addr::unchecked(bridge_addr.as_str()),
+        &tonbridge_bridge::msg::ExecuteMsg::DeleteMappingPair(DeletePairMsg {
+            denom: "EQCcvbJBC2z5eiG00mtS6hYgijemXjMEnRrdPAenNSAringl".to_string(),
         }),
+        &[],
     )
     .unwrap();
 }
@@ -341,7 +307,7 @@ fn test_update_channel_balance() {
     increase_channel_balance(deps.as_mut().storage, denom, Uint128::from(1000000u128)).unwrap();
 
     // after increase, query channel balance
-    let state: ChannelResponse = from_binary(
+    let state: ChannelResponse = from_json(
         &query(
             deps.as_ref(),
             mock_env(),
@@ -363,7 +329,7 @@ fn test_update_channel_balance() {
     decrease_channel_balance(deps.as_mut().storage, denom, Uint128::from(500000u128)).unwrap();
 
     // after decrease, query channel balance
-    let state: ChannelResponse = from_binary(
+    let state: ChannelResponse = from_json(
         &query(
             deps.as_ref(),
             mock_env(),

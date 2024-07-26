@@ -1,89 +1,71 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cosmwasm_std::{Addr, BlockInfo, Empty, Timestamp, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, Timestamp, Uint128};
+use cosmwasm_testing_util::ContractWrapper;
 use cw20::Cw20Coin;
-use cw_multi_test::{App, AppBuilder, Contract, ContractWrapper, Executor};
+use derive_more::{Deref, DerefMut};
 use oraiswap::asset::AssetInfo;
-
-fn validator_contract() -> Box<dyn Contract<Empty>> {
-    let contract = ContractWrapper::new(
-        cw_tonbridge_validator::contract::execute,
-        cw_tonbridge_validator::contract::instantiate,
-        cw_tonbridge_validator::contract::query,
-    );
-    Box::new(contract)
-}
-
-fn bridge_contract() -> Box<dyn Contract<Empty>> {
-    let contract = ContractWrapper::new(
-        crate::contract::execute,
-        crate::contract::instantiate,
-        crate::contract::query,
-    );
-    Box::new(contract)
-}
-
-fn dummy_cw20_contract() -> Box<dyn Contract<Empty>> {
-    let contract = ContractWrapper::new(
-        cw20_base::contract::execute,
-        cw20_base::contract::instantiate,
-        cw20_base::contract::query,
-    );
-    Box::new(contract)
-}
-
-fn new_app() -> App {
-    let mut app = AppBuilder::new().build(|_router, _, _storage| {});
-    app.set_block(BlockInfo {
-        height: 1,
-        time: Timestamp::from_seconds(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        ),
-        chain_id: "Oraichain".to_string(),
-    });
-    app
-}
 
 pub fn new_mock_app() -> MockApp {
     MockApp::new()
 }
 
+#[derive(Deref, DerefMut)]
 pub struct MockApp {
-    pub app: App,
+    #[deref]
+    #[deref_mut]
+    pub app: cosmwasm_testing_util::MockApp,
     pub owner: Addr,
     pub validator_addr: Addr,
     pub bridge_addr: Addr,
     pub cw20_addr: Addr,
+    pub token_factory_addr: Addr,
 }
 
 impl MockApp {
     pub fn new() -> Self {
-        let mut app = new_app();
+        let mut app = cosmwasm_testing_util::MockApp::new(&[]);
+        app.app.set_block(BlockInfo {
+            height: 1,
+            time: Timestamp::from_seconds(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
+            chain_id: "Oraichain".to_string(),
+        });
         let admin = Addr::unchecked("admin");
-        let validator_contract = validator_contract();
-        let bridge_contract = bridge_contract();
-        let dummy_cw20_contract = dummy_cw20_contract();
-        let validator_id = app.store_code(validator_contract);
-        let bridge_id = app.store_code(bridge_contract);
-        let cw20_id = app.store_code(dummy_cw20_contract);
+
+        let validator_id = app.upload(Box::new(ContractWrapper::new_with_empty(
+            cw_tonbridge_validator::contract::execute,
+            cw_tonbridge_validator::contract::instantiate,
+            cw_tonbridge_validator::contract::query,
+        )));
+        let bridge_id = app.upload(Box::new(ContractWrapper::new_with_empty(
+            crate::contract::execute,
+            crate::contract::instantiate,
+            crate::contract::query,
+        )));
+        let cw20_id = app.upload(Box::new(ContractWrapper::new_with_empty(
+            cw20_base::contract::execute,
+            cw20_base::contract::instantiate,
+            cw20_base::contract::query,
+        )));
         let bridge_cw20_balance = Uint128::from(10000000000000001u64);
 
         let validator_addr = app
-            .instantiate_contract(
+            .instantiate(
                 validator_id,
                 admin.clone(),
                 &tonbridge_validator::msg::InstantiateMsg { boc: None },
                 &vec![],
-                "validator".to_string(),
-                None,
+                "validator",
             )
             .unwrap();
 
         let bridge_addr = app
-            .instantiate_contract(
+            .instantiate(
                 bridge_id,
                 admin.clone(),
                 &tonbridge_bridge::msg::InstantiateMsg {
@@ -99,13 +81,12 @@ impl MockApp {
                     token_factory_addr: None,
                 },
                 &vec![],
-                "bridge".to_string(),
-                None,
+                "bridge",
             )
             .unwrap();
 
         let cw20_addr = app
-            .instantiate_contract(
+            .instantiate(
                 cw20_id,
                 admin.clone(),
                 &cw20_base::msg::InstantiateMsg {
@@ -122,10 +103,11 @@ impl MockApp {
                     marketing: None,
                 },
                 &vec![],
-                "dummy".to_string(),
-                None,
+                "dummy",
             )
             .unwrap();
+
+        let token_factory_addr = app.create_tokenfactory(admin.clone()).unwrap();
 
         Self {
             app,
@@ -133,6 +115,7 @@ impl MockApp {
             validator_addr,
             bridge_addr,
             cw20_addr,
+            token_factory_addr,
         }
     }
 }

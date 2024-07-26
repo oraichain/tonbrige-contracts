@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
+use cosmwasm_std::{from_json, to_json_binary, Addr, Empty, Order, StdError, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw_utils::{nonpayable, one_coin};
@@ -208,7 +208,7 @@ pub fn execute_receive(
     nonpayable(&info)?;
 
     let amount = Amount::cw20(wrapper.amount.into(), info.sender.as_str());
-    let msg: BridgeToTonMsg = from_binary(&wrapper.msg)?;
+    let msg: BridgeToTonMsg = from_json(&wrapper.msg)?;
     let sender = deps.api.addr_validate(&wrapper.sender)?;
     handle_bridge_to_ton(deps, env, msg, amount, sender)
 }
@@ -216,18 +216,18 @@ pub fn execute_receive(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Owner {} => to_binary(&OWNER.query_admin(deps)?.admin),
-        QueryMsg::Config {} => to_binary(&get_config(deps)?),
+        QueryMsg::Owner {} => to_json_binary(&OWNER.query_admin(deps)?.admin),
+        QueryMsg::Config {} => to_json_binary(&get_config(deps)?),
         QueryMsg::TokenFee { remote_token_denom } => {
-            to_binary(&TOKEN_FEE.load(deps.storage, &remote_token_denom)?)
+            to_json_binary(&TOKEN_FEE.load(deps.storage, &remote_token_denom)?)
         }
-        QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
-        QueryMsg::ChannelStateData {} => to_binary(&query_channel(deps)?),
-        QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
+        QueryMsg::IsTxProcessed { tx_hash } => to_json_binary(&is_tx_processed(deps, tx_hash)?),
+        QueryMsg::ChannelStateData {} => to_json_binary(&query_channel(deps)?),
+        QueryMsg::PairMapping { key } => to_json_binary(&get_mapping_from_key(deps, key)?),
         QueryMsg::SendPacketCommitment { seq } => {
-            to_binary(&SEND_PACKET_COMMITMENT.load(deps.storage, seq)?)
+            to_json_binary(&SEND_PACKET_COMMITMENT.load(deps.storage, seq)?)
         }
-        QueryMsg::AckCommitment { seq } => to_binary(&ACK_COMMITMENT.load(deps.storage, seq)?),
+        QueryMsg::AckCommitment { seq } => to_json_binary(&ACK_COMMITMENT.load(deps.storage, seq)?),
     }
 }
 
