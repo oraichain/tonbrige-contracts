@@ -38,9 +38,9 @@ tonbridge-validator = { path = "./packages/validator" }
 tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./contracts/tonbridge_validator" }
 derive_more = "0.99.17"
-oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "2b18d76" }
-tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "eb28f37993939a0ee0b39db7d2c8db4aa02fe0fc", default-features = false }
-cosmwasm-testing-util = { git = "https://github.com/oraichain/cosmwasm-testing-util.git", rev = "ed58567" }
+oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "c5fd186" }
+tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "eb28f37", default-features = false }
+cosmwasm-testing-util = { git = "https://github.com/oraichain/cosmwasm-testing-util.git", rev = "1b9c412" }
 tokenfactory = { git = "https://github.com/oraichain/token-bindings.git", rev = "7861576" }
 token-bindings = { git = "https://github.com/oraichain/token-bindings.git", rev = "7861576" }
 
