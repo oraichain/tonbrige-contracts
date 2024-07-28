@@ -2,6 +2,7 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, HexBinary, Uint128, Uint256};
 use cw20::Cw20ReceiveMsg;
 use oraiswap::asset::AssetInfo;
+use token_bindings::Metadata;
 
 use crate::{
     amount::Amount,
@@ -43,6 +44,7 @@ pub enum ExecuteMsg {
         swap_router_contract: Option<String>,
         token_fee: Option<Vec<TokenFee>>,
     },
+    RegisterDenom(RegisterDenomMsg),
     // ProcessTimeoutSendPacket {
     //     masterchain_header_proof: HexBinary,
     //     tx_proof_unreceived: HexBinary,
@@ -73,6 +75,12 @@ pub struct BridgeToTonMsg {
     pub to: String,
     pub denom: String,
     pub timeout: Option<u64>,
+}
+
+#[cw_serde]
+pub struct RegisterDenomMsg {
+    pub subdenom: String,
+    pub metadata: Option<Metadata>,
 }
 
 /// We currently take no arguments for migrations

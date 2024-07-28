@@ -1,6 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{from_json, to_json_binary, Addr, Empty, Order, StdError, Uint128};
+use cosmwasm_std::{
+    from_json, to_json_binary, wasm_execute, Addr, Empty, Order, StdError, Uint128,
+};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw_utils::{nonpayable, one_coin};
@@ -9,7 +11,7 @@ use oraiswap::router::RouterController;
 use tonbridge_bridge::amount::Amount;
 use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, DeletePairMsg, ExecuteMsg, InstantiateMsg, MigrateMsg,
-    PairQuery, QueryMsg, UpdatePairMsg,
+    PairQuery, QueryMsg, RegisterDenomMsg, UpdatePairMsg,
 };
 
 use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
@@ -90,6 +92,7 @@ pub fn execute(
             handle_bridge_to_ton(deps, env, msg, amount, info.sender)
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
+        ExecuteMsg::RegisterDenom(msg) => register_denom(deps, info, msg),
     }
 }
 
@@ -182,6 +185,30 @@ pub fn update_mapping_pair(
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
+}
+
+pub fn register_denom(
+    deps: DepsMut,
+    info: MessageInfo,
+    msg: RegisterDenomMsg,
+) -> Result<Response, ContractError> {
+    OWNER.assert_admin(deps.as_ref(), &info.sender)?;
+
+    let config = CONFIG.load(deps.storage)?;
+
+    let mut cosmos_msgs = vec![];
+    cosmos_msgs.push(wasm_execute(
+        config.token_factory_addr.unwrap(),
+        &tokenfactory::msg::ExecuteMsg::CreateDenom {
+            subdenom: msg.subdenom,
+            metadata: msg.metadata,
+        },
+        info.funds,
+    )?);
+
+    Ok(Response::new()
+        .add_messages(cosmos_msgs)
+        .add_attribute("action", "create_denom"))
 }
 
 pub fn execute_delete_mapping_pair(

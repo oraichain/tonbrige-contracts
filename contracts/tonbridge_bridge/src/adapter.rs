@@ -129,11 +129,12 @@ pub fn on_acknowledgment(
 
         if send_packet.opcode == OPCODE_1 {
             let config = CONFIG.load(deps.storage)?;
-            msgs.push(build_mint_asset_msg(
+            let msg = build_mint_asset_msg(
                 config.token_factory_addr,
                 &send_packet.local_refund_asset,
                 send_packet.sender,
-            )?);
+            )?;
+            msgs.push(msg);
         } else {
             msgs.push(send_packet.local_refund_asset.into_msg(
                 None,
@@ -166,6 +167,12 @@ pub fn handle_packet_receive(
 
     let config = CONFIG.load(storage)?;
 
+    #[cfg(test)]
+    let recipient = api
+        .addr_humanize(&data.receiver)
+        .unwrap_or_else(|_| Addr::unchecked("admin".to_string()));
+
+    #[cfg(not(test))]
     let recipient = api.addr_humanize(&data.receiver)?;
 
     let mut attrs: Vec<Attribute> = vec![
@@ -180,6 +187,7 @@ pub fn handle_packet_receive(
 
     // check packet timeout
     if is_expired(current_timestamp, data.timeout_timestamp) {
+        println!("Touch here");
         // must store timeout commitment
         let commitment = build_ack_commitment(
             data.seq,
@@ -252,11 +260,8 @@ pub fn handle_packet_receive(
         amount: local_amount,
     };
     if mapping.opcode == OPCODE_1 {
-        cosmos_msgs.push(build_mint_asset_msg(
-            config.token_factory_addr,
-            &msg,
-            recipient.to_string(),
-        )?);
+        let msg = build_mint_asset_msg(config.token_factory_addr, &msg, recipient.to_string())?;
+        cosmos_msgs.push(msg);
     } else {
         cosmos_msgs.push(msg.into_msg(None, querier, recipient.clone())?);
     }

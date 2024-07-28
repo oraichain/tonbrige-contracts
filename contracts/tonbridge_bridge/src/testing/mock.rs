@@ -1,13 +1,17 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cosmwasm_std::{Addr, BlockInfo, Timestamp, Uint128};
+use cosmwasm_std::{Addr, BlockInfo, HexBinary, Timestamp, Uint128};
 use cosmwasm_testing_util::ContractWrapper;
 use cw20::Cw20Coin;
 use derive_more::{Deref, DerefMut};
 use oraiswap::asset::AssetInfo;
 
 pub fn new_mock_app() -> MockApp {
-    MockApp::new()
+    MockApp::new(None)
+}
+
+pub fn new_mock_app_with_boc(key_block_boc: HexBinary) -> MockApp {
+    MockApp::new(Some(key_block_boc))
 }
 
 #[derive(Deref, DerefMut)]
@@ -23,7 +27,7 @@ pub struct MockApp {
 }
 
 impl MockApp {
-    pub fn new() -> Self {
+    pub fn new(boc: Option<HexBinary>) -> Self {
         let mut app = cosmwasm_testing_util::MockApp::new(&[]);
         app.app.set_block(BlockInfo {
             height: 1,
@@ -58,7 +62,7 @@ impl MockApp {
             .instantiate(
                 validator_id,
                 admin.clone(),
-                &tonbridge_validator::msg::InstantiateMsg { boc: None },
+                &tonbridge_validator::msg::InstantiateMsg { boc: boc },
                 &vec![],
                 "validator",
             )

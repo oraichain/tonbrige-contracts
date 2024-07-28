@@ -3085,6 +3085,7 @@ dependencies = [
  "cosmwasm-std",
  "cw20",
  "oraiswap",
+ "token-bindings",
  "tonbridge-parser",
 ]
 
