@@ -637,6 +637,7 @@ fn test_bridge_to_ton_with_fee() {
                     denominator: 1000,
                 },
             }]),
+            token_factory_addr: None,
         },
     )
     .unwrap();
@@ -737,6 +738,7 @@ fn test_bridge_to_ton_with_fee() {
             relayer_fee: None,
             swap_router_contract: None,
             token_fee: None,
+            token_factory_addr: None,
         },
     )
     .unwrap();
@@ -908,6 +910,7 @@ fn test_happy_case_token_factory() {
             relayer_fee: None,
             swap_router_contract: None,
             token_fee: None,
+            token_factory_addr: None,
         })
         .unwrap(),
         funds: vec![],

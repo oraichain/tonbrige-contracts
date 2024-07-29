@@ -25,6 +25,7 @@ fn test_instantiate_contract() {
         app,
         owner,
         bridge_addr,
+        token_factory_addr,
         ..
     } = new_mock_app();
 
@@ -44,7 +45,7 @@ fn test_instantiate_contract() {
             token_fee_receiver: Addr::unchecked("token_fee"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee"),
             swap_router_contract: RouterController("router".to_string()),
-            token_factory_addr: None
+            token_factory_addr: Some(token_factory_addr)
         }
     );
     let _owner: Addr = app
@@ -97,6 +98,7 @@ fn test_update_config() {
         mut app,
         owner,
         bridge_addr,
+        token_factory_addr,
         ..
     } = new_mock_app();
 
@@ -113,6 +115,7 @@ fn test_update_config() {
             relayer_fee: None,
             swap_router_contract: None,
             token_fee: None,
+            token_factory_addr: None,
         },
         &[],
     )
@@ -133,6 +136,7 @@ fn test_update_config() {
             relayer_fee_receiver: Some(Addr::unchecked("new_relayer_fee")),
             swap_router_contract: Some("new_router".to_string()),
             token_fee: None,
+            token_factory_addr: None,
         },
         &[],
     )
@@ -154,7 +158,7 @@ fn test_update_config() {
             token_fee_receiver: Addr::unchecked("new_token_fee"),
             relayer_fee_receiver: Addr::unchecked("new_relayer_fee"),
             swap_router_contract: RouterController("new_router".to_string()),
-            token_factory_addr: None
+            token_factory_addr: Some(token_factory_addr)
         }
     );
 }
@@ -186,6 +190,7 @@ fn test_update_token_fee() {
                     denominator: 1000,
                 },
             }]),
+            token_factory_addr: None,
         },
         &[],
     )

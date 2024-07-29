@@ -67,6 +67,7 @@ pub fn execute(
             relayer_fee,
             swap_router_contract,
             token_fee,
+            token_factory_addr,
         } => execute_update_config(
             deps,
             info,
@@ -78,6 +79,7 @@ pub fn execute(
             relayer_fee,
             swap_router_contract,
             token_fee,
+            token_factory_addr,
         ),
         ExecuteMsg::ReadTransaction { tx_proof, tx_boc } => {
             read_transaction(deps, env, tx_proof, tx_boc)
@@ -119,6 +121,7 @@ pub fn execute_update_config(
     relayer_fee: Option<Uint128>,
     swap_router_contract: Option<String>,
     token_fee: Option<Vec<TokenFee>>,
+    token_factory_addr: Option<Addr>,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), &info.sender)?;
 
@@ -150,6 +153,9 @@ pub fn execute_update_config(
     }
     if let Some(swap_router_contract) = swap_router_contract {
         config.swap_router_contract = RouterController(swap_router_contract);
+    }
+    if let Some(token_factory_addr) = token_factory_addr {
+        config.token_factory_addr = Some(token_factory_addr);
     }
 
     CONFIG.save(deps.storage, &config)?;

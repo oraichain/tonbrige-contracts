@@ -43,6 +43,7 @@ pub enum ExecuteMsg {
         relayer_fee: Option<Uint128>,
         swap_router_contract: Option<String>,
         token_fee: Option<Vec<TokenFee>>,
+        token_factory_addr: Option<Addr>,
     },
     RegisterDenom(RegisterDenomMsg),
     // ProcessTimeoutSendPacket {
