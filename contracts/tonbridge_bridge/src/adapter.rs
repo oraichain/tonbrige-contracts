@@ -187,7 +187,6 @@ pub fn handle_packet_receive(
 
     // check packet timeout
     if is_expired(current_timestamp, data.timeout_timestamp) {
-        println!("Touch here");
         // must store timeout commitment
         let commitment = build_ack_commitment(
             data.seq,
