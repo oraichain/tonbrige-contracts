@@ -1,8 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    from_json, to_json_binary, wasm_execute, Addr, Empty, Order, StdError, Uint128,
-};
+use cosmwasm_std::{from_json, to_json_binary, wasm_execute, Addr, Empty, Order, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw_utils::{nonpayable, one_coin};
@@ -101,9 +99,7 @@ pub fn execute_update_owner(
     info: MessageInfo,
     new_owner: Addr,
 ) -> Result<Response, ContractError> {
-    OWNER
-        .execute_update_admin::<Empty, Empty>(deps, info, Some(new_owner.clone()))
-        .map_err(|error| StdError::generic_err(error.to_string()))?;
+    OWNER.execute_update_admin::<Empty, Empty>(deps, info, Some(new_owner.clone()))?;
 
     Ok(Response::new().add_attributes(vec![
         ("action", "update_owner"),
@@ -167,11 +163,6 @@ pub fn update_mapping_pair(
     msg: UpdatePairMsg,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), caller)?;
-
-    // if pair already exists in list, remove it and create a new one
-    if ics20_denoms().load(deps.storage, &msg.denom).is_ok() {
-        ics20_denoms().remove(deps.storage, &msg.denom)?;
-    }
 
     ics20_denoms().save(
         deps.storage,
@@ -273,15 +264,14 @@ pub fn get_config(deps: Deps) -> StdResult<Config> {
 pub fn query_channel(deps: Deps) -> StdResult<ChannelResponse> {
     let state = REMOTE_INITIATED_CHANNEL_STATE
         .range(deps.storage, None, None, Order::Ascending)
-        .map(|r| {
-            // this denom is
-            r.map(|(denom, v)| {
-                let outstanding = Amount::from_parts(denom.clone(), v.outstanding);
-                let total = Amount::from_parts(denom, v.total_sent);
-                (outstanding, total)
-            })
+        .filter_map(Result::ok)
+        // this denom is
+        .map(|(denom, v)| {
+            let outstanding = Amount::from_parts(denom.clone(), v.outstanding);
+            let total = Amount::from_parts(denom, v.total_sent);
+            (outstanding, total)
         })
-        .collect::<StdResult<Vec<_>>>()?;
+        .collect::<Vec<_>>();
 
     // we want (Vec<outstanding>, Vec<total>)
     let (balances, total_sent): (Vec<Amount>, Vec<Amount>) = state.into_iter().unzip();
