@@ -208,7 +208,7 @@ pub fn register_denom(
 
     Ok(Response::new()
         .add_messages(cosmos_msgs)
-        .add_attribute("action", "create_denom"))
+        .add_attribute("action", "register_denom"))
 }
 
 pub fn execute_delete_mapping_pair(
