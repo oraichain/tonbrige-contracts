@@ -1,10 +1,10 @@
 [package]
-name = "tonbridge-bridge"
-version = { workspace = true }
-authors = { workspace = true }
-edition = { workspace = true }
-documentation = { workspace = true }
+authors = {workspace = true}
 description = "Common helpers for tonbridge contracts"
+documentation = {workspace = true}
+edition = {workspace = true}
+name = "tonbridge-bridge"
+version = {workspace = true}
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,8 +14,9 @@ description = "Common helpers for tonbridge contracts"
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
-oraiswap = { workspace = true }
-cosmwasm-schema = { workspace = true }
-cosmwasm-std = { workspace = true }
-tonbridge-parser = { workspace = true }
-cw20 = { workspace = true }
+cosmwasm-schema = {workspace = true}
+cosmwasm-std = {workspace = true}
+cw20 = {workspace = true}
+oraiswap = {workspace = true}
+token-bindings = {workspace = true}
+tonbridge-parser = {workspace = true}

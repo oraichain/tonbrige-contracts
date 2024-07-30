@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{from_binary, to_binary, Addr, Empty, Order, StdError, Uint128};
+use cosmwasm_std::{from_json, to_json_binary, wasm_execute, Addr, Empty, Order, Uint128};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw_utils::{nonpayable, one_coin};
@@ -9,7 +9,7 @@ use oraiswap::router::RouterController;
 use tonbridge_bridge::amount::Amount;
 use tonbridge_bridge::msg::{
     BridgeToTonMsg, ChannelResponse, DeletePairMsg, ExecuteMsg, InstantiateMsg, MigrateMsg,
-    PairQuery, QueryMsg, UpdatePairMsg,
+    PairQuery, QueryMsg, RegisterDenomMsg, UpdatePairMsg,
 };
 
 use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
@@ -41,6 +41,7 @@ pub fn instantiate(
             relayer_fee_receiver: msg.relayer_fee_receiver,
             relayer_fee: msg.relayer_fee.unwrap_or_default(),
             swap_router_contract: RouterController(msg.swap_router_contract),
+            token_factory_addr: msg.token_factory_addr,
         },
     )?;
     OWNER.set(deps, Some(info.sender))?;
@@ -66,6 +67,7 @@ pub fn execute(
             relayer_fee,
             swap_router_contract,
             token_fee,
+            token_factory_addr,
         } => execute_update_config(
             deps,
             info,
@@ -77,6 +79,7 @@ pub fn execute(
             relayer_fee,
             swap_router_contract,
             token_fee,
+            token_factory_addr,
         ),
         ExecuteMsg::ReadTransaction { tx_proof, tx_boc } => {
             read_transaction(deps, env, tx_proof, tx_boc)
@@ -89,6 +92,7 @@ pub fn execute(
             handle_bridge_to_ton(deps, env, msg, amount, info.sender)
         }
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
+        ExecuteMsg::RegisterDenom(msg) => register_denom(deps, info, msg),
     }
 }
 
@@ -97,9 +101,7 @@ pub fn execute_update_owner(
     info: MessageInfo,
     new_owner: Addr,
 ) -> Result<Response, ContractError> {
-    OWNER
-        .execute_update_admin::<Empty, Empty>(deps, info, Some(new_owner.clone()))
-        .map_err(|error| StdError::generic_err(error.to_string()))?;
+    OWNER.execute_update_admin::<Empty, Empty>(deps, info, Some(new_owner.clone()))?;
 
     Ok(Response::new().add_attributes(vec![
         ("action", "update_owner"),
@@ -119,6 +121,7 @@ pub fn execute_update_config(
     relayer_fee: Option<Uint128>,
     swap_router_contract: Option<String>,
     token_fee: Option<Vec<TokenFee>>,
+    token_factory_addr: Option<Addr>,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), &info.sender)?;
 
@@ -151,6 +154,9 @@ pub fn execute_update_config(
     if let Some(swap_router_contract) = swap_router_contract {
         config.swap_router_contract = RouterController(swap_router_contract);
     }
+    if let Some(token_factory_addr) = token_factory_addr {
+        config.token_factory_addr = Some(token_factory_addr);
+    }
 
     CONFIG.save(deps.storage, &config)?;
 
@@ -164,11 +170,6 @@ pub fn update_mapping_pair(
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), caller)?;
 
-    // if pair already exists in list, remove it and create a new one
-    if ics20_denoms().load(deps.storage, &msg.denom).is_ok() {
-        ics20_denoms().remove(deps.storage, &msg.denom)?;
-    }
-
     ics20_denoms().save(
         deps.storage,
         &msg.denom,
@@ -181,6 +182,30 @@ pub fn update_mapping_pair(
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
+}
+
+pub fn register_denom(
+    deps: DepsMut,
+    info: MessageInfo,
+    msg: RegisterDenomMsg,
+) -> Result<Response, ContractError> {
+    OWNER.assert_admin(deps.as_ref(), &info.sender)?;
+
+    let config = CONFIG.load(deps.storage)?;
+
+    let mut cosmos_msgs = vec![];
+    cosmos_msgs.push(wasm_execute(
+        config.token_factory_addr.unwrap(),
+        &tokenfactory::msg::ExecuteMsg::CreateDenom {
+            subdenom: msg.subdenom,
+            metadata: msg.metadata,
+        },
+        info.funds,
+    )?);
+
+    Ok(Response::new()
+        .add_messages(cosmos_msgs)
+        .add_attribute("action", "register_denom"))
 }
 
 pub fn execute_delete_mapping_pair(
@@ -207,7 +232,7 @@ pub fn execute_receive(
     nonpayable(&info)?;
 
     let amount = Amount::cw20(wrapper.amount.into(), info.sender.as_str());
-    let msg: BridgeToTonMsg = from_binary(&wrapper.msg)?;
+    let msg: BridgeToTonMsg = from_json(&wrapper.msg)?;
     let sender = deps.api.addr_validate(&wrapper.sender)?;
     handle_bridge_to_ton(deps, env, msg, amount, sender)
 }
@@ -215,18 +240,18 @@ pub fn execute_receive(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Owner {} => to_binary(&OWNER.query_admin(deps)?.admin),
-        QueryMsg::Config {} => to_binary(&get_config(deps)?),
+        QueryMsg::Owner {} => to_json_binary(&OWNER.query_admin(deps)?.admin),
+        QueryMsg::Config {} => to_json_binary(&get_config(deps)?),
         QueryMsg::TokenFee { remote_token_denom } => {
-            to_binary(&TOKEN_FEE.load(deps.storage, &remote_token_denom)?)
+            to_json_binary(&TOKEN_FEE.load(deps.storage, &remote_token_denom)?)
         }
-        QueryMsg::IsTxProcessed { tx_hash } => to_binary(&is_tx_processed(deps, tx_hash)?),
-        QueryMsg::ChannelStateData {} => to_binary(&query_channel(deps)?),
-        QueryMsg::PairMapping { key } => to_binary(&get_mapping_from_key(deps, key)?),
+        QueryMsg::IsTxProcessed { tx_hash } => to_json_binary(&is_tx_processed(deps, tx_hash)?),
+        QueryMsg::ChannelStateData {} => to_json_binary(&query_channel(deps)?),
+        QueryMsg::PairMapping { key } => to_json_binary(&get_mapping_from_key(deps, key)?),
         QueryMsg::SendPacketCommitment { seq } => {
-            to_binary(&SEND_PACKET_COMMITMENT.load(deps.storage, seq)?)
+            to_json_binary(&SEND_PACKET_COMMITMENT.load(deps.storage, seq)?)
         }
-        QueryMsg::AckCommitment { seq } => to_binary(&ACK_COMMITMENT.load(deps.storage, seq)?),
+        QueryMsg::AckCommitment { seq } => to_json_binary(&ACK_COMMITMENT.load(deps.storage, seq)?),
     }
 }
 
@@ -245,15 +270,14 @@ pub fn get_config(deps: Deps) -> StdResult<Config> {
 pub fn query_channel(deps: Deps) -> StdResult<ChannelResponse> {
     let state = REMOTE_INITIATED_CHANNEL_STATE
         .range(deps.storage, None, None, Order::Ascending)
-        .map(|r| {
-            // this denom is
-            r.map(|(denom, v)| {
-                let outstanding = Amount::from_parts(denom.clone(), v.outstanding);
-                let total = Amount::from_parts(denom, v.total_sent);
-                (outstanding, total)
-            })
+        .filter_map(Result::ok)
+        // this denom is
+        .map(|(denom, v)| {
+            let outstanding = Amount::from_parts(denom.clone(), v.outstanding);
+            let total = Amount::from_parts(denom, v.total_sent);
+            (outstanding, total)
         })
-        .collect::<StdResult<Vec<_>>>()?;
+        .collect::<Vec<_>>();
 
     // we want (Vec<outstanding>, Vec<total>)
     let (balances, total_sent): (Vec<Amount>, Vec<Amount>) = state.into_iter().unzip();

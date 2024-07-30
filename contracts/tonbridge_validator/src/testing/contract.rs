@@ -3,7 +3,7 @@ mod tests {
 
     use cosmwasm_schema::cw_serde;
     use cosmwasm_std::{
-        from_binary,
+        from_json,
         testing::{mock_dependencies, mock_env, mock_info},
         Addr, HexBinary, StdError,
     };
@@ -61,7 +61,7 @@ mod tests {
         )
         .unwrap();
 
-        let validators: Vec<UserFriendlyValidator> = from_binary(&validators_bin).unwrap();
+        let validators: Vec<UserFriendlyValidator> = from_json(&validators_bin).unwrap();
 
         // choose two random indexes for testing
         assert_eq!(
@@ -85,7 +85,7 @@ mod tests {
         assert_eq!(validators.len(), 14usize);
 
         let config: ConfigResponse =
-            from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+            from_json(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
         assert_eq!(
             config,
             ConfigResponse {
@@ -133,7 +133,7 @@ mod tests {
         .unwrap();
 
         let config: ConfigResponse =
-            from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+            from_json(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
         assert_eq!(
             config,
             ConfigResponse {
@@ -169,7 +169,7 @@ mod tests {
         )
         .unwrap();
 
-        let validators: Vec<UserFriendlyValidator> = from_binary(&validators_bin).unwrap();
+        let validators: Vec<UserFriendlyValidator> = from_json(&validators_bin).unwrap();
 
         // choose two random indexes for testing
         assert_eq!(
@@ -304,7 +304,7 @@ mod tests {
         .unwrap_err();
         assert!(err.to_string().contains("not enough votes"));
         // before verify success, query  failed
-        let is_verified_block: bool = from_binary(
+        let is_verified_block: bool = from_json(
             &query(
                 deps.as_ref(),
                 mock_env(),
@@ -331,7 +331,7 @@ mod tests {
         .unwrap();
 
         // pick random validator and ensure they are signed
-        let is_signed_by_validator: bool = from_binary(
+        let is_signed_by_validator: bool = from_json(
             &query(
                 deps.as_ref(),
                 mock_env(),
@@ -345,7 +345,7 @@ mod tests {
         .unwrap();
         assert_eq!(is_signed_by_validator, true);
 
-        let is_verified_block: bool = from_binary(
+        let is_verified_block: bool = from_json(
             &query(
                 deps.as_ref(),
                 mock_env(),
@@ -392,7 +392,7 @@ mod tests {
         .unwrap();
 
         // query validator list, should return some validators
-        let validators: Vec<UserFriendlyValidator> = from_binary(
+        let validators: Vec<UserFriendlyValidator> = from_json(
             &query(
                 deps.as_ref(),
                 mock_env(),
@@ -428,7 +428,7 @@ mod tests {
         assert_eq!(validators.len(), 14usize);
 
         // after reset, the candidate list should be empty
-        let candidates: Vec<UserFriendlyValidator> = from_binary(
+        let candidates: Vec<UserFriendlyValidator> = from_json(
             &query(
                 deps.as_ref(),
                 mock_env(),

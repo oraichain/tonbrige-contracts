@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 
 use std::array::TryFromSliceError;
 
-use cosmwasm_std::{to_binary, Addr, Empty, HexBinary, Order, StdError};
+use cosmwasm_std::{to_json_binary, Addr, Empty, HexBinary, Order, StdError};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw_storage_plus::Bound;
 use tonbridge_parser::to_bytes32;
@@ -218,12 +218,12 @@ pub fn set_verified_block(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_binary(&get_config(deps)?),
+        QueryMsg::Config {} => to_json_binary(&get_config(deps)?),
         QueryMsg::GetCandidatesForValidators {
             start_after,
             limit,
             order,
-        } => to_binary(&get_candidates_for_validators(
+        } => to_json_binary(&get_candidates_for_validators(
             deps,
             start_after,
             limit,
@@ -233,13 +233,13 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             start_after,
             limit,
             order,
-        } => to_binary(&get_validators(deps, start_after, limit, order)?),
-        QueryMsg::IsVerifiedBlock { root_hash } => to_binary(&is_verified_block(deps, root_hash)?),
+        } => to_json_binary(&get_validators(deps, start_after, limit, order)?),
+        QueryMsg::IsVerifiedBlock { root_hash } => to_json_binary(&is_verified_block(deps, root_hash)?),
         QueryMsg::IsSignedByValidator {
             validator_node_id,
             root_hash,
-        } => to_binary(&is_signed_by_validator(deps, validator_node_id, root_hash)?),
-        QueryMsg::NextValidatorUpdated {} => to_binary(&next_validator_updated(deps)?),
+        } => to_json_binary(&is_signed_by_validator(deps, validator_node_id, root_hash)?),
+        QueryMsg::NextValidatorUpdated {} => to_json_binary(&next_validator_updated(deps)?),
     }
 }
 

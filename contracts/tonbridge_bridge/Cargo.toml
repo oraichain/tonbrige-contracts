@@ -33,9 +33,11 @@ thiserror = { workspace = true }
 tonbridge-bridge = { workspace = true }
 tonlib = { workspace = true }
 oraiswap = { workspace = true }
-
+token-bindings = { workspace = true }
+tokenfactory = { workspace = true }
+derive_more = { workspace = true }
 
 [dev-dependencies]
-cw-multi-test = { workspace = true }
+cosmwasm-testing-util = { workspace = true }
 cw-tonbridge-validator = { workspace = true }
 cw20-base = { workspace = true }

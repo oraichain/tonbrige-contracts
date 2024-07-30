@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{Api, Uint128};
+use cosmwasm_std::{to_json_binary, Addr, Api, CosmosMsg, StdError, Uint128, WasmMsg};
 
-use oraiswap::asset::AssetInfo;
+use cw20::{Cw20Contract, Cw20ExecuteMsg};
+use oraiswap::asset::{Asset, AssetInfo};
 use tonbridge_parser::{
     transaction_parser::{RECEIVE_PACKET_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
     types::Status,
@@ -96,6 +97,71 @@ pub fn build_ack_commitment(
 
     let commitment: Vec<u8> = cell_builder.build()?.cell_hash()?;
     Ok(commitment)
+}
+
+pub fn build_mint_asset_msg(
+    token_factory: Option<Addr>,
+    asset: &Asset,
+    receiver: String,
+) -> Result<CosmosMsg, ContractError> {
+    let msg = match &asset.info {
+        AssetInfo::NativeToken { denom } => {
+            if token_factory.is_none() {
+                return Err(ContractError::Std(StdError::generic_err(
+                    "Missing factory contract",
+                )));
+            }
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: token_factory.unwrap().to_string(),
+                msg: to_json_binary(&tokenfactory::msg::ExecuteMsg::MintTokens {
+                    denom: denom.to_owned(),
+                    amount: asset.amount,
+                    mint_to_address: receiver,
+                })?,
+                funds: vec![],
+            })
+        }
+        AssetInfo::Token { contract_addr } => {
+            Cw20Contract(contract_addr.to_owned()).call(Cw20ExecuteMsg::Mint {
+                recipient: receiver,
+                amount: asset.amount,
+            })?
+        }
+    };
+
+    Ok(msg)
+}
+
+pub fn build_burn_asset_msg(
+    token_factory: Option<Addr>,
+    asset: &Asset,
+    from_address: String,
+) -> Result<CosmosMsg, ContractError> {
+    let msg = match &asset.info {
+        AssetInfo::NativeToken { denom } => {
+            if token_factory.is_none() {
+                return Err(ContractError::Std(StdError::generic_err(
+                    "Missing factory contract",
+                )));
+            }
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: token_factory.unwrap().to_string(),
+                msg: to_json_binary(&tokenfactory::msg::ExecuteMsg::BurnTokens {
+                    denom: denom.to_owned(),
+                    amount: asset.amount,
+                    burn_from_address: from_address,
+                })?,
+                funds: vec![],
+            })
+        }
+        AssetInfo::Token { contract_addr } => {
+            Cw20Contract(contract_addr.to_owned()).call(Cw20ExecuteMsg::Burn {
+                amount: asset.amount,
+            })?
+        }
+    };
+
+    Ok(msg)
 }
 
 #[cfg(test)]
