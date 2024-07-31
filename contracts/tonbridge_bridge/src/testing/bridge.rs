@@ -3,8 +3,8 @@ use std::str::FromStr;
 use cosmwasm_std::{
     attr, coin,
     testing::{mock_dependencies, mock_env, mock_info},
-    to_json_binary, Addr, Api, BlockInfo, CanonicalAddr, CosmosMsg, HexBinary, SubMsg, Timestamp,
-    Uint128, Uint256, WasmMsg,
+    to_json_binary, Addr, Api, BankMsg, BlockInfo, CanonicalAddr, Coin, CosmosMsg, HexBinary,
+    StdError, SubMsg, Timestamp, Uint128, Uint256, WasmMsg,
 };
 
 use cosmwasm_testing_util::Executor;
@@ -24,12 +24,12 @@ use tonbridge_bridge::{
         BridgeToTonMsg, ChannelResponse, ExecuteMsg, InstantiateMsg, QueryMsg as BridgeQueryMsg,
         RegisterDenomMsg, UpdatePairMsg,
     },
-    state::{Config, MappingMetadata, Ratio, TokenFee},
+    state::{ChannelState, Config, MappingMetadata, Ratio, TimeoutSendPacket, TokenFee},
 };
 use tonbridge_parser::{
     transaction_parser::{RECEIVE_PACKET_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
     types::{BridgePacketData, Status, VdataHex},
-    OPCODE_2,
+    OPCODE_1, OPCODE_2,
 };
 use tonlib::{
     address::TonAddress,
@@ -38,13 +38,13 @@ use tonlib::{
 };
 
 use crate::{
-    adapter::{handle_packet_receive, DEFAULT_TIMEOUT},
+    adapter::{handle_packet_receive, on_acknowledgment, DEFAULT_TIMEOUT},
     bridge::Bridge,
     channel::increase_channel_balance,
     contract::{execute, instantiate},
     error::ContractError,
     helper::{build_ack_commitment, build_burn_asset_msg, build_mint_asset_msg},
-    state::{ACK_COMMITMENT, CONFIG, TOKEN_FEE},
+    state::{ACK_COMMITMENT, CONFIG, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET, TOKEN_FEE},
     testing::mock::{new_mock_app, new_mock_app_with_boc, MockApp},
 };
 
@@ -1089,6 +1089,140 @@ fn test_happy_case_token_factory() {
     println!("Res: {:?}", res);
     let sender_balance = app.query_balance(owner.clone(), denom.clone()).unwrap();
     assert_eq!(sender_balance.u128(), 10000);
+}
+
+#[test]
+fn test_refund_bridge_to_ton() {
+    let mut deps = mock_dependencies();
+    instantiate(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("owner", &vec![]),
+        InstantiateMsg {
+            validator_contract_addr: Addr::unchecked("validator_contract_addr"),
+            bridge_adapter: "bridge_adapter".to_string(),
+            relayer_fee_token: AssetInfo::Token {
+                contract_addr: Addr::unchecked("orai"),
+            },
+            token_fee_receiver: Addr::unchecked("token_fee_receiver"),
+            relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
+            relayer_fee: Some(Uint128::from(1000u128)),
+            swap_router_contract: "swap_router_contract".to_string(),
+            token_factory_addr: Some(Addr::unchecked("token_factory")),
+        },
+    )
+    .unwrap();
+
+    let seq = 1u64;
+
+    let send_packet = TimeoutSendPacket {
+        local_refund_asset: Asset {
+            info: AssetInfo::NativeToken {
+                denom: "ton_orai".to_string(),
+            },
+            amount: Uint128::new(1000000),
+        },
+        remote_denom: "ton".to_string(),
+        remote_amount: Uint128::new(1000000000),
+        sender: "sender".to_string(),
+        timeout_timestamp: mock_env().block.time.seconds(),
+        opcode: OPCODE_1,
+    };
+    REMOTE_INITIATED_CHANNEL_STATE
+        .save(deps.as_mut().storage, "ton", &ChannelState::default())
+        .unwrap();
+
+    // case 1: not found send_packet => error
+    let mut cell_builder = CellBuilder::new();
+    cell_builder
+        .store_slice(&SEND_TO_TON_MAGIC_NUMBER.to_be_bytes())
+        .unwrap();
+    cell_builder.store_slice(&seq.to_be_bytes()).unwrap();
+    cell_builder.store_u8(2, 2).unwrap();
+    let cell = cell_builder.build().unwrap();
+
+    let err = on_acknowledgment(deps.as_mut(), &cell);
+    assert!(err.is_err());
+
+    // refund success (mint token)
+    // before refund, channel balance = 0;
+    let channel_balance = REMOTE_INITIATED_CHANNEL_STATE
+        .load(deps.as_ref().storage, "ton")
+        .unwrap();
+    assert_eq!(
+        channel_balance,
+        ChannelState {
+            outstanding: Uint128::new(0),
+            total_sent: Uint128::new(0)
+        }
+    );
+
+    SEND_PACKET
+        .save(deps.as_mut().storage, seq, &send_packet)
+        .unwrap();
+
+    let res = on_acknowledgment(deps.as_mut(), &cell).unwrap();
+    // before refund, channel balance updated;
+    let channel_balance = REMOTE_INITIATED_CHANNEL_STATE
+        .load(deps.as_ref().storage, "ton")
+        .unwrap();
+    assert_eq!(
+        channel_balance,
+        ChannelState {
+            outstanding: Uint128::new(1000000000),
+            total_sent: Uint128::new(1000000000)
+        }
+    );
+    assert_eq!(
+        res.1,
+        vec![
+            attr("action", "acknowledgment"),
+            attr("seq", "1"),
+            attr("status", "Timeout")
+        ]
+    );
+    assert_eq!(
+        res.0,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "token_factory".to_string(),
+            msg: to_json_binary(&tokenfactory::msg::ExecuteMsg::MintTokens {
+                denom: "ton_orai".to_string(),
+                amount: Uint128::new(1000000),
+                mint_to_address: "sender".to_string(),
+            })
+            .unwrap(),
+            funds: vec![],
+        })]
+    );
+
+    // refund by sendToken
+    let send_packet = TimeoutSendPacket {
+        local_refund_asset: Asset {
+            info: AssetInfo::NativeToken {
+                denom: "ton_orai".to_string(),
+            },
+            amount: Uint128::new(1000000),
+        },
+        remote_denom: "ton".to_string(),
+        remote_amount: Uint128::new(1000000000),
+        sender: "sender".to_string(),
+        timeout_timestamp: mock_env().block.time.seconds(),
+        opcode: OPCODE_2,
+    };
+    SEND_PACKET
+        .save(deps.as_mut().storage, seq, &send_packet)
+        .unwrap();
+    let res = on_acknowledgment(deps.as_mut(), &cell).unwrap();
+    assert_eq!(
+        res.0,
+        vec![CosmosMsg::Bank(BankMsg::Send {
+            to_address: "sender".to_string(),
+            amount: vec![Coin {
+                denom: "ton_orai".to_string(),
+                amount: Uint128::new(1000000),
+            }]
+        })]
+    );
 }
 
 // FIXME: Wrong canonical address length

@@ -127,6 +127,13 @@ pub fn on_acknowledgment(
     if ack.status.ne(&Status::Success) {
         let send_packet = SEND_PACKET.load(deps.storage, ack.seq)?;
 
+        // increase channel balance
+        increase_channel_balance(
+            deps.storage,
+            &send_packet.remote_denom,
+            send_packet.remote_amount,
+        )?;
+
         if send_packet.opcode == OPCODE_1 {
             let config = CONFIG.load(deps.storage)?;
             let msg = build_mint_asset_msg(
@@ -380,6 +387,8 @@ pub fn handle_bridge_to_ton(
                 info: mapping.asset_info,
                 amount: local_amount,
             },
+            remote_denom: msg.denom.clone(),
+            remote_amount,
             timeout_timestamp,
             opcode: mapping.opcode,
         },

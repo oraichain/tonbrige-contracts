@@ -56,6 +56,8 @@ pub struct Config {
 #[cw_serde]
 pub struct TimeoutSendPacket {
     pub local_refund_asset: Asset,
+    pub remote_denom: String,
+    pub remote_amount: Uint128,
     pub sender: String,
     pub timeout_timestamp: u64,
     pub opcode: Bytes32,
