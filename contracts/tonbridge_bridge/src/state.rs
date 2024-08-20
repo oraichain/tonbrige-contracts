@@ -2,7 +2,9 @@ use cosmwasm_std::Uint256;
 use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 
 use cw_controllers::Admin;
-use tonbridge_bridge::state::{ChannelState, Config, MappingMetadata, Ratio, TimeoutSendPacket};
+use tonbridge_bridge::state::{
+    ChannelState, Config, MappingMetadata, Ratio, TempUniversalSwap, TimeoutSendPacket,
+};
 use tonbridge_parser::types::Bytes32;
 
 /// Owner admin
@@ -19,6 +21,7 @@ pub const SEND_PACKET: Map<u64, TimeoutSendPacket> = Map::new("send_packet");
 pub const LAST_PACKET_SEQ: Item<u64> = Item::new("last_packet_seq"); // mapping: chanel->seq
 pub const SEND_PACKET_COMMITMENT: Map<u64, Uint256> = Map::new("send_packet_commitment"); // cell hash of send_packet
 pub const ACK_COMMITMENT: Map<u64, Uint256> = Map::new("ack_commitment");
+pub const TEMP_UNIVERSAL_SWAP: Item<TempUniversalSwap> = Item::new("temp_universal_swap");
 
 // =============================== Reference from: https://github.com/oraichain/ibc-bridge-wasm.git
 /// This channel state is used when a REMOTE chain initiates ibc transfer to LOCAL chain

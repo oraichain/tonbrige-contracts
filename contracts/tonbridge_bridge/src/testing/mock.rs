@@ -85,6 +85,7 @@ impl MockApp {
                     relayer_fee: None,
                     swap_router_contract: "router".to_string(),
                     token_factory_addr: Some(token_factory_addr.clone()),
+                    osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
                 },
                 &vec![],
                 "bridge",

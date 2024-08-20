@@ -45,7 +45,8 @@ fn test_instantiate_contract() {
             token_fee_receiver: Addr::unchecked("token_fee"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee"),
             swap_router_contract: RouterController("router".to_string()),
-            token_factory_addr: Some(token_factory_addr)
+            token_factory_addr: Some(token_factory_addr),
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
         }
     );
     let _owner: Addr = app
@@ -158,7 +159,8 @@ fn test_update_config() {
             token_fee_receiver: Addr::unchecked("new_token_fee"),
             relayer_fee_receiver: Addr::unchecked("new_relayer_fee"),
             swap_router_contract: RouterController("new_router".to_string()),
-            token_factory_addr: Some(token_factory_addr)
+            token_factory_addr: Some(token_factory_addr),
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
         }
     );
 }

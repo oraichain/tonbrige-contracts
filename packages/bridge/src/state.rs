@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Uint128};
+use cosmwasm_std::{Addr, Uint128, Uint256};
 use oraiswap::{
     asset::{Asset, AssetInfo},
     router::RouterController,
@@ -51,6 +51,7 @@ pub struct Config {
     pub relayer_fee_receiver: Addr,
     pub swap_router_contract: RouterController,
     pub token_factory_addr: Option<Addr>,
+    pub osor_entrypoint_contract: Addr,
 }
 
 #[cw_serde]
@@ -61,4 +62,11 @@ pub struct TimeoutSendPacket {
     pub sender: String,
     pub timeout_timestamp: u64,
     pub opcode: Bytes32,
+}
+
+#[cw_serde]
+pub struct TempUniversalSwap {
+    pub seq: u64,
+    pub err_commitment: Uint256,
+    pub burn_asset: Option<Asset>,
 }

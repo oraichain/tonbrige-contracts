@@ -55,4 +55,7 @@ pub enum ContractError {
 
     #[error("Duplicate receive packet sequence")]
     ReceiveSeqDuplicated {},
+
+    #[error("Got a submessage reply with unknown id: {id}")]
+    UnknownReplyId { id: u64 },
 }

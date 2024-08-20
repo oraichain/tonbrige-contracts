@@ -350,6 +350,7 @@ fn test_bridge_native_to_ton() {
             relayer_fee: None,
             swap_router_contract: "swap_router_contract".to_string(),
             token_factory_addr: None,
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
         },
     )
     .unwrap();
@@ -494,6 +495,7 @@ fn test_bridge_cw20_to_ton() {
             relayer_fee: None,
             swap_router_contract: "swap_router_contract".to_string(),
             token_factory_addr: None,
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
         },
     )
     .unwrap();
@@ -593,6 +595,7 @@ fn test_bridge_to_ton_with_fee() {
             relayer_fee: Some(Uint128::from(1000u128)),
             swap_router_contract: "swap_router_contract".to_string(),
             token_factory_addr: None,
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
         },
     )
     .unwrap();
@@ -1109,6 +1112,7 @@ fn test_refund_bridge_to_ton() {
             relayer_fee: Some(Uint128::from(1000u128)),
             swap_router_contract: "swap_router_contract".to_string(),
             token_factory_addr: Some(Addr::unchecked("token_factory")),
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
         },
     )
     .unwrap();

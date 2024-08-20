@@ -1,13 +1,14 @@
 use cosmwasm_std::{
-    attr, Addr, Api, Attribute, CosmosMsg, DepsMut, Env, HexBinary, QuerierWrapper, Response,
-    Storage, Uint256,
+    attr, to_json_binary, Addr, Api, Attribute, CosmosMsg, DepsMut, Env, HexBinary, QuerierWrapper,
+    Response, Storage, SubMsg, Uint256,
 };
 
 use oraiswap::asset::Asset;
+use skip::entry_point::ExecuteMsg as EntryPointExecuteMsg;
 use tonbridge_bridge::{
     amount::{convert_local_to_remote, convert_remote_to_local, Amount},
     msg::BridgeToTonMsg,
-    state::{MappingMetadata, TimeoutSendPacket},
+    state::{MappingMetadata, TempUniversalSwap, TimeoutSendPacket},
 };
 use tonbridge_parser::{
     transaction_parser::{
@@ -26,7 +27,7 @@ use crate::{
     fee::process_deduct_fee,
     helper::{
         build_ack_commitment, build_bridge_to_ton_commitment, build_burn_asset_msg,
-        build_mint_asset_msg, is_expired, parse_asset_info_denom,
+        build_mint_asset_msg, is_expired, parse_asset_info_denom, parse_memo,
     },
     state::{
         ics20_denoms, ACK_COMMITMENT, CONFIG, LAST_PACKET_SEQ, SEND_PACKET, SEND_PACKET_COMMITMENT,
@@ -34,6 +35,7 @@ use crate::{
 };
 
 pub const DEFAULT_TIMEOUT: u64 = 3600; // 3600s
+pub const UNIVERSAL_SWAP_ERROR_ID: u64 = 1;
 
 pub fn read_transaction(
     deps: DepsMut,
@@ -43,7 +45,7 @@ pub fn read_transaction(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let bridge = Bridge::new(config.validator_contract_addr);
-    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    let mut cosmos_msgs: Vec<SubMsg> = vec![];
     let mut attrs: Vec<Attribute> = vec![];
     let transaction = bridge.read_transaction(
         deps.storage,
@@ -66,7 +68,7 @@ pub fn read_transaction(
             // ack
             SEND_TO_TON_MAGIC_NUMBER => {
                 let mut res = on_acknowledgment(deps, &cell)?;
-                cosmos_msgs.append(&mut res.0);
+                cosmos_msgs.append(&mut res.0.into_iter().map(SubMsg::new).collect());
                 attrs.append(&mut res.1);
             }
             // on receive packet
@@ -83,16 +85,16 @@ pub fn read_transaction(
     }
     Ok(Response::new()
         .add_attributes(attrs)
-        .add_messages(cosmos_msgs))
+        .add_submessages(cosmos_msgs))
 }
 
 fn on_packet_receive(
     deps: DepsMut,
     env: Env,
     cell: &Cell,
-) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
+) -> Result<(Vec<SubMsg>, Vec<Attribute>), ContractError> {
     let tx_parser = TransactionParser::default();
-    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    let mut cosmos_msgs: Vec<SubMsg> = vec![];
     let mut attrs: Vec<Attribute> = vec![attr("action", "send_to_cosmos")];
 
     let packet_data = tx_parser.parse_packet_data(cell)?.to_pretty()?;
@@ -100,6 +102,7 @@ fn on_packet_receive(
     let mapping = ics20_denoms().load(deps.storage, &packet_data.src_denom)?;
 
     let mut res = handle_packet_receive(
+        &env,
         deps.storage,
         deps.api,
         &deps.querier,
@@ -160,13 +163,14 @@ pub fn on_acknowledgment(
 }
 
 pub fn handle_packet_receive(
+    env: &Env,
     storage: &mut dyn Storage,
     api: &dyn Api,
     querier: &QuerierWrapper,
     current_timestamp: u64,
     data: BridgePacketData,
     mapping: MappingMetadata,
-) -> Result<(Vec<CosmosMsg>, Vec<Attribute>), ContractError> {
+) -> Result<(Vec<SubMsg>, Vec<Attribute>), ContractError> {
     // check unique sequence
     if ACK_COMMITMENT.may_load(storage, data.seq)?.is_some() {
         return Err(ContractError::ReceiveSeqDuplicated {});
@@ -219,7 +223,7 @@ pub fn handle_packet_receive(
     // increase first
     increase_channel_balance(storage, &data.src_denom, data.amount)?;
 
-    let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+    let mut cosmos_msgs: Vec<SubMsg> = vec![];
 
     let to_send = Amount::from_parts(
         parse_asset_info_denom(&mapping.asset_info),
@@ -234,18 +238,18 @@ pub fn handle_packet_receive(
     let local_amount = fee_data.deducted_amount;
 
     if !fee_data.token_fee.is_empty() {
-        cosmos_msgs.push(
+        cosmos_msgs.push(SubMsg::new(
             fee_data
                 .token_fee
                 .send_amount(config.token_fee_receiver.into_string(), None),
-        )
+        ))
     }
     if !fee_data.relayer_fee.is_empty() {
-        cosmos_msgs.push(
+        cosmos_msgs.push(SubMsg::new(
             fee_data
                 .relayer_fee
                 .send_amount(config.relayer_fee_receiver.to_string(), None),
-        )
+        ))
     }
 
     attrs.append(&mut vec![
@@ -261,15 +265,68 @@ pub fn handle_packet_receive(
         return Ok((cosmos_msgs, attrs));
     }
 
-    let msg = Asset {
+    let return_amount = Asset {
         info: mapping.asset_info.clone(),
         amount: local_amount,
     };
-    if mapping.opcode == OPCODE_1 {
-        let msg = build_mint_asset_msg(config.token_factory_addr, &msg, recipient.to_string())?;
-        cosmos_msgs.push(msg);
+
+    let memo = parse_memo(&data.memo)?;
+    if !memo.is_empty() {
+        // build error commitment to use for universal swap error
+        let err_commitment = build_ack_commitment(
+            data.seq,
+            data.token_origin,
+            data.amount,
+            data.timeout_timestamp,
+            data.receiver.as_slice(),
+            &data.src_denom,
+            &data.src_sender,
+            Status::Error,
+        )?;
+
+        let mut temp_universal_swap = TempUniversalSwap {
+            seq: data.seq,
+            err_commitment: Uint256::from_be_bytes(err_commitment.as_slice().try_into()?),
+            burn_asset: None,
+        };
+
+        if mapping.opcode == OPCODE_1 {
+            // mint for this contract
+            let msg = build_mint_asset_msg(
+                config.token_factory_addr,
+                &return_amount,
+                env.contract.address.to_string(),
+            )?;
+            cosmos_msgs.push(SubMsg::new(msg));
+            temp_universal_swap.burn_asset = Some(return_amount);
+        }
+        let swap_then_post_action_msg =
+            Amount::from_parts(parse_asset_info_denom(&mapping.asset_info), local_amount)
+                .send_amount(
+                    config.osor_entrypoint_contract.to_string(),
+                    Some(to_json_binary(&EntryPointExecuteMsg::UniversalSwap {
+                        memo,
+                    })?),
+                );
+        cosmos_msgs.push(SubMsg::reply_on_error(
+            swap_then_post_action_msg,
+            UNIVERSAL_SWAP_ERROR_ID,
+        ));
     } else {
-        cosmos_msgs.push(msg.into_msg(None, querier, recipient.clone())?);
+        if mapping.opcode == OPCODE_1 {
+            let msg = build_mint_asset_msg(
+                config.token_factory_addr,
+                &return_amount,
+                recipient.to_string(),
+            )?;
+            cosmos_msgs.push(SubMsg::new(msg));
+        } else {
+            cosmos_msgs.push(SubMsg::new(return_amount.into_msg(
+                None,
+                querier,
+                recipient.clone(),
+            )?));
+        }
     }
 
     // store ack commitment

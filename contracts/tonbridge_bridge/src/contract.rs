@@ -1,6 +1,9 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{from_json, to_json_binary, wasm_execute, Addr, Empty, Order, Uint128};
+use cosmwasm_std::{
+    from_json, to_json_binary, wasm_execute, Addr, CosmosMsg, Empty, Order, Reply, SubMsgResult,
+    Uint128,
+};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw_utils::{nonpayable, one_coin};
@@ -15,13 +18,14 @@ use tonbridge_bridge::msg::{
 use tonbridge_bridge::state::{Config, MappingMetadata, TokenFee};
 use tonbridge_parser::to_bytes32;
 
-use crate::adapter::{handle_bridge_to_ton, read_transaction};
+use crate::adapter::{handle_bridge_to_ton, read_transaction, UNIVERSAL_SWAP_ERROR_ID};
 
 use crate::error::ContractError;
 
+use crate::helper::build_burn_asset_msg;
 use crate::state::{
     ics20_denoms, ACK_COMMITMENT, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
-    SEND_PACKET_COMMITMENT, TOKEN_FEE,
+    SEND_PACKET_COMMITMENT, TEMP_UNIVERSAL_SWAP, TOKEN_FEE,
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -42,6 +46,7 @@ pub fn instantiate(
             relayer_fee: msg.relayer_fee.unwrap_or_default(),
             swap_router_contract: RouterController(msg.swap_router_contract),
             token_factory_addr: msg.token_factory_addr,
+            osor_entrypoint_contract: msg.osor_entrypoint_contract,
         },
     )?;
     OWNER.set(deps, Some(info.sender))?;
@@ -94,6 +99,40 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
         ExecuteMsg::RegisterDenom(msg) => register_denom(deps, info, msg),
     }
+}
+
+#[entry_point]
+pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, ContractError> {
+    if let SubMsgResult::Err(err) = reply.result {
+        return match reply.id {
+            UNIVERSAL_SWAP_ERROR_ID => {
+                let universal_swap_data = TEMP_UNIVERSAL_SWAP.load(deps.storage)?;
+                let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
+                // set ack error and burn
+                ACK_COMMITMENT.save(
+                    deps.storage,
+                    universal_swap_data.seq,
+                    &universal_swap_data.err_commitment,
+                )?;
+                if let Some(asset) = universal_swap_data.burn_asset {
+                    let config = CONFIG.load(deps.storage)?;
+                    cosmos_msgs.push(build_burn_asset_msg(
+                        config.token_factory_addr,
+                        &asset,
+                        env.contract.address.to_string(),
+                    )?);
+                }
+
+                Ok(Response::new()
+                    .add_attribute("action", "universal_swap_error")
+                    .add_attribute("error_trying_to_call_entrypoint_for_universal_swap", err)
+                    .add_messages(cosmos_msgs))
+            }
+            _ => Err(ContractError::UnknownReplyId { id: reply.id }),
+        };
+    }
+    // default response
+    Ok(Response::new())
 }
 
 pub fn execute_update_owner(
