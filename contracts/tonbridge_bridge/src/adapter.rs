@@ -237,8 +237,6 @@ pub fn handle_packet_receive(
 
     let fee_data = process_deduct_fee(
         storage,
-        querier,
-        api,
         data.src_denom.clone(),
         to_send,
         mapping.relayer_fee,
@@ -362,8 +360,6 @@ pub fn handle_bridge_to_ton(
 
     let fee_data = process_deduct_fee(
         deps.storage,
-        &deps.querier,
-        deps.api,
         msg.denom.clone(),
         amount.clone(),
         mapping.relayer_fee,

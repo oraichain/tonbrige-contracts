@@ -1,4 +1,4 @@
-use cosmwasm_std::{Api, Decimal, QuerierWrapper, StdResult, Storage, Uint128};
+use cosmwasm_std::{Decimal, QuerierWrapper, StdResult, Storage, Uint128};
 
 use oraiswap::{
     asset::AssetInfo,
@@ -7,15 +7,10 @@ use oraiswap::{
 use std::ops::Mul;
 use tonbridge_bridge::{amount::Amount, msg::FeeData, state::Ratio};
 
-use crate::{
-    helper::denom_to_asset_info,
-    state::{CONFIG, TOKEN_FEE},
-};
+use crate::state::TOKEN_FEE;
 
 pub fn process_deduct_fee(
     storage: &dyn Storage,
-    querier: &QuerierWrapper,
-    api: &dyn Api,
     remote_token_denom: String,
     local_amount: Amount, // local amount
     relayer_fee: Uint128,
@@ -34,9 +29,6 @@ pub fn process_deduct_fee(
         fee_data.token_fee = local_amount;
         return Ok(fee_data);
     }
-
-    // simulate for relayer fee
-    let ask_asset_info = denom_to_asset_info(api, &local_amount.raw_denom());
 
     fee_data.deducted_amount = deducted_amount.checked_sub(relayer_fee).unwrap_or_default();
     fee_data.relayer_fee = Amount::from_parts(local_denom.clone(), relayer_fee);

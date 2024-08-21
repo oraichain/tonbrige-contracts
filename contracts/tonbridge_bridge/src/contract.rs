@@ -1,13 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    from_json, to_json_binary, wasm_execute, Addr, CosmosMsg, Empty, Order, Reply, SubMsgResult,
-    Uint128,
+    from_json, to_json_binary, wasm_execute, Addr, Empty, Order, Reply, SubMsgResult,
 };
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response, StdResult};
 use cw20::Cw20ReceiveMsg;
 use cw_utils::{nonpayable, one_coin};
-use oraiswap::asset::AssetInfo;
 use oraiswap::router::RouterController;
 use tonbridge_bridge::amount::Amount;
 use tonbridge_bridge::msg::{
@@ -22,7 +20,6 @@ use crate::adapter::{handle_bridge_to_ton, read_transaction, UNIVERSAL_SWAP_ERRO
 
 use crate::error::ContractError;
 
-use crate::helper::build_burn_asset_msg;
 use crate::state::{
     ics20_denoms, ACK_COMMITMENT, CONFIG, OWNER, PROCESSED_TXS, REMOTE_INITIATED_CHANNEL_STATE,
     SEND_PACKET_COMMITMENT, TEMP_UNIVERSAL_SWAP, TOKEN_FEE,
@@ -98,39 +95,24 @@ pub fn execute(
 }
 
 #[entry_point]
-pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, ContractError> {
+pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
     if let SubMsgResult::Err(err) = reply.result {
         return match reply.id {
             UNIVERSAL_SWAP_ERROR_ID => {
                 let universal_swap_data = TEMP_UNIVERSAL_SWAP.load(deps.storage)?;
-                let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-                // ACK_COMMITMENT.save(
-                //     deps.storage,
-                //     universal_swap_data.seq,
-                //     &universal_swap_data.err_commitment,
-                // )?;
-                // if let Some(asset) = universal_swap_data.burn_asset {
-                //     let config = CONFIG.load(deps.storage)?;
-                //     cosmos_msgs.push(build_burn_asset_msg(
-                //         config.token_factory_addr,
-                //         &asset,
-                //         env.contract.address.to_string(),
-                //     )?);
-                // }
-                cosmos_msgs.push(
-                    universal_swap_data.return_amount.into_msg(
-                        None,
-                        &deps.querier,
-                        deps.api
-                            .addr_validate(&universal_swap_data.recovery_address)?,
-                    )?,
-                );
+
+                let refund_msg = universal_swap_data.return_amount.into_msg(
+                    None,
+                    &deps.querier,
+                    deps.api
+                        .addr_validate(&universal_swap_data.recovery_address)?,
+                )?;
                 TEMP_UNIVERSAL_SWAP.remove(deps.storage);
 
                 Ok(Response::new()
                     .add_attribute("action", "universal_swap_error")
                     .add_attribute("error_trying_to_call_entrypoint_for_universal_swap", err)
-                    .add_messages(cosmos_msgs))
+                    .add_message(refund_msg))
             }
             _ => Err(ContractError::UnknownReplyId { id: reply.id }),
         };
@@ -229,19 +211,18 @@ pub fn register_denom(
 
     let config = CONFIG.load(deps.storage)?;
 
-    let mut cosmos_msgs = vec![];
-    cosmos_msgs.push(wasm_execute(
+    let create_denom_msg = wasm_execute(
         config.token_factory_addr.unwrap(),
         &tokenfactory::msg::ExecuteMsg::CreateDenom {
             subdenom: msg.subdenom,
             metadata: msg.metadata,
         },
         info.funds,
-    )?);
+    )?;
 
     Ok(Response::new()
-        .add_messages(cosmos_msgs)
-        .add_attribute("action", "register_denom"))
+        .add_attribute("action", "register_denom")
+        .add_message(create_denom_msg))
 }
 
 pub fn execute_delete_mapping_pair(
