@@ -300,7 +300,7 @@ pub fn handle_packet_receive(
             err_commitment: Uint256::from_be_bytes(err_commitment.as_slice().try_into()?),
             // burn_asset: None,
             recovery_address: recipient.into_string(),
-            return_amount: return_amount.clone(),
+            return_amount,
         };
         // temporarily stored for reply_on_error handling if the universal swap fails
         TEMP_UNIVERSAL_SWAP.save(storage, &temp_universal_swap)?;
