@@ -77,12 +77,8 @@ impl MockApp {
                 &tonbridge_bridge::msg::InstantiateMsg {
                     validator_contract_addr: validator_addr.clone(),
                     bridge_adapter: "EQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
-                    relayer_fee_token: AssetInfo::NativeToken {
-                        denom: "orai".to_string(),
-                    },
                     token_fee_receiver: Addr::unchecked("token_fee"),
                     relayer_fee_receiver: Addr::unchecked("relayer_fee"),
-                    relayer_fee: None,
                     swap_router_contract: "router".to_string(),
                     token_factory_addr: Some(token_factory_addr.clone()),
                     osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),

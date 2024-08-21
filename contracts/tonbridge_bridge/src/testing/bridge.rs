@@ -342,12 +342,8 @@ fn test_bridge_native_to_ton() {
         InstantiateMsg {
             validator_contract_addr: Addr::unchecked("validator_contract_addr"),
             bridge_adapter: "bridge_adapter".to_string(),
-            relayer_fee_token: AssetInfo::NativeToken {
-                denom: "orai".to_string(),
-            },
             token_fee_receiver: Addr::unchecked("token_fee_receiver"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
-            relayer_fee: None,
             swap_router_contract: "swap_router_contract".to_string(),
             token_factory_addr: None,
             osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
@@ -398,6 +394,7 @@ fn test_bridge_native_to_ton() {
             local_asset_info_decimals: 6,
             opcode,
             token_origin: 529034805,
+            relayer_fee: Uint128::zero(),
         }),
     )
     .unwrap();
@@ -487,12 +484,8 @@ fn test_bridge_cw20_to_ton() {
         InstantiateMsg {
             validator_contract_addr: Addr::unchecked("validator_contract_addr"),
             bridge_adapter: "bridge_adapter".to_string(),
-            relayer_fee_token: AssetInfo::NativeToken {
-                denom: "orai".to_string(),
-            },
             token_fee_receiver: Addr::unchecked("token_fee_receiver"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
-            relayer_fee: None,
             swap_router_contract: "swap_router_contract".to_string(),
             token_factory_addr: None,
             osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
@@ -516,6 +509,7 @@ fn test_bridge_cw20_to_ton() {
             local_asset_info_decimals: 6,
             opcode,
             token_origin: 529034805,
+            relayer_fee: Uint128::zero(),
         }),
     )
     .unwrap();
@@ -587,12 +581,10 @@ fn test_bridge_to_ton_with_fee() {
         InstantiateMsg {
             validator_contract_addr: Addr::unchecked("validator_contract_addr"),
             bridge_adapter: "bridge_adapter".to_string(),
-            relayer_fee_token: AssetInfo::Token {
-                contract_addr: Addr::unchecked("orai"),
-            },
+
             token_fee_receiver: Addr::unchecked("token_fee_receiver"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
-            relayer_fee: Some(Uint128::from(1000u128)),
+
             swap_router_contract: "swap_router_contract".to_string(),
             token_factory_addr: None,
             osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
@@ -614,8 +606,9 @@ fn test_bridge_to_ton_with_fee() {
             },
             remote_decimals: 6,
             local_asset_info_decimals: 6,
-            opcode,
+            opcode: opcode.clone(),
             token_origin: 529034805,
+            relayer_fee: Uint128::new(1000),
         }),
     )
     .unwrap();
@@ -628,10 +621,8 @@ fn test_bridge_to_ton_with_fee() {
         ExecuteMsg::UpdateConfig {
             validator_contract_addr: None,
             bridge_adapter: None,
-            relayer_fee_token: None,
             token_fee_receiver: None,
             relayer_fee_receiver: None,
-            relayer_fee: None,
             swap_router_contract: None,
             token_fee: Some(vec![TokenFee {
                 token_denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
@@ -723,26 +714,23 @@ fn test_bridge_to_ton_with_fee() {
         ]
     );
 
-    // try change to other relayer fee and we cannot simualate swap, so relayer fee = 0
+    // set relayer fee = 0
 
-    // add token fee
     execute(
         deps.as_mut(),
         mock_env(),
         mock_info("owner", &vec![]),
-        ExecuteMsg::UpdateConfig {
-            validator_contract_addr: None,
-            bridge_adapter: None,
-            relayer_fee_token: Some(AssetInfo::Token {
-                contract_addr: Addr::unchecked("usdc"),
-            }),
-            token_fee_receiver: None,
-            relayer_fee_receiver: None,
-            relayer_fee: None,
-            swap_router_contract: None,
-            token_fee: None,
-            token_factory_addr: None,
-        },
+        ExecuteMsg::UpdateMappingPair(UpdatePairMsg {
+            denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
+            local_asset_info: AssetInfo::Token {
+                contract_addr: Addr::unchecked("orai"),
+            },
+            remote_decimals: 6,
+            local_asset_info_decimals: 6,
+            opcode,
+            token_origin: 529034805,
+            relayer_fee: Uint128::zero(),
+        }),
     )
     .unwrap();
     let res = execute(
@@ -907,10 +895,8 @@ fn test_happy_case_token_factory() {
         msg: to_json_binary(&tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
             validator_contract_addr: Some(validator_addr.clone()),
             bridge_adapter: Some("EQAFzUWT10H8NZtXn5sFrv_MmrfMe3iJJJV_JDHUPR0PdVHh".to_string()),
-            relayer_fee_token: None,
             token_fee_receiver: None,
             relayer_fee_receiver: None,
-            relayer_fee: None,
             swap_router_contract: None,
             token_fee: None,
             token_factory_addr: None,
@@ -950,6 +936,7 @@ fn test_happy_case_token_factory() {
                 local_asset_info_decimals: 6,
                 opcode,
                 token_origin: 529034805,
+                relayer_fee: Uint128::zero(),
             },
         ))
         .unwrap(),
@@ -1104,12 +1091,8 @@ fn test_refund_bridge_to_ton() {
         InstantiateMsg {
             validator_contract_addr: Addr::unchecked("validator_contract_addr"),
             bridge_adapter: "bridge_adapter".to_string(),
-            relayer_fee_token: AssetInfo::Token {
-                contract_addr: Addr::unchecked("orai"),
-            },
             token_fee_receiver: Addr::unchecked("token_fee_receiver"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
-            relayer_fee: Some(Uint128::from(1000u128)),
             swap_router_contract: "swap_router_contract".to_string(),
             token_factory_addr: Some(Addr::unchecked("token_factory")),
             osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),

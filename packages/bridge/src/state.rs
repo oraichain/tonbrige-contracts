@@ -14,6 +14,7 @@ pub struct MappingMetadata {
     pub asset_info_decimals: u8,
     pub opcode: Bytes32,
     pub token_origin: u32, // to determine the source of token
+    pub relayer_fee: Uint128,
 }
 
 #[cw_serde]
@@ -45,8 +46,6 @@ pub struct Ratio {
 pub struct Config {
     pub validator_contract_addr: Addr,
     pub bridge_adapter: String, // bridge adapter on TON
-    pub relayer_fee_token: AssetInfo,
-    pub relayer_fee: Uint128, // This fee depends on the network type, not token type decimals of relayer fee should always be 10^6
     pub token_fee_receiver: Addr,
     pub relayer_fee_receiver: Addr,
     pub swap_router_contract: RouterController,

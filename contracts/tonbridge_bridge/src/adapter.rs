@@ -16,7 +16,7 @@ use tonbridge_parser::{
         SEND_TO_TON_MAGIC_NUMBER,
     },
     types::{BridgePacketData, Status},
-    OPCODE_1,
+    OPCODE_1, OPCODE_2,
 };
 use tonlib::cell::Cell;
 
@@ -235,7 +235,14 @@ pub fn handle_packet_receive(
         )?,
     );
 
-    let fee_data = process_deduct_fee(storage, querier, api, data.src_denom.clone(), to_send)?;
+    let fee_data = process_deduct_fee(
+        storage,
+        querier,
+        api,
+        data.src_denom.clone(),
+        to_send,
+        mapping.relayer_fee,
+    )?;
     let local_amount = fee_data.deducted_amount;
 
     if !fee_data.token_fee.is_empty() {
@@ -277,37 +284,20 @@ pub fn handle_packet_receive(
     } else {
         env.contract.address.to_string()
     };
+
     if mapping.opcode == OPCODE_1 {
         let msg =
             build_mint_asset_msg(config.token_factory_addr, &return_amount, mint_destination)?;
         cosmos_msgs.push(SubMsg::new(msg));
     }
     if !memo.is_empty() {
-        // build error commitment to use for universal swap error
-        // let err_commitment = build_ack_commitment(
-        //     data.seq,
-        //     data.token_origin,
-        //     data.amount,
-        //     data.timeout_timestamp,
-        //     data.receiver.as_slice(),
-        //     &data.src_denom,
-        //     &data.src_sender,
-        //     Status::Error,
-        // )?;
-
         let temp_universal_swap = TempUniversalSwap {
-            // seq: data.seq,
-            // err_commitment: Uint256::from_be_bytes(err_commitment.as_slice().try_into()?),
-            // burn_asset: None,
             recovery_address: recipient.into_string(),
             return_amount,
         };
         // temporarily stored for reply_on_error handling if the universal swap fails
         TEMP_UNIVERSAL_SWAP.save(storage, &temp_universal_swap)?;
 
-        // if mapping.opcode == OPCODE_1 {
-        //     temp_universal_swap.burn_asset = Some(return_amount);
-        // }
         let swap_then_post_action_msg =
             Amount::from_parts(parse_asset_info_denom(&mapping.asset_info), local_amount)
                 .send_amount(
@@ -320,7 +310,7 @@ pub fn handle_packet_receive(
             swap_then_post_action_msg,
             UNIVERSAL_SWAP_ERROR_ID,
         ));
-    } else {
+    } else if mapping.opcode == OPCODE_2 {
         cosmos_msgs.push(SubMsg::new(return_amount.into_msg(
             None,
             querier,
@@ -376,6 +366,7 @@ pub fn handle_bridge_to_ton(
         deps.api,
         msg.denom.clone(),
         amount.clone(),
+        mapping.relayer_fee,
     )?;
 
     let mut cosmos_msgs: Vec<CosmosMsg> = vec![];

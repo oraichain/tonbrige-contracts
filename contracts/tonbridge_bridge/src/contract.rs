@@ -40,10 +40,8 @@ pub fn instantiate(
         &Config {
             validator_contract_addr: msg.validator_contract_addr,
             bridge_adapter: msg.bridge_adapter,
-            relayer_fee_token: msg.relayer_fee_token,
             token_fee_receiver: msg.token_fee_receiver,
             relayer_fee_receiver: msg.relayer_fee_receiver,
-            relayer_fee: msg.relayer_fee.unwrap_or_default(),
             swap_router_contract: RouterController(msg.swap_router_contract),
             token_factory_addr: msg.token_factory_addr,
             osor_entrypoint_contract: msg.osor_entrypoint_contract,
@@ -66,10 +64,10 @@ pub fn execute(
         ExecuteMsg::UpdateConfig {
             validator_contract_addr,
             bridge_adapter,
-            relayer_fee_token,
+
             token_fee_receiver,
             relayer_fee_receiver,
-            relayer_fee,
+
             swap_router_contract,
             token_fee,
             token_factory_addr,
@@ -78,10 +76,8 @@ pub fn execute(
             info,
             validator_contract_addr,
             bridge_adapter,
-            relayer_fee_token,
             token_fee_receiver,
             relayer_fee_receiver,
-            relayer_fee,
             swap_router_contract,
             token_fee,
             token_factory_addr,
@@ -162,10 +158,8 @@ pub fn execute_update_config(
     info: MessageInfo,
     validator_contract_addr: Option<Addr>,
     bridge_adapter: Option<String>,
-    relayer_fee_token: Option<AssetInfo>,
     token_fee_receiver: Option<Addr>,
     relayer_fee_receiver: Option<Addr>,
-    relayer_fee: Option<Uint128>,
     swap_router_contract: Option<String>,
     token_fee: Option<Vec<TokenFee>>,
     token_factory_addr: Option<Addr>,
@@ -186,17 +180,11 @@ pub fn execute_update_config(
     if let Some(bridge_adapter) = bridge_adapter {
         config.bridge_adapter = bridge_adapter;
     }
-    if let Some(relayer_fee_token) = relayer_fee_token {
-        config.relayer_fee_token = relayer_fee_token;
-    }
     if let Some(token_fee_receiver) = token_fee_receiver {
         config.token_fee_receiver = token_fee_receiver;
     }
     if let Some(relayer_fee_receiver) = relayer_fee_receiver {
         config.relayer_fee_receiver = relayer_fee_receiver;
-    }
-    if let Some(relayer_fee) = relayer_fee {
-        config.relayer_fee = relayer_fee;
     }
     if let Some(swap_router_contract) = swap_router_contract {
         config.swap_router_contract = RouterController(swap_router_contract);
@@ -226,6 +214,7 @@ pub fn update_mapping_pair(
             asset_info_decimals: msg.local_asset_info_decimals,
             opcode: to_bytes32(&msg.opcode)?,
             token_origin: msg.token_origin,
+            relayer_fee: msg.relayer_fee,
         },
     )?;
     Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
