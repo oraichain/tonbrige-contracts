@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{to_json_binary, Addr, Api, CosmosMsg, StdError, Uint128, WasmMsg};
+use cosmwasm_std::{to_json_binary, Addr, Api, Binary, CosmosMsg, StdError, Uint128, WasmMsg};
 
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
 use cw_storage_plus::KeyDeserialize;
@@ -168,13 +168,13 @@ pub fn build_burn_asset_msg(
     Ok(msg)
 }
 
-pub fn parse_memo(cell: &Option<Cell>) -> Result<String, ContractError> {
+pub fn parse_memo(cell: &Option<Cell>) -> Result<Binary, ContractError> {
     if let Some(cell) = cell {
         let mut memo = vec![];
         cell.load_buffer(&mut memo)?;
-        Ok(String::from_vec(memo)?)
+        Ok(Binary::from(memo))
     } else {
-        Ok(String::default())
+        Ok(Binary::default())
     }
 }
 

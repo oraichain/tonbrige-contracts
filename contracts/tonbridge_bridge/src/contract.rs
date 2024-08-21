@@ -114,14 +114,23 @@ pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, Contract
                     universal_swap_data.seq,
                     &universal_swap_data.err_commitment,
                 )?;
-                if let Some(asset) = universal_swap_data.burn_asset {
-                    let config = CONFIG.load(deps.storage)?;
-                    cosmos_msgs.push(build_burn_asset_msg(
-                        config.token_factory_addr,
-                        &asset,
-                        env.contract.address.to_string(),
-                    )?);
-                }
+                // if let Some(asset) = universal_swap_data.burn_asset {
+                //     let config = CONFIG.load(deps.storage)?;
+                //     cosmos_msgs.push(build_burn_asset_msg(
+                //         config.token_factory_addr,
+                //         &asset,
+                //         env.contract.address.to_string(),
+                //     )?);
+                // }
+                cosmos_msgs.push(
+                    universal_swap_data.return_amount.into_msg(
+                        None,
+                        &deps.querier,
+                        deps.api
+                            .addr_validate(&universal_swap_data.recovery_address)?,
+                    )?,
+                );
+                TEMP_UNIVERSAL_SWAP.remove(deps.storage);
 
                 Ok(Response::new()
                     .add_attribute("action", "universal_swap_error")

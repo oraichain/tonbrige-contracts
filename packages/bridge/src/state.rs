@@ -68,5 +68,7 @@ pub struct TimeoutSendPacket {
 pub struct TempUniversalSwap {
     pub seq: u64,
     pub err_commitment: Uint256,
-    pub burn_asset: Option<Asset>,
+    // pub burn_asset: Option<Asset>,
+    pub recovery_address: String,
+    pub return_amount: Asset,
 }

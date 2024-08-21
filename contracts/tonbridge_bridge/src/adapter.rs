@@ -31,6 +31,7 @@ use crate::{
     },
     state::{
         ics20_denoms, ACK_COMMITMENT, CONFIG, LAST_PACKET_SEQ, SEND_PACKET, SEND_PACKET_COMMITMENT,
+        TEMP_UNIVERSAL_SWAP,
     },
 };
 
@@ -271,6 +272,16 @@ pub fn handle_packet_receive(
     };
 
     let memo = parse_memo(&data.memo)?;
+    let mint_destination = if memo.is_empty() {
+        recipient.to_string()
+    } else {
+        env.contract.address.to_string()
+    };
+    if mapping.opcode == OPCODE_1 {
+        let msg =
+            build_mint_asset_msg(config.token_factory_addr, &return_amount, mint_destination)?;
+        cosmos_msgs.push(SubMsg::new(msg));
+    }
     if !memo.is_empty() {
         // build error commitment to use for universal swap error
         let err_commitment = build_ack_commitment(
@@ -284,28 +295,25 @@ pub fn handle_packet_receive(
             Status::Error,
         )?;
 
-        let mut temp_universal_swap = TempUniversalSwap {
+        let temp_universal_swap = TempUniversalSwap {
             seq: data.seq,
             err_commitment: Uint256::from_be_bytes(err_commitment.as_slice().try_into()?),
-            burn_asset: None,
+            // burn_asset: None,
+            recovery_address: recipient.into_string(),
+            return_amount: return_amount.clone(),
         };
+        // temporarily stored for reply_on_error handling if the universal swap fails
+        TEMP_UNIVERSAL_SWAP.save(storage, &temp_universal_swap)?;
 
-        if mapping.opcode == OPCODE_1 {
-            // mint for this contract
-            let msg = build_mint_asset_msg(
-                config.token_factory_addr,
-                &return_amount,
-                env.contract.address.to_string(),
-            )?;
-            cosmos_msgs.push(SubMsg::new(msg));
-            temp_universal_swap.burn_asset = Some(return_amount);
-        }
+        // if mapping.opcode == OPCODE_1 {
+        //     temp_universal_swap.burn_asset = Some(return_amount);
+        // }
         let swap_then_post_action_msg =
             Amount::from_parts(parse_asset_info_denom(&mapping.asset_info), local_amount)
                 .send_amount(
                     config.osor_entrypoint_contract.to_string(),
                     Some(to_json_binary(&EntryPointExecuteMsg::UniversalSwap {
-                        memo,
+                        memo: memo.to_base64(),
                     })?),
                 );
         cosmos_msgs.push(SubMsg::reply_on_error(
@@ -313,20 +321,11 @@ pub fn handle_packet_receive(
             UNIVERSAL_SWAP_ERROR_ID,
         ));
     } else {
-        if mapping.opcode == OPCODE_1 {
-            let msg = build_mint_asset_msg(
-                config.token_factory_addr,
-                &return_amount,
-                recipient.to_string(),
-            )?;
-            cosmos_msgs.push(SubMsg::new(msg));
-        } else {
-            cosmos_msgs.push(SubMsg::new(return_amount.into_msg(
-                None,
-                querier,
-                recipient.clone(),
-            )?));
-        }
+        cosmos_msgs.push(SubMsg::new(return_amount.into_msg(
+            None,
+            querier,
+            recipient.clone(),
+        )?));
     }
 
     // store ack commitment
