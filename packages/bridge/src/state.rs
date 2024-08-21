@@ -14,6 +14,7 @@ pub struct MappingMetadata {
     pub asset_info_decimals: u8,
     pub opcode: Bytes32,
     pub token_origin: u32, // to determine the source of token
+    #[serde(default)]
     pub relayer_fee: Uint128,
 }
 
