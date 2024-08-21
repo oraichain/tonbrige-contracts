@@ -4,7 +4,6 @@ use cosmwasm_std::{Addr, BlockInfo, HexBinary, Timestamp, Uint128};
 use cosmwasm_testing_util::ContractWrapper;
 use cw20::Cw20Coin;
 use derive_more::{Deref, DerefMut};
-use oraiswap::asset::AssetInfo;
 
 pub fn new_mock_app() -> MockApp {
     MockApp::new(None)
