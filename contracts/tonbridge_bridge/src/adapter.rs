@@ -296,8 +296,8 @@ pub fn handle_packet_receive(
         )?;
 
         let temp_universal_swap = TempUniversalSwap {
-            seq: data.seq,
-            err_commitment: Uint256::from_be_bytes(err_commitment.as_slice().try_into()?),
+            // seq: data.seq,
+            // err_commitment: Uint256::from_be_bytes(err_commitment.as_slice().try_into()?),
             // burn_asset: None,
             recovery_address: recipient.into_string(),
             return_amount,

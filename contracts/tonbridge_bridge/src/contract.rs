@@ -108,12 +108,11 @@ pub fn reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, Contract
             UNIVERSAL_SWAP_ERROR_ID => {
                 let universal_swap_data = TEMP_UNIVERSAL_SWAP.load(deps.storage)?;
                 let mut cosmos_msgs: Vec<CosmosMsg> = vec![];
-                // set ack error and burn
-                ACK_COMMITMENT.save(
-                    deps.storage,
-                    universal_swap_data.seq,
-                    &universal_swap_data.err_commitment,
-                )?;
+                // ACK_COMMITMENT.save(
+                //     deps.storage,
+                //     universal_swap_data.seq,
+                //     &universal_swap_data.err_commitment,
+                // )?;
                 // if let Some(asset) = universal_swap_data.burn_asset {
                 //     let config = CONFIG.load(deps.storage)?;
                 //     cosmos_msgs.push(build_burn_asset_msg(
