@@ -1,4 +1,4 @@
-use cosmwasm_std::{Api, Decimal, QuerierWrapper, StdResult, Storage, Uint128};
+use cosmwasm_std::{Decimal, QuerierWrapper, StdResult, Storage, Uint128};
 
 use oraiswap::{
     asset::AssetInfo,
@@ -7,17 +7,13 @@ use oraiswap::{
 use std::ops::Mul;
 use tonbridge_bridge::{amount::Amount, msg::FeeData, state::Ratio};
 
-use crate::{
-    helper::denom_to_asset_info,
-    state::{CONFIG, TOKEN_FEE},
-};
+use crate::state::TOKEN_FEE;
 
 pub fn process_deduct_fee(
     storage: &dyn Storage,
-    querier: &QuerierWrapper,
-    api: &dyn Api,
     remote_token_denom: String,
     local_amount: Amount, // local amount
+    relayer_fee: Uint128,
 ) -> StdResult<FeeData> {
     let local_denom = local_amount.denom();
     let (deducted_amount, token_fee) =
@@ -34,10 +30,6 @@ pub fn process_deduct_fee(
         return Ok(fee_data);
     }
 
-    // simulate for relayer fee
-    let ask_asset_info = denom_to_asset_info(api, &local_amount.raw_denom());
-    let relayer_fee = deduct_relayer_fee(storage, querier, ask_asset_info)?;
-
     fee_data.deducted_amount = deducted_amount.checked_sub(relayer_fee).unwrap_or_default();
     fee_data.relayer_fee = Amount::from_parts(local_denom.clone(), relayer_fee);
     // if the relayer fee makes the final amount 0, then we charge the remaining deducted amount as relayer fee
@@ -46,29 +38,6 @@ pub fn process_deduct_fee(
         return Ok(fee_data);
     }
     Ok(fee_data)
-}
-
-pub fn deduct_relayer_fee(
-    storage: &dyn Storage,
-    querier: &QuerierWrapper,
-    ask_asset_info: AssetInfo,
-) -> StdResult<Uint128> {
-    let config = CONFIG.load(storage)?;
-
-    // no need to deduct fee if no fee is found in the mapping
-    if config.relayer_fee.is_zero() {
-        return Ok(Uint128::from(0u64));
-    }
-
-    let relayer_fee = get_swap_token_amount_out(
-        querier,
-        config.relayer_fee,
-        &config.swap_router_contract,
-        ask_asset_info,
-        config.relayer_fee_token,
-    );
-
-    Ok(relayer_fee)
 }
 
 pub fn deduct_token_fee(

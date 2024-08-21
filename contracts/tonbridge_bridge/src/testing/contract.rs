@@ -38,14 +38,11 @@ fn test_instantiate_contract() {
         Config {
             validator_contract_addr: Addr::unchecked("contract0"),
             bridge_adapter: "EQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
-            relayer_fee_token: AssetInfo::NativeToken {
-                denom: "orai".to_string()
-            },
-            relayer_fee: Uint128::zero(),
             token_fee_receiver: Addr::unchecked("token_fee"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee"),
             swap_router_contract: RouterController("router".to_string()),
-            token_factory_addr: Some(token_factory_addr)
+            token_factory_addr: Some(token_factory_addr),
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
         }
     );
     let _owner: Addr = app
@@ -109,13 +106,12 @@ fn test_update_config() {
         &tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
             validator_contract_addr: None,
             bridge_adapter: None,
-            relayer_fee_token: None,
             token_fee_receiver: None,
             relayer_fee_receiver: None,
-            relayer_fee: None,
             swap_router_contract: None,
             token_fee: None,
             token_factory_addr: None,
+            osor_entrypoint_contract: None,
         },
         &[],
     )
@@ -128,15 +124,12 @@ fn test_update_config() {
         &tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
             validator_contract_addr: Some(Addr::unchecked("contract1")),
             bridge_adapter: Some("DQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string()),
-            relayer_fee_token: Some(AssetInfo::NativeToken {
-                denom: "atom".to_string(),
-            }),
-            relayer_fee: Some(Uint128::one()),
             token_fee_receiver: Some(Addr::unchecked("new_token_fee")),
             relayer_fee_receiver: Some(Addr::unchecked("new_relayer_fee")),
             swap_router_contract: Some("new_router".to_string()),
             token_fee: None,
             token_factory_addr: None,
+            osor_entrypoint_contract: None,
         },
         &[],
     )
@@ -151,14 +144,11 @@ fn test_update_config() {
         Config {
             validator_contract_addr: Addr::unchecked("contract1"),
             bridge_adapter: "DQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
-            relayer_fee_token: AssetInfo::NativeToken {
-                denom: "atom".to_string()
-            },
-            relayer_fee: Uint128::one(),
             token_fee_receiver: Addr::unchecked("new_token_fee"),
             relayer_fee_receiver: Addr::unchecked("new_relayer_fee"),
             swap_router_contract: RouterController("new_router".to_string()),
-            token_factory_addr: Some(token_factory_addr)
+            token_factory_addr: Some(token_factory_addr),
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
         }
     );
 }
@@ -178,10 +168,8 @@ fn test_update_token_fee() {
         &tonbridge_bridge::msg::ExecuteMsg::UpdateConfig {
             validator_contract_addr: None,
             bridge_adapter: None,
-            relayer_fee_token: None,
             token_fee_receiver: None,
             relayer_fee_receiver: None,
-            relayer_fee: None,
             swap_router_contract: None,
             token_fee: Some(vec![TokenFee {
                 token_denom: "orai".to_string(),
@@ -191,6 +179,7 @@ fn test_update_token_fee() {
                 },
             }]),
             token_factory_addr: None,
+            osor_entrypoint_contract: None,
         },
         &[],
     )
@@ -242,6 +231,7 @@ fn test_register_mapping_pair() {
             local_asset_info_decimals: 6,
             opcode: opcode.clone(),
             token_origin: 529034805,
+            relayer_fee: Uint128::zero(),
         }),
         &[],
     )
@@ -260,6 +250,7 @@ fn test_register_mapping_pair() {
             local_asset_info_decimals: 6,
             opcode: opcode.clone(),
             token_origin: 529034805,
+            relayer_fee: Uint128::default(),
         }),
         &[],
     )
@@ -287,7 +278,8 @@ fn test_register_mapping_pair() {
                 remote_decimals: 6,
                 asset_info_decimals: 6,
                 opcode: to_bytes32(&opcode).unwrap(),
-                token_origin: 529034805
+                token_origin: 529034805,
+                relayer_fee: Uint128::default()
             }
         }
     );

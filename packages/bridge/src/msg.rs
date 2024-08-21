@@ -13,12 +13,12 @@ use crate::{
 pub struct InstantiateMsg {
     pub validator_contract_addr: Addr,
     pub bridge_adapter: String,
-    pub relayer_fee_token: AssetInfo,
+
     pub token_fee_receiver: Addr,
     pub relayer_fee_receiver: Addr,
-    pub relayer_fee: Option<Uint128>,
     pub swap_router_contract: String,
     pub token_factory_addr: Option<Addr>,
+    pub osor_entrypoint_contract: Addr,
 }
 
 #[cw_serde]
@@ -37,20 +37,14 @@ pub enum ExecuteMsg {
     UpdateConfig {
         validator_contract_addr: Option<Addr>,
         bridge_adapter: Option<String>,
-        relayer_fee_token: Option<AssetInfo>,
         token_fee_receiver: Option<Addr>,
         relayer_fee_receiver: Option<Addr>,
-        relayer_fee: Option<Uint128>,
         swap_router_contract: Option<String>,
         token_fee: Option<Vec<TokenFee>>,
         token_factory_addr: Option<Addr>,
+        osor_entrypoint_contract: Option<Addr>,
     },
     RegisterDenom(RegisterDenomMsg),
-    // ProcessTimeoutSendPacket {
-    //     masterchain_header_proof: HexBinary,
-    //     tx_proof_unreceived: HexBinary,
-    //     tx_boc: HexBinary, // in hex form
-    // },
 }
 
 #[cw_serde]
@@ -63,6 +57,7 @@ pub struct UpdatePairMsg {
     pub local_asset_info_decimals: u8,
     pub opcode: HexBinary,
     pub token_origin: u32,
+    pub relayer_fee: Uint128,
 }
 
 #[cw_serde]

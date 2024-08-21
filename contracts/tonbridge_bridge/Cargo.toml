@@ -36,6 +36,7 @@ oraiswap = { workspace = true }
 token-bindings = { workspace = true }
 tokenfactory = { workspace = true }
 derive_more = { workspace = true }
+skip = { workspace = true }
 
 [dev-dependencies]
 cosmwasm-testing-util = { workspace = true }
