@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     attr, to_json_binary, Addr, Api, Attribute, CosmosMsg, DepsMut, Env, HexBinary, QuerierWrapper,
-    Response, Storage, SubMsg, Uint256,
+    Response, Storage, SubMsg, Uint128, Uint256,
 };
 
 use oraiswap::asset::Asset;
@@ -243,19 +243,43 @@ pub fn handle_packet_receive(
     )?;
     let local_amount = fee_data.deducted_amount;
 
+    let mut fee_asset = Asset {
+        info: mapping.asset_info.clone(),
+        amount: Uint128::zero(),
+    };
     if !fee_data.token_fee.is_empty() {
-        cosmos_msgs.push(SubMsg::new(
-            fee_data
-                .token_fee
-                .transfer(config.token_fee_receiver.as_str()),
-        ))
+        if mapping.opcode == OPCODE_1 {
+            fee_asset.amount = fee_data.token_fee.amount();
+            let msg = build_mint_asset_msg(
+                config.token_factory_addr.clone(),
+                &fee_asset,
+                config.token_fee_receiver.to_string(),
+            )?;
+            cosmos_msgs.push(SubMsg::new(msg));
+        } else {
+            cosmos_msgs.push(SubMsg::new(
+                fee_data
+                    .token_fee
+                    .transfer(config.token_fee_receiver.as_str()),
+            ))
+        }
     }
     if !fee_data.relayer_fee.is_empty() {
-        cosmos_msgs.push(SubMsg::new(
-            fee_data
-                .relayer_fee
-                .transfer(config.relayer_fee_receiver.as_str()),
-        ))
+        if mapping.opcode == OPCODE_1 {
+            fee_asset.amount = fee_data.relayer_fee.amount();
+            let msg = build_mint_asset_msg(
+                config.token_factory_addr.clone(),
+                &fee_asset,
+                config.relayer_fee_receiver.to_string(),
+            )?;
+            cosmos_msgs.push(SubMsg::new(msg));
+        } else {
+            cosmos_msgs.push(SubMsg::new(
+                fee_data
+                    .relayer_fee
+                    .transfer(config.relayer_fee_receiver.as_str()),
+            ));
+        }
     }
 
     attrs.append(&mut vec![
