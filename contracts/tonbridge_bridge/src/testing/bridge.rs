@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{ops::Add, str::FromStr};
 
 use cosmwasm_std::{
     attr, coin,
@@ -80,122 +80,130 @@ fn test_validate_transaction_out_msg() {
     assert_eq!(res.unwrap(), any_cell.cell);
 }
 
-// FIXME: Wrong canonical address length
-// #[test]
-// fn test_handle_packet_receive() {
-//     let mut deps = mock_dependencies();
-//     let deps_mut = deps.as_mut();
-//     let storage = deps_mut.storage;
-//     let api = deps_mut.api;
-//     let querier = deps_mut.querier;
-//     let env = mock_env();
-//     let current_timestamp = env.block.time.seconds() + DEFAULT_TIMEOUT;
+#[test]
+fn test_handle_packet_receive() {
+    let mut deps = mock_dependencies();
+    let deps_mut = deps.as_mut();
+    let storage = deps_mut.storage;
+    let api = deps_mut.api;
+    let querier = deps_mut.querier;
+    let env = mock_env();
+    let current_timestamp = env.block.time.seconds() + DEFAULT_TIMEOUT;
 
-//     let seq = 1;
-//     let token_origin = 529034805;
-//     let timeout_timestamp = env.block.time.seconds() - 100;
-//     let src_sender = "EQCkkxPb0X4DAMBrOi8Tyf0wdqqVtTR9ekbDqB9ijP391nQh".to_string();
-//     let src_denom = "EQCkkxPb0X4DAMBrOi8Tyf0wdqqVtTR9ekbDqB9ijP391nQh".to_string();
-//     let amount = Uint128::from(1000000000u128);
+    let seq = 1;
+    let token_origin = 529034805;
+    let timeout_timestamp = env.block.time.seconds() - 100;
+    let src_sender = "EQCkkxPb0X4DAMBrOi8Tyf0wdqqVtTR9ekbDqB9ijP391nQh".to_string();
+    let src_denom = "EQCkkxPb0X4DAMBrOi8Tyf0wdqqVtTR9ekbDqB9ijP391nQh".to_string();
+    let amount = Uint128::from(1000000000u128);
 
-//     let receiver_raw: Vec<u8> = vec![
-//         23, 12, 3, 5, 13, 30, 10, 3, 20, 28, 27, 5, 31, 12, 11, 15, 3, 1, 22, 13, 21, 3, 30, 20,
-//         12, 3, 16, 0, 11, 14, 26, 4,
-//     ];
-//     let receiver = CanonicalAddr::from(receiver_raw);
+    let receiver_raw: Vec<u8> = vec![
+        23, 12, 3, 5, 13, 30, 10, 3, 20, 28, 27, 5, 31, 12, 11, 15, 3, 1, 22, 13, 21, 3, 30, 20,
+        12, 3, 16, 0, 11, 14, 26, 4,
+    ];
+    let receiver = CanonicalAddr::from(receiver_raw);
 
-//     let mut bridge_packet_data = BridgePacketData {
-//         seq,
-//         token_origin,
-//         timeout_timestamp,
-//         src_sender: src_sender.clone(),
-//         src_denom: src_denom.clone(),
-//         amount,
-//         receiver: receiver.clone(),
-//         memo: None,
-//     };
+    let mut bridge_packet_data = BridgePacketData {
+        seq,
+        token_origin,
+        timeout_timestamp,
+        src_sender: src_sender.clone(),
+        src_denom: src_denom.clone(),
+        amount,
+        receiver: receiver.clone(),
+        memo: None,
+    };
 
-//     let mapping = MappingMetadata {
-//         asset_info: AssetInfo::NativeToken {
-//             denom: "orai".to_string(),
-//         },
-//         remote_decimals: 6,
-//         asset_info_decimals: 6,
-//         opcode: OPCODE_2,
-//         token_origin: 529034805,
-//     };
-//     CONFIG
-//         .save(
-//             storage,
-//             &Config {
-//                 validator_contract_addr: Addr::unchecked("validator"),
-//                 bridge_adapter: "bridge_adapter".to_string(),
-//                 relayer_fee_token: AssetInfo::NativeToken {
-//                     denom: "orai".to_string(),
-//                 },
-//                 relayer_fee: Uint128::from(100000u128),
-//                 token_fee_receiver: Addr::unchecked("token_fee_receiver"),
-//                 relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
-//                 swap_router_contract: RouterController("router".to_string()),
-//             },
-//         )
-//         .unwrap();
-//     TOKEN_FEE
-//         .save(
-//             storage,
-//             "orai",
-//             &Ratio {
-//                 nominator: 1,
-//                 denominator: 1000,
-//             },
-//         )
-//         .unwrap();
+    let mapping = MappingMetadata {
+        asset_info: AssetInfo::NativeToken {
+            denom: "orai".to_string(),
+        },
+        remote_decimals: 6,
+        asset_info_decimals: 6,
+        opcode: OPCODE_2,
+        token_origin: 529034805,
+        relayer_fee: Uint128::zero(),
+    };
+    CONFIG
+        .save(
+            storage,
+            &Config {
+                validator_contract_addr: Addr::unchecked("validator"),
+                bridge_adapter: "bridge_adapter".to_string(),
+                token_fee_receiver: Addr::unchecked("token_fee_receiver"),
+                relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
+                swap_router_contract: RouterController("router".to_string()),
+                token_factory_addr: None,
+                osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
+            },
+        )
+        .unwrap();
+    TOKEN_FEE
+        .save(
+            storage,
+            "orai",
+            &Ratio {
+                nominator: 1,
+                denominator: 1000,
+            },
+        )
+        .unwrap();
 
-//     // case 1: timeout
-//     let res = handle_packet_receive(
-//         storage,
-//         api,
-//         &querier,
-//         current_timestamp,
-//         bridge_packet_data.clone(),
-//         mapping.clone(),
-//     )
-//     .unwrap();
+    // case 1: timeout
+    let res = handle_packet_receive(
+        &env,
+        storage,
+        api,
+        &querier,
+        current_timestamp,
+        bridge_packet_data.clone(),
+        mapping.clone(),
+    )
+    .unwrap();
 
-//     assert_eq!(res.0.len(), 0);
-//     assert_eq!(res.1[0].value, "timeout".to_string());
+    assert_eq!(res.0.len(), 0);
+    assert_eq!(
+        res.1
+            .iter()
+            .find(|x| x.key == "ack_value" && x.value == "timeout")
+            .is_some(),
+        true
+    );
 
-//     // case 2: happy case
-//     bridge_packet_data.timeout_timestamp = current_timestamp;
-//     handle_packet_receive(
-//         storage,
-//         api,
-//         &querier,
-//         current_timestamp,
-//         bridge_packet_data.clone(),
-//         mapping,
-//     )
-//     .unwrap();
+    // case 2: happy case
+    bridge_packet_data.seq = 2;
+    bridge_packet_data.timeout_timestamp = current_timestamp;
+    handle_packet_receive(
+        &env,
+        storage,
+        api,
+        &querier,
+        current_timestamp,
+        bridge_packet_data.clone(),
+        mapping,
+    )
+    .unwrap();
 
-//     let commitment = ACK_COMMITMENT.load(deps.as_ref().storage, 1).unwrap();
-//     assert_eq!(
-//         commitment.to_be_bytes(),
-//         build_ack_commitment(
-//             seq,
-//             token_origin,
-//             amount,
-//             timeout_timestamp,
-//             receiver.as_slice(),
-//             &src_denom,
-//             &src_sender,
-//             Status::Success
-//         )
-//         .unwrap()
-//         .as_slice()
-//     );
-// }
+    let commitment = ACK_COMMITMENT
+        .load(deps.as_ref().storage, bridge_packet_data.seq)
+        .unwrap();
+    assert_eq!(
+        commitment.to_be_bytes(),
+        build_ack_commitment(
+            bridge_packet_data.seq,
+            token_origin,
+            amount,
+            bridge_packet_data.timeout_timestamp,
+            receiver.as_slice(),
+            &src_denom,
+            &src_sender,
+            Status::Success
+        )
+        .unwrap()
+        .as_slice()
+    );
+}
 
-// FIXME: Wrong canonical address length
 // #[test]
 // fn test_read_transaction() {
 //     let MockApp {
@@ -217,12 +225,11 @@ fn test_validate_transaction_out_msg() {
 //                 bridge_adapter: Some(
 //                     "EQCWH9kCKpCTpswaygq-Ah7h-1vH3xZ3gJq7-SM6ZkYiOgHH".to_string(),
 //                 ),
-//                 relayer_fee_token: None,
 //                 token_fee_receiver: None,
 //                 relayer_fee_receiver: None,
-//                 relayer_fee: None,
 //                 swap_router_contract: None,
 //                 token_fee: None,
+//                 token_factory_addr: None,
 //             })
 //             .unwrap(),
 //             funds: vec![],
@@ -632,6 +639,7 @@ fn test_bridge_to_ton_with_fee() {
                 },
             }]),
             token_factory_addr: None,
+            osor_entrypoint_contract: None,
         },
     )
     .unwrap();
@@ -900,6 +908,7 @@ fn test_happy_case_token_factory() {
             swap_router_contract: None,
             token_fee: None,
             token_factory_addr: None,
+            osor_entrypoint_contract: None,
         })
         .unwrap(),
         funds: vec![],

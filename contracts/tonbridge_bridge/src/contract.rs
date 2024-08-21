@@ -61,13 +61,12 @@ pub fn execute(
         ExecuteMsg::UpdateConfig {
             validator_contract_addr,
             bridge_adapter,
-
             token_fee_receiver,
             relayer_fee_receiver,
-
             swap_router_contract,
             token_fee,
             token_factory_addr,
+            osor_entrypoint_contract,
         } => execute_update_config(
             deps,
             info,
@@ -78,6 +77,7 @@ pub fn execute(
             swap_router_contract,
             token_fee,
             token_factory_addr,
+            osor_entrypoint_contract,
         ),
         ExecuteMsg::ReadTransaction { tx_proof, tx_boc } => {
             read_transaction(deps, env, tx_proof, tx_boc)
@@ -145,6 +145,7 @@ pub fn execute_update_config(
     swap_router_contract: Option<String>,
     token_fee: Option<Vec<TokenFee>>,
     token_factory_addr: Option<Addr>,
+    osor_entrypoint_contract: Option<Addr>,
 ) -> Result<Response, ContractError> {
     OWNER.assert_admin(deps.as_ref(), &info.sender)?;
 
@@ -173,6 +174,9 @@ pub fn execute_update_config(
     }
     if let Some(token_factory_addr) = token_factory_addr {
         config.token_factory_addr = Some(token_factory_addr);
+    }
+    if let Some(osor_entrypoint_contract) = osor_entrypoint_contract {
+        config.osor_entrypoint_contract = osor_entrypoint_contract;
     }
 
     CONFIG.save(deps.storage, &config)?;

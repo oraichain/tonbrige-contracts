@@ -111,6 +111,7 @@ fn test_update_config() {
             swap_router_contract: None,
             token_fee: None,
             token_factory_addr: None,
+            osor_entrypoint_contract: None,
         },
         &[],
     )
@@ -128,6 +129,7 @@ fn test_update_config() {
             swap_router_contract: Some("new_router".to_string()),
             token_fee: None,
             token_factory_addr: None,
+            osor_entrypoint_contract: None,
         },
         &[],
     )
@@ -177,6 +179,7 @@ fn test_update_token_fee() {
                 },
             }]),
             token_factory_addr: None,
+            osor_entrypoint_contract: None,
         },
         &[],
     )

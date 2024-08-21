@@ -42,6 +42,7 @@ pub enum ExecuteMsg {
         swap_router_contract: Option<String>,
         token_fee: Option<Vec<TokenFee>>,
         token_factory_addr: Option<Addr>,
+        osor_entrypoint_contract: Option<Addr>,
     },
     RegisterDenom(RegisterDenomMsg),
 }
