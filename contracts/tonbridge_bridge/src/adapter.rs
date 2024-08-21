@@ -284,16 +284,16 @@ pub fn handle_packet_receive(
     }
     if !memo.is_empty() {
         // build error commitment to use for universal swap error
-        let err_commitment = build_ack_commitment(
-            data.seq,
-            data.token_origin,
-            data.amount,
-            data.timeout_timestamp,
-            data.receiver.as_slice(),
-            &data.src_denom,
-            &data.src_sender,
-            Status::Error,
-        )?;
+        // let err_commitment = build_ack_commitment(
+        //     data.seq,
+        //     data.token_origin,
+        //     data.amount,
+        //     data.timeout_timestamp,
+        //     data.receiver.as_slice(),
+        //     &data.src_denom,
+        //     &data.src_sender,
+        //     Status::Error,
+        // )?;
 
         let temp_universal_swap = TempUniversalSwap {
             // seq: data.seq,
