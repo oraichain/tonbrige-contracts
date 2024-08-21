@@ -247,14 +247,14 @@ pub fn handle_packet_receive(
         cosmos_msgs.push(SubMsg::new(
             fee_data
                 .token_fee
-                .send_amount(config.token_fee_receiver.into_string(), None),
+                .transfer(config.token_fee_receiver.as_str()),
         ))
     }
     if !fee_data.relayer_fee.is_empty() {
         cosmos_msgs.push(SubMsg::new(
             fee_data
                 .relayer_fee
-                .send_amount(config.relayer_fee_receiver.to_string(), None),
+                .transfer(config.relayer_fee_receiver.as_str()),
         ))
     }
 
@@ -276,7 +276,11 @@ pub fn handle_packet_receive(
         amount: local_amount,
     };
 
-    let memo = parse_memo(&data.memo)?;
+    let memo = match data.memo {
+        Some(memo) => parse_memo(&memo)?,
+        None => String::default(),
+    };
+
     let mint_destination = if memo.is_empty() {
         recipient.to_string()
     } else {
@@ -298,12 +302,10 @@ pub fn handle_packet_receive(
 
         let swap_then_post_action_msg =
             Amount::from_parts(parse_asset_info_denom(&mapping.asset_info), local_amount)
-                .send_amount(
+                .into_wasm_msg(
                     config.osor_entrypoint_contract.to_string(),
-                    Some(to_json_binary(&EntryPointExecuteMsg::UniversalSwap {
-                        memo: memo.to_base64(),
-                    })?),
-                );
+                    to_json_binary(&EntryPointExecuteMsg::UniversalSwap { memo })?,
+                )?;
         cosmos_msgs.push(SubMsg::reply_on_error(
             swap_then_post_action_msg,
             UNIVERSAL_SWAP_ERROR_ID,
@@ -370,14 +372,14 @@ pub fn handle_bridge_to_ton(
         cosmos_msgs.push(
             fee_data
                 .token_fee
-                .send_amount(config.token_fee_receiver.into_string(), None),
+                .transfer(config.token_fee_receiver.as_str()),
         )
     }
     if !fee_data.relayer_fee.is_empty() {
         cosmos_msgs.push(
             fee_data
                 .relayer_fee
-                .send_amount(config.relayer_fee_receiver.into_string(), None),
+                .transfer(config.relayer_fee_receiver.as_str()),
         )
     }
 

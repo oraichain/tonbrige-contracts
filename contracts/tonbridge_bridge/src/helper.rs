@@ -3,6 +3,7 @@ use std::str::FromStr;
 use cosmwasm_std::{to_json_binary, Addr, Api, Binary, CosmosMsg, StdError, Uint128, WasmMsg};
 
 use cw20::{Cw20Contract, Cw20ExecuteMsg};
+use cw_storage_plus::KeyDeserialize;
 use oraiswap::asset::{Asset, AssetInfo};
 use tonbridge_parser::{
     transaction_parser::{RECEIVE_PACKET_MAGIC_NUMBER, SEND_TO_TON_MAGIC_NUMBER},
@@ -167,23 +168,20 @@ pub fn build_burn_asset_msg(
     Ok(msg)
 }
 
-pub fn parse_memo(cell: &Option<Cell>) -> Result<Binary, ContractError> {
-    if let Some(cell) = cell {
-        let mut memo = vec![];
-        cell.load_buffer(&mut memo)?;
-        Ok(Binary::from(memo))
-    } else {
-        Ok(Binary::default())
-    }
+pub fn parse_memo(cell: &Cell) -> Result<String, ContractError> {
+    let mut memo = vec![];
+    cell.load_buffer(&mut memo)?;
+    Ok(String::from_vec(memo)?)
 }
 
 #[cfg(test)]
 mod tests {
 
-    use cosmwasm_std::{CanonicalAddr, Uint128};
+    use cosmwasm_std::{CanonicalAddr, HexBinary, Uint128};
     use tonbridge_parser::types::Status;
+    use tonlib::cell::BagOfCells;
 
-    use crate::helper::build_ack_commitment;
+    use crate::helper::{build_ack_commitment, parse_memo};
 
     use super::{build_bridge_to_ton_commitment, is_expired};
 
@@ -253,5 +251,15 @@ mod tests {
                 132, 21, 151, 233, 206, 238, 145, 171, 199, 119, 174, 253, 14, 98
             ]
         )
+    }
+
+    #[test]
+    fn test_parse_memo() {
+        let boc = HexBinary::from_hex("b5ee9c72410206010002890001000101fe4376554243676476636d46705a47563447756b4243755942436763784d4441774d444177456e6b4b4b32397959576b785a444d3359584a30636d73306447746f656a4a786557707459585673597a4a71656d7072654463794d445a306258426d6457635352476c6959793835517a5245513051794d5549304f44497a4d55510201fe77516b4d7951554d7a524446434e7a52424f4459304e7a5132516a4d33525451794f5449324f5452444f544e444e6a45334d7a49304d6a5577524441774d6b5a4447675276636d4670456d414b4b32397959576b78597a567a4d444e6a4d32777a4d7a5a6b5a32567a626d55335a486c73626d316f633370334f4455314e480301fe527a65586b35655851534247397959576b614b32397959576b784d6d6836616e686d61446333643277314e7a4a6e5a48706a64444a6d6548597959584a345933646f4e6d643561324d336357675341544159674b536f3861364b372f515849714d42457141424367746a61474675626d56734c5449324d42497362334a68610401fe57497861485a794f5751334d6e49316457303562485a304d484a7761325130636a6331646e4a7a635852334e6e6c30626d3532634759614c32397959576c694d4868424d7a49315157513252446c6a4f544a434e5456424d305a6a4e5746454e3255304d544a434d5455784f4559354e6a51304d554d77494a41634b6939760500f8636d4670596a42344f474d33525442424f4451784d6a593559544178597a4242596a4d344f554e6c4f455a694d304e6d4d54557751546b30525463354e796f7262334a686154466f646e49355a446379636a563162546c73646e5177636e42725a4452794e7a5632636e4e7864486332655856716148467a4d673d3d7e83f9f1").unwrap();
+        let expected_memo = "CvUBCgdvcmFpZGV4GukBCuYBCgcxMDAwMDAwEnkKK29yYWkxZDM3YXJ0cms0dGtoejJxeWptYXVsYzJqempreDcyMDZ0bXBmdWcSRGliYy85QzREQ0QyMUI0ODIzMUQwQkMyQUMzRDFCNzRBODY0NzQ2QjM3RTQyOTI2OTRDOTNDNjE3MzI0MjUwRDAwMkZDGgRvcmFpEmAKK29yYWkxYzVzMDNjM2wzMzZkZ2VzbmU3ZHlsbm1oc3p3ODU1NHRzeXk5eXQSBG9yYWkaK29yYWkxMmh6anhmaDc3d2w1NzJnZHpjdDJmeHYyYXJ4Y3doNmd5a2M3cWgSATAYgKSo8a6K7/QXIqMBEqABCgtjaGFubmVsLTI2MBIsb3JhaWIxaHZyOWQ3MnI1dW05bHZ0MHJwa2Q0cjc1dnJzcXR3Nnl0bm52cGYaL29yYWliMHhBMzI1QWQ2RDljOTJCNTVBM0ZjNWFEN2U0MTJCMTUxOEY5NjQ0MUMwIJAcKi9vcmFpYjB4OGM3RTBBODQxMjY5YTAxYzBBYjM4OUNlOEZiM0NmMTUwQTk0RTc5Nyorb3JhaTFodnI5ZDcycjV1bTlsdnQwcnBrZDRyNzV2cnNxdHc2eXVqaHFzMg==";
+        let cells = BagOfCells::parse(&boc.to_vec()).unwrap();
+        let first_root = cells.single_root().unwrap();
+
+        assert_eq!(parse_memo(first_root).unwrap(), expected_memo.to_string());
     }
 }

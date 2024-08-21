@@ -3,8 +3,8 @@ use std::str::FromStr;
 use cosmwasm_std::{
     attr, coin,
     testing::{mock_dependencies, mock_env, mock_info},
-    to_json_binary, Addr, BankMsg, BlockInfo, CanonicalAddr, Coin, CosmosMsg, HexBinary, SubMsg,
-    Timestamp, Uint128, Uint256, WasmMsg,
+    to_json_binary, wasm_execute, Addr, BankMsg, Binary, BlockInfo, CanonicalAddr, Coin, CosmosMsg,
+    HexBinary, SubMsg, Timestamp, Uint128, Uint256, WasmMsg,
 };
 
 use cosmwasm_testing_util::Executor;
@@ -35,7 +35,7 @@ use tonlib::{
 };
 
 use crate::{
-    adapter::{handle_packet_receive, on_acknowledgment, DEFAULT_TIMEOUT},
+    adapter::{handle_packet_receive, on_acknowledgment, DEFAULT_TIMEOUT, UNIVERSAL_SWAP_ERROR_ID},
     bridge::Bridge,
     channel::increase_channel_balance,
     contract::{execute, instantiate},
@@ -44,6 +44,7 @@ use crate::{
     state::{ACK_COMMITMENT, CONFIG, REMOTE_INITIATED_CHANNEL_STATE, SEND_PACKET, TOKEN_FEE},
     testing::mock::{new_mock_app, MockApp},
 };
+use skip::entry_point::ExecuteMsg as EntryPointExecuteMsg;
 
 #[test]
 fn test_validate_transaction_out_msg() {
@@ -1393,3 +1394,131 @@ fn test_bridge_ton_to_orai_with_fee() {
 
 //      let res =
 // }
+
+#[test]
+fn test_ton_universal_swap() {
+    let mut deps = mock_dependencies();
+    let deps_mut = deps.as_mut();
+    let storage = deps_mut.storage;
+    let api = deps_mut.api;
+    let querier = deps_mut.querier;
+    let env = mock_env();
+
+    let seq = 1;
+    let token_origin = 529034805;
+    let src_sender = "EQCkkxPb0X4DAMBrOi8Tyf0wdqqVtTR9ekbDqB9ijP391nQh".to_string();
+    let src_denom = "EQCkkxPb0X4DAMBrOi8Tyf0wdqqVtTR9ekbDqB9ijP391nQh".to_string();
+    let amount = Uint128::from(1000000000u128);
+
+    let receiver_raw: Vec<u8> = vec![
+        23, 12, 3, 5, 13, 30, 10, 3, 20, 28, 27, 5, 31, 12, 11, 15, 3, 1, 22, 13, 21, 3, 30, 20,
+        12, 3, 16, 0, 11, 14, 26, 4,
+    ];
+    let receiver = CanonicalAddr::from(receiver_raw);
+
+    let mut bridge_packet_data = BridgePacketData {
+        seq,
+        token_origin,
+        timeout_timestamp: env.block.time.seconds() + DEFAULT_TIMEOUT,
+        src_sender: src_sender.clone(),
+        src_denom: src_denom.clone(),
+        amount,
+        receiver: receiver.clone(),
+        memo: None,
+    };
+
+    let mapping = MappingMetadata {
+        asset_info: AssetInfo::NativeToken {
+            denom: "orai".to_string(),
+        },
+        remote_decimals: 6,
+        asset_info_decimals: 6,
+        opcode: OPCODE_2,
+        token_origin: 529034805,
+        relayer_fee: Uint128::zero(),
+    };
+    CONFIG
+        .save(
+            storage,
+            &Config {
+                validator_contract_addr: Addr::unchecked("validator"),
+                bridge_adapter: "bridge_adapter".to_string(),
+                token_fee_receiver: Addr::unchecked("token_fee_receiver"),
+                relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
+                swap_router_contract: RouterController("router".to_string()),
+                token_factory_addr: None,
+                osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
+            },
+        )
+        .unwrap();
+    TOKEN_FEE
+        .save(
+            storage,
+            "orai",
+            &Ratio {
+                nominator: 1,
+                denominator: 1000,
+            },
+        )
+        .unwrap();
+
+    // case 1: memo is empty, dont trigger osor contract
+    let res = handle_packet_receive(
+        &env,
+        storage,
+        api,
+        &querier,
+        env.block.time.seconds(),
+        bridge_packet_data.clone(),
+        mapping.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        res.0,
+        vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+            to_address: "admin".to_string(),
+            amount: vec![Coin {
+                denom: "orai".to_string(),
+                amount: Uint128::new(1000000000)
+            }]
+        }))]
+    );
+
+    // case 2:  call universal swap
+    bridge_packet_data.seq = 2;
+    bridge_packet_data.memo = Some(
+        CellBuilder::new()
+            .store_string("abc")
+            .unwrap()
+            .build()
+            .unwrap(),
+    );
+    let res = handle_packet_receive(
+        &env,
+        storage,
+        api,
+        &querier,
+        env.block.time.seconds(),
+        bridge_packet_data.clone(),
+        mapping.clone(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        res.0,
+        vec![SubMsg::reply_on_error(
+            wasm_execute(
+                "osor_entrypoint_contract".to_string(),
+                &EntryPointExecuteMsg::UniversalSwap {
+                    memo: "abc".to_string()
+                },
+                vec![Coin {
+                    denom: "orai".to_string(),
+                    amount: Uint128::new(1000000000)
+                }]
+            )
+            .unwrap(),
+            UNIVERSAL_SWAP_ERROR_ID
+        )]
+    );
+}

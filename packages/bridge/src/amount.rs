@@ -88,34 +88,40 @@ impl Amount {
         }
     }
 
-    pub fn send_amount(&self, recipient: String, msg: Option<Binary>) -> CosmosMsg {
+    pub fn transfer(&self, to_address: &str) -> CosmosMsg {
         match self.to_owned() {
-            Amount::Native(coin) => BankMsg::Send {
-                to_address: recipient,
+            Amount::Native(coin) => CosmosMsg::Bank(BankMsg::Send {
+                to_address: to_address.to_string(),
                 amount: vec![coin],
-            }
-            .into(),
-            Amount::Cw20(coin) => {
-                let msg_cw20 = if let Some(msg) = msg {
-                    Cw20ExecuteMsg::Send {
-                        contract: recipient,
-                        amount: coin.amount,
-                        msg,
-                    }
-                } else {
-                    Cw20ExecuteMsg::Transfer {
-                        recipient: recipient.clone(),
-                        amount: coin.amount,
-                    }
-                };
+            }),
+            Amount::Cw20(coin) => CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: coin.address.clone(),
+                msg: to_json_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: to_address.to_string(),
+                    amount: coin.amount,
+                })
+                .unwrap(),
+                funds: vec![],
+            }),
+        }
+    }
 
-                WasmMsg::Execute {
-                    contract_addr: coin.address,
-                    msg: to_json_binary(&msg_cw20).unwrap(),
-                    funds: vec![],
-                }
-                .into()
-            }
+    pub fn into_wasm_msg(&self, contract_addr: String, msg: Binary) -> StdResult<WasmMsg> {
+        match self.to_owned() {
+            Amount::Native(coin) => Ok(WasmMsg::Execute {
+                contract_addr,
+                msg,
+                funds: vec![coin],
+            }),
+            Amount::Cw20(coin) => Ok(WasmMsg::Execute {
+                contract_addr: coin.address,
+                msg: to_json_binary(&Cw20ExecuteMsg::Send {
+                    contract: contract_addr,
+                    amount: coin.amount,
+                    msg,
+                })?,
+                funds: vec![],
+            }),
         }
     }
 }
