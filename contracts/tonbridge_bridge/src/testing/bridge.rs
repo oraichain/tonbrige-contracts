@@ -290,6 +290,10 @@ fn test_read_transaction() {
     )
     .unwrap();
 
+    app.inner_mut().update_block(|block| {
+        block.time = block.time.minus_seconds(10);
+    });
+
     app.execute(
         owner.clone(),
         bridge_addr.clone(),
@@ -1256,6 +1260,10 @@ fn test_bridge_ton_to_orai_with_fee() {
         &[],
     )
     .unwrap();
+
+    app.inner_mut().update_block(|block| {
+        block.time = block.time.minus_seconds(10);
+    });
 
     app.execute(
         owner.clone(),
