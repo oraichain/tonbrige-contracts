@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Binary, CanonicalAddr};
+use cosmwasm_std::CanonicalAddr;
 use tonlib::cell::{Cell, CellParser, TonCellError};
 
 use crate::types::{AckPacket, BridgePacketDataRaw, Status};

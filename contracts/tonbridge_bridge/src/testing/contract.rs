@@ -30,8 +30,7 @@ fn test_instantiate_contract() {
     } = new_mock_app();
 
     let config: Config = app
-        .as_querier()
-        .query_wasm_smart(bridge_addr.clone(), &BridgeQueryMsg::Config {})
+        .query(bridge_addr.clone(), &BridgeQueryMsg::Config {})
         .unwrap();
     assert_eq!(
         config,
@@ -46,8 +45,7 @@ fn test_instantiate_contract() {
         }
     );
     let _owner: Addr = app
-        .as_querier()
-        .query_wasm_smart(bridge_addr.clone(), &BridgeQueryMsg::Owner {})
+        .query(bridge_addr.clone(), &BridgeQueryMsg::Owner {})
         .unwrap();
     assert_eq!(owner, _owner);
 }
@@ -83,8 +81,7 @@ fn test_update_owner() {
     )
     .unwrap();
     let _owner: Addr = app
-        .as_querier()
-        .query_wasm_smart(bridge_addr.clone(), &BridgeQueryMsg::Owner {})
+        .query(bridge_addr.clone(), &BridgeQueryMsg::Owner {})
         .unwrap();
     assert_eq!(_owner, Addr::unchecked("alice"));
 }
@@ -136,8 +133,7 @@ fn test_update_config() {
     .unwrap();
 
     let config: Config = app
-        .as_querier()
-        .query_wasm_smart(bridge_addr.clone(), &BridgeQueryMsg::Config {})
+        .query(bridge_addr.clone(), &BridgeQueryMsg::Config {})
         .unwrap();
     assert_eq!(
         config,
@@ -186,8 +182,7 @@ fn test_update_token_fee() {
     .unwrap();
 
     let ratio: Ratio = app
-        .as_querier()
-        .query_wasm_smart(
+        .query(
             bridge_addr.clone(),
             &BridgeQueryMsg::TokenFee {
                 remote_token_denom: "orai".to_string(),
@@ -259,8 +254,7 @@ fn test_register_mapping_pair() {
     // query mapping
 
     let res: PairQuery = app
-        .as_querier()
-        .query_wasm_smart(
+        .query(
             bridge_addr.clone(),
             &BridgeQueryMsg::PairMapping {
                 key: ibc_denom.to_string(),
