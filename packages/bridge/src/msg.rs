@@ -81,15 +81,7 @@ pub struct RegisterDenomMsg {
 
 /// We currently take no arguments for migrations
 #[cw_serde]
-pub struct MigrateMsg {
-    pub validator_contract_addr: Addr,
-    pub bridge_adapter: String,
-    pub token_fee_receiver: Addr,
-    pub relayer_fee_receiver: Addr,
-    pub swap_router_contract: String,
-    pub token_factory_addr: Option<Addr>,
-    pub osor_entrypoint_contract: Addr,
-}
+pub struct MigrateMsg {}
 
 #[cw_serde]
 #[derive(QueryResponses)]

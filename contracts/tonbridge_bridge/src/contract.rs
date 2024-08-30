@@ -318,18 +318,6 @@ fn get_mapping_from_key(deps: Deps, ibc_denom: String) -> StdResult<PairQuery> {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
-    CONFIG.save(
-        deps.storage,
-        &Config {
-            validator_contract_addr: msg.validator_contract_addr,
-            bridge_adapter: msg.bridge_adapter,
-            token_fee_receiver: msg.token_fee_receiver,
-            relayer_fee_receiver: msg.relayer_fee_receiver,
-            swap_router_contract: RouterController(msg.swap_router_contract),
-            token_factory_addr: msg.token_factory_addr,
-            osor_entrypoint_contract: msg.osor_entrypoint_contract,
-        },
-    )?;
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
     Ok(Response::default())
 }
