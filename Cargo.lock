@@ -995,7 +995,6 @@ dependencies = [
  "cw-utils 1.0.3",
  "cw20 1.1.0",
  "cw20-base",
- "derive_more",
  "oraiswap 0.2.0 (git+https://github.com/oraichain/oraiswap.git?rev=c5fd186)",
  "skip",
  "thiserror",

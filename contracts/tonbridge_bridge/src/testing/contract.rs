@@ -26,6 +26,7 @@ fn test_instantiate_contract() {
         owner,
         bridge_addr,
         token_factory_addr,
+        validator_addr,
         ..
     } = new_mock_app();
 
@@ -35,7 +36,7 @@ fn test_instantiate_contract() {
     assert_eq!(
         config,
         Config {
-            validator_contract_addr: Addr::unchecked("contract0"),
+            validator_contract_addr: validator_addr.clone(),
             bridge_adapter: "EQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
             token_fee_receiver: Addr::unchecked("token_fee"),
             relayer_fee_receiver: Addr::unchecked("relayer_fee"),

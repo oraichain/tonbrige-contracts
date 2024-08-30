@@ -1,18 +1,17 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use cosmwasm_std::{coins, Addr, BlockInfo, HexBinary, Timestamp};
+use cosmwasm_std::{coins, Addr, HexBinary};
 use cosmwasm_testing_util::ContractWrapper;
-use derive_more::{Deref, DerefMut};
 
 pub fn new_mock_app() -> MockApp {
     MockApp::new(None)
 }
 
-#[derive(Deref, DerefMut)]
+#[cfg(not(feature = "test-tube"))]
+pub type TestMockApp = cosmwasm_testing_util::MultiTestMockApp;
+#[cfg(feature = "test-tube")]
+pub type TestMockApp = cosmwasm_testing_util::TestTubeMockApp;
+
 pub struct MockApp {
-    #[deref]
-    #[deref_mut]
-    pub app: cosmwasm_testing_util::MultiTestMockApp,
+    pub app: TestMockApp,
     pub owner: Addr,
     pub validator_addr: Addr,
     pub bridge_addr: Addr,
@@ -22,32 +21,32 @@ pub struct MockApp {
 
 impl MockApp {
     pub fn new(boc: Option<HexBinary>) -> Self {
-        let (mut app, accounts) = cosmwasm_testing_util::MultiTestMockApp::new(&[(
-            "admin",
-            &coins(100_000_000_000_000u128, "orai"),
-        )]);
+        let (mut app, accounts) =
+            TestMockApp::new(&[("admin", &coins(100_000_000_000_000u128, "orai"))]);
         let admin = Addr::unchecked(&accounts[0]);
-        app.inner_mut().set_block(BlockInfo {
-            height: 1,
-            time: Timestamp::from_seconds(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-            ),
-            chain_id: "Oraichain".to_string(),
-        });
-
-        let validator_id = app.upload(Box::new(ContractWrapper::new_with_empty(
-            cw_tonbridge_validator::contract::execute,
-            cw_tonbridge_validator::contract::instantiate,
-            cw_tonbridge_validator::contract::query,
-        )));
-        let bridge_id = app.upload(Box::new(ContractWrapper::new_with_empty(
-            crate::contract::execute,
-            crate::contract::instantiate,
-            crate::contract::query,
-        )));
+        let validator_id;
+        let bridge_id;
+        #[cfg(not(feature = "test-tube"))]
+        {
+            validator_id = app.upload(Box::new(ContractWrapper::new_with_empty(
+                cw_tonbridge_validator::contract::execute,
+                cw_tonbridge_validator::contract::instantiate,
+                cw_tonbridge_validator::contract::query,
+            )));
+            bridge_id = app.upload(Box::new(ContractWrapper::new_with_empty(
+                crate::contract::execute,
+                crate::contract::instantiate,
+                crate::contract::query,
+            )));
+        }
+        #[cfg(feature = "test-tube")]
+        {
+            static CW_VALIDATOR_BYTES: &[u8] =
+                include_bytes!("./testdata/cw-tonbridge-validator.wasm");
+            validator_id = app.upload(CW_VALIDATOR_BYTES);
+            static CW_BRIDGE_BYTES: &[u8] = include_bytes!("./testdata/cw-tonbridge-bridge.wasm");
+            bridge_id = app.upload(CW_BRIDGE_BYTES);
+        }
 
         let validator_addr = app
             .instantiate(

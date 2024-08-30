@@ -37,7 +37,6 @@ tonbridge-parser = { path = "./packages/parser" }
 tonbridge-validator = { path = "./packages/validator" }
 tonbridge-bridge = { path = "./packages/bridge" }
 cw-tonbridge-validator = { path = "./contracts/tonbridge_validator" }
-derive_more = "0.99.17"
 oraiswap = { git = "https://github.com/oraichain/oraiswap.git", rev = "c5fd186" }
 tonlib = { git = "https://github.com/oraichain/tonlib-rs.git", rev = "eb28f37", default-features = false }
 cosmwasm-testing-util = { git = "https://github.com/oraichain/cosmwasm-testing-util.git", rev = "5ac3664" }
