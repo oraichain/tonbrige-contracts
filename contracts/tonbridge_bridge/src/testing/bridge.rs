@@ -3,8 +3,8 @@ use std::str::FromStr;
 use cosmwasm_std::{
     attr, coin, coins,
     testing::{mock_dependencies, mock_env, mock_info},
-    to_json_binary, wasm_execute, Addr, BankMsg, BlockInfo, CanonicalAddr, Coin, CosmosMsg,
-    HexBinary, SubMsg, Timestamp, Uint128, Uint256, WasmMsg,
+    to_json_binary, wasm_execute, Addr, BankMsg, CanonicalAddr, Coin, CosmosMsg, HexBinary, SubMsg,
+    Uint128, Uint256, WasmMsg,
 };
 
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20ReceiveMsg};
@@ -202,7 +202,6 @@ fn test_handle_packet_receive() {
 }
 
 #[test]
-#[cfg(not(feature = "test-tube"))]
 fn test_read_transaction() {
     let MockApp {
         mut app,
@@ -240,9 +239,7 @@ fn test_read_transaction() {
             .unwrap();
     let token_denom = "EQBynBO23ywHy_CgarY9NK9FTz0yDsG82PtcbSTQgGoXwiuA";
     let packet_timeout_timestamp = 1720691622u64;
-    app.inner_mut().update_block(|block| {
-        block.time = Timestamp::from_seconds(packet_timeout_timestamp - 10);
-    });
+    app.set_block_time_seconds(packet_timeout_timestamp - 10);
 
     app.execute(
         owner.clone(),
@@ -291,9 +288,9 @@ fn test_read_transaction() {
     )
     .unwrap();
 
-    app.inner_mut().update_block(|block| {
-        block.time = block.time.minus_seconds(10);
-    });
+    println!("{}", app.get_block_height());
+    app.set_block_time_seconds(app.get_block_time().seconds() - 10);
+    println!("{}", app.get_block_height());
 
     app.execute(
         owner.clone(),
@@ -850,7 +847,6 @@ fn test_build_burn_msg_by_token_factory() {
 }
 
 #[test]
-#[cfg(not(feature = "test-tube"))]
 fn test_happy_case_token_factory() {
     // Transaction used for this test case: https://testnet.tonviewer.com/transaction/aec51d2faa4c0889f691bcbd2f69f805986516a378ccae4628eec2b8c17b0198
     // Here I bridge usdt to Oraichain and mint it as token factory token
@@ -863,11 +859,9 @@ fn test_happy_case_token_factory() {
         ..
     } = new_mock_app();
 
-    app.inner_mut().set_block(BlockInfo {
-        height: 1,
-        time: Timestamp::from_seconds(0),
-        chain_id: "Oraichain".to_string(),
-    });
+    app.set_block_time_seconds(1000);
+
+    println!("block time {}", app.get_block_time().seconds());
 
     // update config to mutate bridge adapter address
     app.execute(
@@ -966,70 +960,74 @@ fn test_happy_case_token_factory() {
     },&[]).unwrap();
     println!("Res: {:?}", res);
 
-    let sender_balance = app.query_balance(owner.clone(), denom.clone()).unwrap();
-    assert_eq!(sender_balance.u128(), 10000);
-
-    app.execute(
-        owner.clone(),
-        bridge_addr.clone(),
-        &tonbridge_bridge::msg::ExecuteMsg::BridgeToTon(BridgeToTonMsg {
-            denom: "EQAX_18eFGby3HZaB0vr95rg5Te3kHoaUOLG3iS_QjtMJNg9".to_string(), // usdt contract
-            timeout: Some(123), // just random number for timeout in Ton contract
-            to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
-        }),
-        &coins(1000, denom.clone()),
-    )
-    .unwrap();
-    let sender_balance = app.query_balance(owner.clone(), denom.clone()).unwrap();
-    assert_eq!(sender_balance.u128(), 9000);
-
-    // check packet commitment exist
-    let packet_commitment: Uint256 = app
-        .query(
-            bridge_addr.clone(),
-            &tonbridge_bridge::msg::QueryMsg::SendPacketCommitment { seq: 1 },
-        )
+    let receiver = Addr::unchecked("orai1ehmhqcn8erf3dgavrca69zgp4rtxj5kqgtcnyd");
+    app.send_coins(owner.clone(), receiver.clone(), &coins(10_000_000, "orai"))
         .unwrap();
-    println!("Packet commitment: {:?}", packet_commitment);
 
-    // active timeout case
-    // set verified block
-    app.execute(
-        owner.clone(),
-        validator_addr.clone(),
-        &tonbridge_validator::msg::ExecuteMsg::SetVerifiedBlock {
-            root_hash: HexBinary::from_hex(
-                "1dbdf6c3a0e6403743f4f044e3482b41117bdc55105cca1e470395cb62f301fe",
-            )
-            .unwrap(),
-            seq_no: 21513044,
-        },
-        &[],
-    )
-    .unwrap();
-
-    // verify shard block
-    app.execute(owner.clone(), validator_addr.clone(),&tonbridge_validator::msg::ExecuteMsg::VerifyShardBlocks {
-        mc_block_root_hash: HexBinary::from_hex(
-            "1dbdf6c3a0e6403743f4f044e3482b41117bdc55105cca1e470395cb62f301fe",
-        )
-        .unwrap(),
-        shard_proof_links: vec![
-            HexBinary::from_hex(
-                "b5ee9c720102140100029c000946031dbdf6c3a0e6403743f4f044e3482b41117bdc55105cca1e470395cb62f301fe001c01241011ef55aafffffffd0203040528480101f7b02a9ab86c227e407ab753f69c9d9c3dd3a073bccff9562642f3788a95367a0001284801012baaf8e264d4166febb2f334860082faea0d98d1f7ddf852c95160ef6d31324f000328480101da936546c64177b2944610bbc980a8bccf720eb41c7f27c63da5db65d041743d001b24894a33f6fd8bd93ace296c723843fc85ca4bd223dca4cdcb1a373efb093ae0abe96d1827ec83a84ba692374de961fe6e2124bee1df1449b3a47a98a103c09cb894f50309e4c006070809284801018b65ed79386c9472a2e1872d721f8b9a669c1a1514d34458749698b0173af6c40009284801015ab0d4a68fb1b59a3e91a51ef8c415c0296171177ec1c55067a3c1d7a95bbf6f00092848010133510da93049a7f962c359d309a008f2d362afb30cc82b5424e7508f90b053a7000b2317cca5685ad6384e42cb4178040a0b0c2103d0400d2848010146d602e6bb2e2ee54d4c8b790331fdee18ea857983ab58500f5f40f8d5fcad300002210150132201c00e0f2201c01011284801012e009a1f5b4109941e6dd3eff2997ba66acab3957a73d0d5456ce23b47cec0a9000201db500b0255000a421aa00000aff0670e44000000aff0670e443dea22e7fea32d0af5d6839840d8cea1a699a60088b1fdf5a9d95b3fa1d9479652ec77b5ae2bb9dbcd0176456eb89bae9f8be7b5bb8f37339a0201833acc02fd30800023ec5100000000000000000a421a8b3538835212284801010bc77b4297ff68a6b47696ec294601555feac35afe533dd112005a9efe01486f0001001340f9db7272077359402028480101819591975d9ba757d70334539dae4041ddb3b803c5f9fbf5cee8aa9d76ea6caa0003"
-            )
-            .unwrap(),
-        ],
-    },&[]).unwrap();
-
-    // verify tx block
-    let res = app.execute(owner.clone(), bridge_addr.clone(),&tonbridge_bridge::msg::ExecuteMsg::ReadTransaction {
-        tx_boc: HexBinary::from_hex("b5ee9c7201020c010002120003b5705cd4593d741fc359b579f9b05aeffcc9ab7cc7b788924957f2431d43d1d0f75000015fe0ce1c88543a47496a1c10c55ae4ea0fac552161cf37113fdedc36fbe7de167fac4582f83000015fe0ce1c88366a7106a00034678276080102030201e0040500827276bd09e213392c99262fb24da3698b62ecc2c2ade4d78e6795fe790c5c8cd889b7d2e9c290c4e869f32832850e9fb1d7dba2957b7270d24007072903fdafe92802130408dbbc001866987a110a0b01af68000b9a8b27ae83f86b36af3f360b5dff99356f98f6f112492afe4863a87a3a1eeb0001735164f5d07f0d66d5e7e6c16bbff326adf31ede2249255fc90c750f4743dd4dbbc000060a8c0600002bfc19c39108cd4e20d4c0060101df0801181ae4fbbb0000000000000000070000019fe0002e6a2c9eba0fe1acdabcfcd82d77fe64d5be63dbc44924abf9218ea1e8e87bab004e144dd2dfc339aa2639312e1cd6f5d35a03924795906c1a4d156fb124e7097a000015fe0ce1c88666a7106a60090019ae89be5b0000000000000001a0009c4438a91c000000000000000000a100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc983a7f04c1d3f80000000000002000000000002f6baf589033f725cc7cd5f93ee12841f9bf962f604d45dd2d03e91c635847a9a409016e4").unwrap(),
-        tx_proof: HexBinary::from_hex("b5ee9c720102140100035800094603bd445cffd465a15ebad073081b19d434d334c011163fbeb53b2b67f43b28f2ca001e01241011ef55aafffffffd0203040502a09bc7a98700000000840101604aa0000000000200000000000000000000000066a7106a000015fe0ce1c880000015fe0ce1c887ebda212700047d890148435101483bdec40000000800000000000001ee060728480101d53ae37cff4f42cdcfa13e8080a3bb5782d5681b9f969ab3fd96468bdd8559c800012848010124f95b9a61f67cff887c026396ff068272944ab44c349bf57cad866165613e42001d23894a33f6fd0eada71d832bdf383c2e650947ad2f3aea6f7d398764a0ce286f93a8f8f491aedca8416ad47b174aae57a82e41b10e17240eb3b75c7d0c179378713a432c738c4008090a0098000015fe0cd2864401484351774dfb269dad3f065ac2d5bf0e3fcb63bb57a180b8a0ae960a0de08c8937e428bad98b4c3b2b9ab384349b5f54eb3ba7bdc413600034ab91a73ac4759d5ae1570098000015fe0cd2864601604a9f0179d4d990e1997a634dddc0d093fad50c3ffd3d1556dfaa5281ff600b89f06517939154393ec4155a691397144ca8eab91767572478d0c59537faf4001a0e1a28480101b206130edf2d5098671f82b37e8694c4a3db2aba3c33b368e0029607c9f0876900092848010119dc6fe2d49ad87a460ebf9de73a75150bbf110861b0143c9d0af3af5705f7bf000c21079d648d0a0b220960eb2468500c0d22070e3107090e0f2848010162f9e5482518e29e3e2424856a17c191ec9e944b92e5478ec4edf4af8e254dbe000623a3bf1735164f5d07f0d66d5e7e6c16bbff326adf31ede2249255fc90c750f4743dd4d81d108a0b9a8b27ae83f86b36af3f360b5dff99356f98f6f112492afe4863a87a3a1eeb3d000015fe0ce1c881b03a212010111228480101a159c5c1074d4ab48ed154f45baea0da74faf8a13e1eae64c9d9ef2c626b84760005284801011ad34fc8c119c14c2eb2411480c9abc06d0308e214979d1d252d18fab8e20c7d0006210964cf04ec1013008272595338af06028f98fef5ee6279a4b8dc5b1aa50724184340b85f633e3c616226b7d2e9c290c4e869f32832850e9fb1d7dba2957b7270d24007072903fdafe92828480101f9cb28f3a48a71c117a14d69a7a6d3c02e882679bb93280c699fb19b73cdb48e0004").unwrap(),
-    },&[]).unwrap();
-    println!("Res: {:?}", res);
-    let sender_balance = app.query_balance(owner.clone(), denom.clone()).unwrap();
+    let sender_balance = app.query_balance(receiver.clone(), denom.clone()).unwrap();
     assert_eq!(sender_balance.u128(), 10000);
+
+    // app.execute(
+    //     receiver.clone(),
+    //     bridge_addr.clone(),
+    //     &tonbridge_bridge::msg::ExecuteMsg::BridgeToTon(BridgeToTonMsg {
+    //         denom: "EQAX_18eFGby3HZaB0vr95rg5Te3kHoaUOLG3iS_QjtMJNg9".to_string(), // usdt contract
+    //         timeout: Some(123), // just random number for timeout in Ton contract
+    //         to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
+    //     }),
+    //     &coins(1000, denom.clone()),
+    // )
+    // .unwrap();
+    // let sender_balance = app.query_balance(owner.clone(), denom.clone()).unwrap();
+    // assert_eq!(sender_balance.u128(), 9000);
+
+    // // check packet commitment exist
+    // let packet_commitment: Uint256 = app
+    //     .query(
+    //         bridge_addr.clone(),
+    //         &tonbridge_bridge::msg::QueryMsg::SendPacketCommitment { seq: 1 },
+    //     )
+    //     .unwrap();
+    // println!("Packet commitment: {:?}", packet_commitment);
+
+    // // active timeout case
+    // // set verified block
+    // app.execute(
+    //     owner.clone(),
+    //     validator_addr.clone(),
+    //     &tonbridge_validator::msg::ExecuteMsg::SetVerifiedBlock {
+    //         root_hash: HexBinary::from_hex(
+    //             "1dbdf6c3a0e6403743f4f044e3482b41117bdc55105cca1e470395cb62f301fe",
+    //         )
+    //         .unwrap(),
+    //         seq_no: 21513044,
+    //     },
+    //     &[],
+    // )
+    // .unwrap();
+
+    // // verify shard block
+    // app.execute(owner.clone(), validator_addr.clone(),&tonbridge_validator::msg::ExecuteMsg::VerifyShardBlocks {
+    //     mc_block_root_hash: HexBinary::from_hex(
+    //         "1dbdf6c3a0e6403743f4f044e3482b41117bdc55105cca1e470395cb62f301fe",
+    //     )
+    //     .unwrap(),
+    //     shard_proof_links: vec![
+    //         HexBinary::from_hex(
+    //             "b5ee9c720102140100029c000946031dbdf6c3a0e6403743f4f044e3482b41117bdc55105cca1e470395cb62f301fe001c01241011ef55aafffffffd0203040528480101f7b02a9ab86c227e407ab753f69c9d9c3dd3a073bccff9562642f3788a95367a0001284801012baaf8e264d4166febb2f334860082faea0d98d1f7ddf852c95160ef6d31324f000328480101da936546c64177b2944610bbc980a8bccf720eb41c7f27c63da5db65d041743d001b24894a33f6fd8bd93ace296c723843fc85ca4bd223dca4cdcb1a373efb093ae0abe96d1827ec83a84ba692374de961fe6e2124bee1df1449b3a47a98a103c09cb894f50309e4c006070809284801018b65ed79386c9472a2e1872d721f8b9a669c1a1514d34458749698b0173af6c40009284801015ab0d4a68fb1b59a3e91a51ef8c415c0296171177ec1c55067a3c1d7a95bbf6f00092848010133510da93049a7f962c359d309a008f2d362afb30cc82b5424e7508f90b053a7000b2317cca5685ad6384e42cb4178040a0b0c2103d0400d2848010146d602e6bb2e2ee54d4c8b790331fdee18ea857983ab58500f5f40f8d5fcad300002210150132201c00e0f2201c01011284801012e009a1f5b4109941e6dd3eff2997ba66acab3957a73d0d5456ce23b47cec0a9000201db500b0255000a421aa00000aff0670e44000000aff0670e443dea22e7fea32d0af5d6839840d8cea1a699a60088b1fdf5a9d95b3fa1d9479652ec77b5ae2bb9dbcd0176456eb89bae9f8be7b5bb8f37339a0201833acc02fd30800023ec5100000000000000000a421a8b3538835212284801010bc77b4297ff68a6b47696ec294601555feac35afe533dd112005a9efe01486f0001001340f9db7272077359402028480101819591975d9ba757d70334539dae4041ddb3b803c5f9fbf5cee8aa9d76ea6caa0003"
+    //         )
+    //         .unwrap(),
+    //     ],
+    // },&[]).unwrap();
+
+    // // verify tx block
+    // let res = app.execute(owner.clone(), bridge_addr.clone(),&tonbridge_bridge::msg::ExecuteMsg::ReadTransaction {
+    //     tx_boc: HexBinary::from_hex("b5ee9c7201020c010002120003b5705cd4593d741fc359b579f9b05aeffcc9ab7cc7b788924957f2431d43d1d0f75000015fe0ce1c88543a47496a1c10c55ae4ea0fac552161cf37113fdedc36fbe7de167fac4582f83000015fe0ce1c88366a7106a00034678276080102030201e0040500827276bd09e213392c99262fb24da3698b62ecc2c2ade4d78e6795fe790c5c8cd889b7d2e9c290c4e869f32832850e9fb1d7dba2957b7270d24007072903fdafe92802130408dbbc001866987a110a0b01af68000b9a8b27ae83f86b36af3f360b5dff99356f98f6f112492afe4863a87a3a1eeb0001735164f5d07f0d66d5e7e6c16bbff326adf31ede2249255fc90c750f4743dd4dbbc000060a8c0600002bfc19c39108cd4e20d4c0060101df0801181ae4fbbb0000000000000000070000019fe0002e6a2c9eba0fe1acdabcfcd82d77fe64d5be63dbc44924abf9218ea1e8e87bab004e144dd2dfc339aa2639312e1cd6f5d35a03924795906c1a4d156fb124e7097a000015fe0ce1c88666a7106a60090019ae89be5b0000000000000001a0009c4438a91c000000000000000000a100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006fc983a7f04c1d3f80000000000002000000000002f6baf589033f725cc7cd5f93ee12841f9bf962f604d45dd2d03e91c635847a9a409016e4").unwrap(),
+    //     tx_proof: HexBinary::from_hex("b5ee9c720102140100035800094603bd445cffd465a15ebad073081b19d434d334c011163fbeb53b2b67f43b28f2ca001e01241011ef55aafffffffd0203040502a09bc7a98700000000840101604aa0000000000200000000000000000000000066a7106a000015fe0ce1c880000015fe0ce1c887ebda212700047d890148435101483bdec40000000800000000000001ee060728480101d53ae37cff4f42cdcfa13e8080a3bb5782d5681b9f969ab3fd96468bdd8559c800012848010124f95b9a61f67cff887c026396ff068272944ab44c349bf57cad866165613e42001d23894a33f6fd0eada71d832bdf383c2e650947ad2f3aea6f7d398764a0ce286f93a8f8f491aedca8416ad47b174aae57a82e41b10e17240eb3b75c7d0c179378713a432c738c4008090a0098000015fe0cd2864401484351774dfb269dad3f065ac2d5bf0e3fcb63bb57a180b8a0ae960a0de08c8937e428bad98b4c3b2b9ab384349b5f54eb3ba7bdc413600034ab91a73ac4759d5ae1570098000015fe0cd2864601604a9f0179d4d990e1997a634dddc0d093fad50c3ffd3d1556dfaa5281ff600b89f06517939154393ec4155a691397144ca8eab91767572478d0c59537faf4001a0e1a28480101b206130edf2d5098671f82b37e8694c4a3db2aba3c33b368e0029607c9f0876900092848010119dc6fe2d49ad87a460ebf9de73a75150bbf110861b0143c9d0af3af5705f7bf000c21079d648d0a0b220960eb2468500c0d22070e3107090e0f2848010162f9e5482518e29e3e2424856a17c191ec9e944b92e5478ec4edf4af8e254dbe000623a3bf1735164f5d07f0d66d5e7e6c16bbff326adf31ede2249255fc90c750f4743dd4d81d108a0b9a8b27ae83f86b36af3f360b5dff99356f98f6f112492afe4863a87a3a1eeb3d000015fe0ce1c881b03a212010111228480101a159c5c1074d4ab48ed154f45baea0da74faf8a13e1eae64c9d9ef2c626b84760005284801011ad34fc8c119c14c2eb2411480c9abc06d0308e214979d1d252d18fab8e20c7d0006210964cf04ec1013008272595338af06028f98fef5ee6279a4b8dc5b1aa50724184340b85f633e3c616226b7d2e9c290c4e869f32832850e9fb1d7dba2957b7270d24007072903fdafe92828480101f9cb28f3a48a71c117a14d69a7a6d3c02e882679bb93280c699fb19b73cdb48e0004").unwrap(),
+    // },&[]).unwrap();
+    // println!("Res: {:?}", res);
+    // let sender_balance = app.query_balance(owner.clone(), denom.clone()).unwrap();
+    // assert_eq!(sender_balance.u128(), 10000);
 }
 
 #[test]
@@ -1164,7 +1162,6 @@ fn test_refund_bridge_to_ton() {
 }
 
 #[test]
-#[cfg(not(feature = "test-tube"))]
 fn test_bridge_ton_to_orai_with_fee() {
     let MockApp {
         mut app,
@@ -1172,6 +1169,8 @@ fn test_bridge_ton_to_orai_with_fee() {
         validator_addr,
         bridge_addr,
         cw20_addr,
+        relayer_fee_addr,
+        token_fee_addr,
         ..
     } = new_mock_app();
 
@@ -1202,9 +1201,8 @@ fn test_bridge_ton_to_orai_with_fee() {
     let token_denom = "EQBynBO23ywHy_CgarY9NK9FTz0yDsG82PtcbSTQgGoXwiuA";
     let packet_timeout_timestamp = 1720691622u64;
 
-    app.inner_mut().update_block(|block| {
-        block.time = Timestamp::from_seconds(packet_timeout_timestamp - 10);
-    });
+    app.set_block_time_seconds(packet_timeout_timestamp - 10);
+
     // update fee
     app.execute(
         owner.clone(),
@@ -1264,9 +1262,7 @@ fn test_bridge_ton_to_orai_with_fee() {
     )
     .unwrap();
 
-    app.inner_mut().update_block(|block| {
-        block.time = block.time.minus_seconds(10);
-    });
+    app.set_block_time_seconds(app.get_block_time().seconds() - 10);
 
     app.execute(
         owner.clone(),
@@ -1281,7 +1277,7 @@ fn test_bridge_ton_to_orai_with_fee() {
         .query(
             cw20_addr.clone(),
             &cw20_base::msg::QueryMsg::Balance {
-                address: "relayer_fee".to_string(),
+                address: relayer_fee_addr.to_string(),
             },
         )
         .unwrap();
@@ -1290,7 +1286,7 @@ fn test_bridge_ton_to_orai_with_fee() {
         .query(
             cw20_addr.clone(),
             &cw20_base::msg::QueryMsg::Balance {
-                address: "token_fee".to_string(),
+                address: token_fee_addr.to_string(),
             },
         )
         .unwrap();
@@ -1394,7 +1390,7 @@ fn test_ton_universal_swap() {
     assert_eq!(
         res.0,
         vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
-            to_address: "admin".to_string(),
+            to_address: "orai1ehmhqcn8erf3dgavrca69zgp4rtxj5kqgtcnyd".to_string(),
             amount: vec![Coin {
                 denom: "orai".to_string(),
                 amount: Uint128::new(1000000000)

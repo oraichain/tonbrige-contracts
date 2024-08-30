@@ -27,6 +27,8 @@ fn test_instantiate_contract() {
         bridge_addr,
         token_factory_addr,
         validator_addr,
+        token_fee_addr,
+        relayer_fee_addr,
         ..
     } = new_mock_app();
 
@@ -38,8 +40,8 @@ fn test_instantiate_contract() {
         Config {
             validator_contract_addr: validator_addr.clone(),
             bridge_adapter: "EQAE8anZidQFTKcsKS_98iDEXFkvuoa1YmVPxQC279zAoV7R".to_string(),
-            token_fee_receiver: Addr::unchecked("token_fee"),
-            relayer_fee_receiver: Addr::unchecked("relayer_fee"),
+            token_fee_receiver: token_fee_addr.clone(),
+            relayer_fee_receiver: relayer_fee_addr.clone(),
             swap_router_contract: RouterController("router".to_string()),
             token_factory_addr: Some(token_factory_addr),
             osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),

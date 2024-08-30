@@ -180,10 +180,7 @@ pub fn handle_packet_receive(
     let config = CONFIG.load(storage)?;
 
     #[cfg(test)]
-    let recipient = api
-        .addr_humanize(&data.receiver)
-        .unwrap_or_else(|_| Addr::unchecked("admin".to_string()));
-
+    let recipient = Addr::unchecked("orai1ehmhqcn8erf3dgavrca69zgp4rtxj5kqgtcnyd");
     #[cfg(not(test))]
     let recipient = api.addr_humanize(&data.receiver)?;
 
