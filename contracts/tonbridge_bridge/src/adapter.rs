@@ -130,6 +130,9 @@ pub fn on_acknowledgment(
     // if not success, try refunds
     if ack.status.ne(&Status::Success) {
         let send_packet = SEND_PACKET.load(deps.storage, ack.seq)?;
+        let recover_addr = send_packet
+            .recovery_addr
+            .unwrap_or(deps.api.addr_validate(&send_packet.sender)?);
 
         // increase channel balance
         increase_channel_balance(
@@ -143,14 +146,14 @@ pub fn on_acknowledgment(
             let msg = build_mint_asset_msg(
                 config.token_factory_addr,
                 &send_packet.local_refund_asset,
-                send_packet.sender,
+                recover_addr.to_string(),
             )?;
             msgs.push(msg);
         } else {
             msgs.push(send_packet.local_refund_asset.into_msg(
                 None,
                 &deps.querier,
-                deps.api.addr_validate(&send_packet.sender)?,
+                recover_addr,
             )?);
         }
     }
@@ -460,6 +463,7 @@ pub fn handle_bridge_to_ton(
             remote_amount,
             timeout_timestamp,
             opcode: mapping.opcode,
+            recovery_addr: msg.recovery_addr.clone(),
         },
     )?;
     LAST_PACKET_SEQ.save(deps.storage, &last_packet_seq)?;
@@ -469,7 +473,7 @@ pub fn handle_bridge_to_ton(
         .add_attributes(vec![
             ("action", "send_to_ton"),
             ("opcode_packet", &SEND_TO_TON_MAGIC_NUMBER.to_string()),
-            ("local_sender", sender.as_str()),
+            ("local_sender", sender.clone().as_str()),
             ("remote_receiver", &msg.to),
             ("remote_denom", &msg.denom),
             ("local_amount", &local_amount.to_string()),
@@ -482,5 +486,9 @@ pub fn handle_bridge_to_ton(
             ),
             ("remote_amount", &remote_amount.to_string()),
             ("seq", &last_packet_seq.to_string()),
+            (
+                "recovery_addr",
+                &msg.recovery_addr.unwrap_or(sender).to_string(),
+            ),
         ]))
 }
