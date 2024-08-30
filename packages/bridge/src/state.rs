@@ -62,6 +62,8 @@ pub struct TimeoutSendPacket {
     pub sender: String,
     pub timeout_timestamp: u64,
     pub opcode: Bytes32,
+    #[serde(default)]
+    pub recovery_addr: Option<Addr>,
 }
 
 #[cw_serde]

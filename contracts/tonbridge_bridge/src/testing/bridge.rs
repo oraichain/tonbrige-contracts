@@ -343,6 +343,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap_err();
@@ -357,6 +358,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap_err();
@@ -391,6 +393,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap_err();
@@ -405,6 +408,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap_err();
@@ -420,6 +424,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap();
@@ -453,6 +458,7 @@ fn test_bridge_native_to_ton() {
             ),
             attr("remote_amount", "10000"),
             attr("seq", "1"),
+            attr("recovery_addr", "sender"),
         ]
     );
 }
@@ -515,6 +521,7 @@ fn test_bridge_cw20_to_ton() {
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
+                recovery_addr: None,
             })
             .unwrap(),
         }),
@@ -550,6 +557,7 @@ fn test_bridge_cw20_to_ton() {
             ),
             attr("remote_amount", "10000"),
             attr("seq", "1"),
+            attr("recovery_addr", "sender"),
         ]
     );
 }
@@ -638,6 +646,7 @@ fn test_bridge_to_ton_with_fee() {
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
+                recovery_addr: None,
             })
             .unwrap(),
         }),
@@ -695,6 +704,7 @@ fn test_bridge_to_ton_with_fee() {
             ),
             attr("remote_amount", "8990"),
             attr("seq", "1"),
+            attr("recovery_addr", "sender"),
         ]
     );
 
@@ -728,6 +738,7 @@ fn test_bridge_to_ton_with_fee() {
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
+                recovery_addr: None,
             })
             .unwrap(),
         }),
@@ -774,6 +785,7 @@ fn test_bridge_to_ton_with_fee() {
             ),
             attr("remote_amount", "9990"),
             attr("seq", "2"),
+            attr("recovery_addr", "sender"),
         ]
     );
 }
@@ -959,13 +971,35 @@ fn test_happy_case_token_factory() {
         tx_proof: HexBinary::from_hex("b5ee9c72010210010002fb00094603c3ee48fcfb1951c41df4cc1ceb1b68e7dabc32182746e36bcb3090f14bad0af4001f01241011ef55aafffffffd0203040502a09bc7a987000000008401015f804e000000000200000000000000000000000066a50b4a000015f140d4f5c0000015f140d4f5c44d4af0b900047b4c0147870601478393c40000000800000000000001ee06072848010167650f78a9eae9494f5a3a0b4ffa657c3de887d6657294db573277968937141a000128480101cc14e21c72a1dc48a74e278dd596d7b0ca90e8c2ca12b1f89b3f62b729b86a17001e23894a33f6fdc540aa39b755ffae32b04c425d2c46501e831aba8f7fb18c819bb6b60a37477855ba839d64291c2e272d37bed587debc8653dbb1f6342747bb3447681533dfbf4008090a0098000015f140c5b3840147870601160693e59aeda77a71c6a85c3206e624c2b876589909f1046434be0495ec8db37737bf2aea702ee9a183ee2b94b6f35aaebd83180fc2a3ccce2c36e7320ba90098000015f140c5b381015f804d60808aef9591c0f3065403bb60937021674a049c05e60624539d2f1b0e508179a206b4ebab6fd3727aa62830bfe6274ec01efb73bad093fcf7da98136591c04d28480101f266622e77d2b020b40dda4ec40655bbe76865265760a595147c6d4958617137000928480101747427c412a5ddbbc3933125b9b2956d23c18c48b511a51311aa10ac6b2529dc000a21079b167f1a0b220960d8b3f8d00c0d22a3bf4b9a8b27ae83f86b36af3f360b5dff99356f98f6f112492afe4863a87a3a1eea6c46742505cd4593d741fc359b579f9b05aeffcc9ab7cc7b788924957f2431d43d1d0f75a000000af8a06a7ae09b119d0a0e0f284801014518eb72f99744912489062273d29c4efa158e17c0ab7c7188438932f55a9824000328480101f6532afe25bf35a0e13fef84792cb35fde2c1fcdbed78ce321413413bdce75df00060082725bc12430b7094c9649826b0550b887a42522f80b11bbda296bc4a0ae8f3c3a82a7307e385b80e3e85fa6aed19a5cf24d56d64f18e3628d26fe9f745f2f48d811").unwrap(),
     },&[]).unwrap();
     println!("Res: {:?}", res);
-
     let receiver = Addr::unchecked("orai1ehmhqcn8erf3dgavrca69zgp4rtxj5kqgtcnyd");
-    app.send_coins(owner.clone(), receiver.clone(), &coins(10_000_000, "orai"))
-        .unwrap();
-
     let sender_balance = app.query_balance(receiver.clone(), denom.clone()).unwrap();
     assert_eq!(sender_balance.u128(), 10000);
+
+    // app.execute(
+    //     owner.clone(),
+    //     bridge_addr.clone(),
+    //     &tonbridge_bridge::msg::ExecuteMsg::BridgeToTon(BridgeToTonMsg {
+    //         denom: "EQAX_18eFGby3HZaB0vr95rg5Te3kHoaUOLG3iS_QjtMJNg9".to_string(), // usdt contract
+    //         timeout: Some(123), // just random number for timeout in Ton contract
+    //         to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
+    //         recovery_addr: None,
+    //     }),
+    //     &coins(1000, denom.clone()),
+    // )
+    // .unwrap();
+    // let sender_balance = app.query_balance(owner.clone(), denom.clone()).unwrap();
+    // assert_eq!(sender_balance.u128(), 9000);
+
+    // // check packet commitment exist
+    // let packet_commitment: Uint256 = app
+    //     .query(
+    //         bridge_addr.clone(),
+    //         &tonbridge_bridge::msg::QueryMsg::SendPacketCommitment { seq: 1 },
+    //     )
+    //     .unwrap();
+    // let receiver = Addr::unchecked("orai1ehmhqcn8erf3dgavrca69zgp4rtxj5kqgtcnyd");
+    // let sender_balance = app.query_balance(receiver.clone(), denom.clone()).unwrap();
+    // assert_eq!(sender_balance.u128(), 10000);
 
     // app.execute(
     //     receiver.clone(),
@@ -1063,6 +1097,7 @@ fn test_refund_bridge_to_ton() {
         sender: "sender".to_string(),
         timeout_timestamp: mock_env().block.time.seconds(),
         opcode: OPCODE_1,
+        recovery_addr: None,
     };
     REMOTE_INITIATED_CHANNEL_STATE
         .save(deps.as_mut().storage, "ton", &ChannelState::default())
@@ -1144,6 +1179,7 @@ fn test_refund_bridge_to_ton() {
         sender: "sender".to_string(),
         timeout_timestamp: mock_env().block.time.seconds(),
         opcode: OPCODE_2,
+        recovery_addr: None,
     };
     SEND_PACKET
         .save(deps.as_mut().storage, seq, &send_packet)
@@ -1162,6 +1198,140 @@ fn test_refund_bridge_to_ton() {
 }
 
 #[test]
+fn test_refund_bridge_to_ton_with_recovery_addr() {
+    let mut deps = mock_dependencies();
+    instantiate(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("owner", &vec![]),
+        InstantiateMsg {
+            validator_contract_addr: Addr::unchecked("validator_contract_addr"),
+            bridge_adapter: "bridge_adapter".to_string(),
+            token_fee_receiver: Addr::unchecked("token_fee_receiver"),
+            relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
+            swap_router_contract: "swap_router_contract".to_string(),
+            token_factory_addr: Some(Addr::unchecked("token_factory")),
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
+        },
+    )
+    .unwrap();
+
+    let seq = 1u64;
+
+    let send_packet = TimeoutSendPacket {
+        local_refund_asset: Asset {
+            info: AssetInfo::NativeToken {
+                denom: "ton_orai".to_string(),
+            },
+            amount: Uint128::new(1000000),
+        },
+        remote_denom: "ton".to_string(),
+        remote_amount: Uint128::new(1000000000),
+        sender: "sender".to_string(),
+        timeout_timestamp: mock_env().block.time.seconds(),
+        opcode: OPCODE_1,
+        recovery_addr: Some(Addr::unchecked("recovery_addr")),
+    };
+    REMOTE_INITIATED_CHANNEL_STATE
+        .save(deps.as_mut().storage, "ton", &ChannelState::default())
+        .unwrap();
+
+    // case 1: not found send_packet => error
+    let mut cell_builder = CellBuilder::new();
+    cell_builder
+        .store_slice(&SEND_TO_TON_MAGIC_NUMBER.to_be_bytes())
+        .unwrap();
+    cell_builder.store_slice(&seq.to_be_bytes()).unwrap();
+    cell_builder.store_u8(2, 2).unwrap();
+    let cell = cell_builder.build().unwrap();
+
+    let err = on_acknowledgment(deps.as_mut(), &cell);
+    assert!(err.is_err());
+
+    // refund success (mint token)
+    // before refund, channel balance = 0;
+    let channel_balance = REMOTE_INITIATED_CHANNEL_STATE
+        .load(deps.as_ref().storage, "ton")
+        .unwrap();
+    assert_eq!(
+        channel_balance,
+        ChannelState {
+            outstanding: Uint128::new(0),
+            total_sent: Uint128::new(0)
+        }
+    );
+
+    SEND_PACKET
+        .save(deps.as_mut().storage, seq, &send_packet)
+        .unwrap();
+
+    let res = on_acknowledgment(deps.as_mut(), &cell).unwrap();
+    // before refund, channel balance updated;
+    let channel_balance = REMOTE_INITIATED_CHANNEL_STATE
+        .load(deps.as_ref().storage, "ton")
+        .unwrap();
+    assert_eq!(
+        channel_balance,
+        ChannelState {
+            outstanding: Uint128::new(1000000000),
+            total_sent: Uint128::new(1000000000)
+        }
+    );
+    assert_eq!(
+        res.1,
+        vec![
+            attr("action", "acknowledgment"),
+            attr("seq", "1"),
+            attr("status", "Timeout")
+        ]
+    );
+    assert_eq!(
+        res.0,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "token_factory".to_string(),
+            msg: to_json_binary(&tokenfactory::msg::ExecuteMsg::MintTokens {
+                denom: "ton_orai".to_string(),
+                amount: Uint128::new(1000000),
+                mint_to_address: "recovery_addr".to_string(),
+            })
+            .unwrap(),
+            funds: vec![],
+        })]
+    );
+
+    // refund by sendToken
+    let send_packet = TimeoutSendPacket {
+        local_refund_asset: Asset {
+            info: AssetInfo::NativeToken {
+                denom: "ton_orai".to_string(),
+            },
+            amount: Uint128::new(1000000),
+        },
+        remote_denom: "ton".to_string(),
+        remote_amount: Uint128::new(1000000000),
+        sender: "sender".to_string(),
+        timeout_timestamp: mock_env().block.time.seconds(),
+        opcode: OPCODE_2,
+        recovery_addr: Some(Addr::unchecked("recovery_addr")),
+    };
+    SEND_PACKET
+        .save(deps.as_mut().storage, seq, &send_packet)
+        .unwrap();
+    let res = on_acknowledgment(deps.as_mut(), &cell).unwrap();
+    assert_eq!(
+        res.0,
+        vec![CosmosMsg::Bank(BankMsg::Send {
+            to_address: "recovery_addr".to_string(),
+            amount: vec![Coin {
+                denom: "ton_orai".to_string(),
+                amount: Uint128::new(1000000),
+            }]
+        })]
+    );
+}
+
+#[test]
+#[cfg(not(feature = "test-tube"))]
 fn test_bridge_ton_to_orai_with_fee() {
     let MockApp {
         mut app,
