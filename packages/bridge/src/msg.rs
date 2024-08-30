@@ -70,6 +70,7 @@ pub struct BridgeToTonMsg {
     pub to: String,
     pub denom: String,
     pub timeout: Option<u64>,
+    pub recovery_addr: Option<Addr>,
 }
 
 #[cw_serde]

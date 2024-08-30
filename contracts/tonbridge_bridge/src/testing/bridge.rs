@@ -346,6 +346,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap_err();
@@ -360,6 +361,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap_err();
@@ -394,6 +396,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap_err();
@@ -408,6 +411,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap_err();
@@ -423,6 +427,7 @@ fn test_bridge_native_to_ton() {
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
             denom: denom.to_string(),
             timeout: None,
+            recovery_addr: None,
         }),
     )
     .unwrap();
@@ -456,6 +461,7 @@ fn test_bridge_native_to_ton() {
             ),
             attr("remote_amount", "10000"),
             attr("seq", "1"),
+            attr("recovery_addr", "sender"),
         ]
     );
 }
@@ -518,6 +524,7 @@ fn test_bridge_cw20_to_ton() {
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
+                recovery_addr: None,
             })
             .unwrap(),
         }),
@@ -553,6 +560,7 @@ fn test_bridge_cw20_to_ton() {
             ),
             attr("remote_amount", "10000"),
             attr("seq", "1"),
+            attr("recovery_addr", "sender"),
         ]
     );
 }
@@ -641,6 +649,7 @@ fn test_bridge_to_ton_with_fee() {
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
+                recovery_addr: None,
             })
             .unwrap(),
         }),
@@ -698,6 +707,7 @@ fn test_bridge_to_ton_with_fee() {
             ),
             attr("remote_amount", "8990"),
             attr("seq", "1"),
+            attr("recovery_addr", "sender"),
         ]
     );
 
@@ -731,6 +741,7 @@ fn test_bridge_to_ton_with_fee() {
                 to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
                 denom: "EQA5FnPP13uZPJQq7aj6UHLEukJJZSZW053cU1Wu6R6BpYYB".to_string(),
                 timeout: None,
+                recovery_addr: None,
             })
             .unwrap(),
         }),
@@ -777,6 +788,7 @@ fn test_bridge_to_ton_with_fee() {
             ),
             attr("remote_amount", "9990"),
             attr("seq", "2"),
+            attr("recovery_addr", "sender"),
         ]
     );
 }
@@ -976,6 +988,7 @@ fn test_happy_case_token_factory() {
             denom: "EQAX_18eFGby3HZaB0vr95rg5Te3kHoaUOLG3iS_QjtMJNg9".to_string(), // usdt contract
             timeout: Some(123), // just random number for timeout in Ton contract
             to: "EQABEq658dLg1KxPhXZxj0vapZMNYevotqeINH786lpwwSnT".to_string(),
+            recovery_addr: None,
         }),
         &coins(1000, denom.clone()),
     )
@@ -1065,6 +1078,7 @@ fn test_refund_bridge_to_ton() {
         sender: "sender".to_string(),
         timeout_timestamp: mock_env().block.time.seconds(),
         opcode: OPCODE_1,
+        recovery_addr: None,
     };
     REMOTE_INITIATED_CHANNEL_STATE
         .save(deps.as_mut().storage, "ton", &ChannelState::default())
@@ -1146,6 +1160,7 @@ fn test_refund_bridge_to_ton() {
         sender: "sender".to_string(),
         timeout_timestamp: mock_env().block.time.seconds(),
         opcode: OPCODE_2,
+        recovery_addr: None,
     };
     SEND_PACKET
         .save(deps.as_mut().storage, seq, &send_packet)
@@ -1155,6 +1170,139 @@ fn test_refund_bridge_to_ton() {
         res.0,
         vec![CosmosMsg::Bank(BankMsg::Send {
             to_address: "sender".to_string(),
+            amount: vec![Coin {
+                denom: "ton_orai".to_string(),
+                amount: Uint128::new(1000000),
+            }]
+        })]
+    );
+}
+
+#[test]
+fn test_refund_bridge_to_ton_with_recovery_addr() {
+    let mut deps = mock_dependencies();
+    instantiate(
+        deps.as_mut(),
+        mock_env(),
+        mock_info("owner", &vec![]),
+        InstantiateMsg {
+            validator_contract_addr: Addr::unchecked("validator_contract_addr"),
+            bridge_adapter: "bridge_adapter".to_string(),
+            token_fee_receiver: Addr::unchecked("token_fee_receiver"),
+            relayer_fee_receiver: Addr::unchecked("relayer_fee_receiver"),
+            swap_router_contract: "swap_router_contract".to_string(),
+            token_factory_addr: Some(Addr::unchecked("token_factory")),
+            osor_entrypoint_contract: Addr::unchecked("osor_entrypoint_contract"),
+        },
+    )
+    .unwrap();
+
+    let seq = 1u64;
+
+    let send_packet = TimeoutSendPacket {
+        local_refund_asset: Asset {
+            info: AssetInfo::NativeToken {
+                denom: "ton_orai".to_string(),
+            },
+            amount: Uint128::new(1000000),
+        },
+        remote_denom: "ton".to_string(),
+        remote_amount: Uint128::new(1000000000),
+        sender: "sender".to_string(),
+        timeout_timestamp: mock_env().block.time.seconds(),
+        opcode: OPCODE_1,
+        recovery_addr: Some(Addr::unchecked("recovery_addr")),
+    };
+    REMOTE_INITIATED_CHANNEL_STATE
+        .save(deps.as_mut().storage, "ton", &ChannelState::default())
+        .unwrap();
+
+    // case 1: not found send_packet => error
+    let mut cell_builder = CellBuilder::new();
+    cell_builder
+        .store_slice(&SEND_TO_TON_MAGIC_NUMBER.to_be_bytes())
+        .unwrap();
+    cell_builder.store_slice(&seq.to_be_bytes()).unwrap();
+    cell_builder.store_u8(2, 2).unwrap();
+    let cell = cell_builder.build().unwrap();
+
+    let err = on_acknowledgment(deps.as_mut(), &cell);
+    assert!(err.is_err());
+
+    // refund success (mint token)
+    // before refund, channel balance = 0;
+    let channel_balance = REMOTE_INITIATED_CHANNEL_STATE
+        .load(deps.as_ref().storage, "ton")
+        .unwrap();
+    assert_eq!(
+        channel_balance,
+        ChannelState {
+            outstanding: Uint128::new(0),
+            total_sent: Uint128::new(0)
+        }
+    );
+
+    SEND_PACKET
+        .save(deps.as_mut().storage, seq, &send_packet)
+        .unwrap();
+
+    let res = on_acknowledgment(deps.as_mut(), &cell).unwrap();
+    // before refund, channel balance updated;
+    let channel_balance = REMOTE_INITIATED_CHANNEL_STATE
+        .load(deps.as_ref().storage, "ton")
+        .unwrap();
+    assert_eq!(
+        channel_balance,
+        ChannelState {
+            outstanding: Uint128::new(1000000000),
+            total_sent: Uint128::new(1000000000)
+        }
+    );
+    assert_eq!(
+        res.1,
+        vec![
+            attr("action", "acknowledgment"),
+            attr("seq", "1"),
+            attr("status", "Timeout")
+        ]
+    );
+    assert_eq!(
+        res.0,
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "token_factory".to_string(),
+            msg: to_json_binary(&tokenfactory::msg::ExecuteMsg::MintTokens {
+                denom: "ton_orai".to_string(),
+                amount: Uint128::new(1000000),
+                mint_to_address: "recovery_addr".to_string(),
+            })
+            .unwrap(),
+            funds: vec![],
+        })]
+    );
+
+    // refund by sendToken
+    let send_packet = TimeoutSendPacket {
+        local_refund_asset: Asset {
+            info: AssetInfo::NativeToken {
+                denom: "ton_orai".to_string(),
+            },
+            amount: Uint128::new(1000000),
+        },
+        remote_denom: "ton".to_string(),
+        remote_amount: Uint128::new(1000000000),
+        sender: "sender".to_string(),
+        timeout_timestamp: mock_env().block.time.seconds(),
+        opcode: OPCODE_2,
+        recovery_addr: Some(Addr::unchecked("recovery_addr")),
+    };
+    SEND_PACKET
+        .save(deps.as_mut().storage, seq, &send_packet)
+        .unwrap();
+    let res = on_acknowledgment(deps.as_mut(), &cell).unwrap();
+    assert_eq!(
+        res.0,
+        vec![CosmosMsg::Bank(BankMsg::Send {
+            to_address: "recovery_addr".to_string(),
             amount: vec![Coin {
                 denom: "ton_orai".to_string(),
                 amount: Uint128::new(1000000),
