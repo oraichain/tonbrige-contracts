@@ -203,7 +203,19 @@ pub fn update_mapping_pair(
             relayer_fee: msg.relayer_fee,
         },
     )?;
-    Ok(Response::new().add_attributes(vec![("action", "update_mapping_pair")]))
+    Ok(Response::new().add_attributes(vec![
+        ("action", "update_mapping_pair"),
+        ("denom", msg.denom.as_str()),
+        ("local_asset_info", &msg.local_asset_info.to_string()),
+        ("remote_decimals", &msg.remote_decimals.to_string()),
+        (
+            "asset_info_decimals",
+            &msg.local_asset_info_decimals.to_string(),
+        ),
+        ("opcode", &msg.opcode.to_string()),
+        ("token_origin", &msg.token_origin.to_string()),
+        ("relayer_fee", &msg.relayer_fee.to_string()),
+    ]))
 }
 
 pub fn register_denom(
