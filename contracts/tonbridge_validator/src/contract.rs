@@ -27,11 +27,11 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     let mut validator = Validator::default();
+    VALIDATOR.save(deps.storage, &validator)?;
     if let Some(boc) = msg.boc {
         validator.parse_candidates_root_block(deps.storage, boc.as_slice())?;
         validator.init_validators(deps.storage)?;
     }
-    VALIDATOR.save(deps.storage, &validator)?;
     OWNER.set(deps, Some(info.sender))?;
     Ok(Response::new())
 }

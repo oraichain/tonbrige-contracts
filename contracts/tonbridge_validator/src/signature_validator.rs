@@ -116,9 +116,7 @@ impl SignatureValidator {
         for mut total_validator in total_validators {
             // if the candidate is already in the list, we compare weight with the input
             if let Some(candidate) = candidates_for_validator_set.iter_mut().find(|val| {
-                HexBinary::from(val.pubkey)
-                    .to_hex()
-                    .eq(&HexBinary::from(total_validator.pubkey).to_string())
+                HexBinary::from(val.pubkey).eq(&HexBinary::from(total_validator.pubkey))
             }) {
                 // old validator has less weight then new
                 if candidate.weight < total_validator.weight {

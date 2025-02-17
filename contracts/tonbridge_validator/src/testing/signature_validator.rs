@@ -92,13 +92,14 @@ mod tests {
         ];
         let mut sig_val = SignatureValidator::default();
 
+        let current_candidate_weight = 2;
         SIGNATURE_CANDIDATE_VALIDATOR
             .save(
                 deps.as_mut().storage,
                 0,
                 &ValidatorDescription {
                     c_type: 1,
-                    weight: 2,
+                    weight: current_candidate_weight,
                     adnl_addr: EMPTY_HASH,
                     pubkey: to_bytes32(
                         &HexBinary::from_hex(
@@ -118,6 +119,7 @@ mod tests {
             )
             .unwrap();
 
+        sig_val.candidates_total_weight = current_candidate_weight;
         sig_val
             .parse_validators(deps.as_mut().storage, &mut validators)
             .unwrap();

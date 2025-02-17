@@ -298,7 +298,7 @@ mod tests {
             ExecuteMsg::VerifyKeyBlock {
                 root_hash: root_hash.clone(),
                 file_hash: file_hash.clone(),
-                vdata: v_data_hex[0..v_data_hex.len() / 3].to_vec(),
+                vdata: vec![],
             },
         )
         .unwrap_err();

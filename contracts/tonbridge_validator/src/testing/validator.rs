@@ -4,7 +4,7 @@ mod tests {
     use cosmwasm_std::{testing::mock_dependencies, HexBinary};
     use tonbridge_parser::types::VerifiedBlockInfo;
 
-    use crate::validator::Validator;
+    use crate::{state::VALIDATOR, validator::Validator};
 
     const BLOCK_BOCS_SMALL: &str = include_str!("./testdata/bocs.hex");
     const BLOCK_BOCS_LARGE: &str = include_str!("./testdata/bocs_large.hex");
@@ -22,6 +22,7 @@ mod tests {
         let boc = HexBinary::from_hex(BLOCK_BOCS_SMALL).unwrap().to_vec();
 
         let mut validator = Validator::default();
+        VALIDATOR.save(deps.as_mut().storage, &validator).unwrap();
         validator
             .parse_candidates_root_block(deps.as_mut().storage, &boc)
             .unwrap();
@@ -63,6 +64,7 @@ mod tests {
         let boc = HexBinary::from_hex(BLOCK_BOCS_LARGE).unwrap().to_vec();
 
         let mut validator = Validator::default();
+        VALIDATOR.save(deps.as_mut().storage, &validator).unwrap();
         validator
             .parse_candidates_root_block(deps.as_mut().storage, &boc)
             .unwrap();
@@ -88,6 +90,7 @@ mod tests {
             .to_vec();
 
         let mut validator = Validator::default();
+        VALIDATOR.save(deps.as_mut().storage, &validator).unwrap();
         validator
             .parse_candidates_root_block(deps.as_mut().storage, &boc)
             .unwrap();
