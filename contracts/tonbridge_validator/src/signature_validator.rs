@@ -124,17 +124,18 @@ impl SignatureValidator {
 
                     candidate.node_id = compute_node_id(candidate.pubkey);
                 }
+            } else {
+                // not found, we push a new default validator and update its info
+                candidates_for_validator_set.push(ValidatorDescription::default());
+
+                self.candidates_total_weight += total_validator.weight;
+                candidates_for_validator_set[j] = total_validator;
+                candidates_for_validator_set[j].node_id =
+                    compute_node_id(candidates_for_validator_set[j].pubkey);
+
+                // increment size of validator set
+                j += 1;
             }
-            // not found, we push a new default validator and update its info
-            candidates_for_validator_set.push(ValidatorDescription::default());
-
-            self.candidates_total_weight += total_validator.weight;
-            candidates_for_validator_set[j] = total_validator;
-            candidates_for_validator_set[j].node_id =
-                compute_node_id(candidates_for_validator_set[j].pubkey);
-
-            // increment size of validator set
-            j += 1;
         }
 
         // store candidate validator
