@@ -1,3 +1,5 @@
+use std::array::TryFromSliceError;
+
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, HexBinary, StdError, StdResult, Storage};
 use tonbridge_parser::{
@@ -15,9 +17,11 @@ use crate::{
     state::{
         get_signature_candidate_validators, get_signature_validator_set,
         reset_signature_candidate_validators, validator_set, SIGNATURE_CANDIDATE_VALIDATOR,
-        SIGNED_BLOCKS,
+        SIGNED_BLOCKS, VALIDATOR,
     },
 };
+
+use crate::validator::IValidator;
 
 pub const MESSAGE_PREFIX: [u8; 4] = [0x70, 0x6e, 0x0b, 0xc5];
 
@@ -60,8 +64,9 @@ pub trait ISignatureValidator {
 
     fn get_validators_set_from_boc(
         &mut self,
+        storage: &mut dyn Storage,
         boc: &[u8],
-    ) -> Result<KeyBlockValidators, ContractError>;
+    ) -> Result<Option<KeyBlockValidators>, ContractError>;
 }
 
 // need to deserialize from storage and better access directly from storage
@@ -299,24 +304,29 @@ impl ISignatureValidator for SignatureValidator {
         storage: &mut dyn Storage,
         boc: &[u8],
     ) -> Result<(), ContractError> {
-        // self.candidates_for_validator_set = ValidatorSet::default();
         self.candidates_total_weight = 0;
-        let mut validators = self.get_validators_set_from_boc(boc)?;
-        self.parse_validators(storage, &mut validators)?;
+        let validators = self.get_validators_set_from_boc(storage, boc)?;
+        if let Some(mut validators) = validators {
+            self.parse_validators(storage, &mut validators)?;
+        }
 
         Ok(())
     }
 
     fn get_validators_set_from_boc(
         &mut self,
+        storage: &mut dyn Storage,
         boc: &[u8],
-    ) -> Result<KeyBlockValidators, ContractError> {
+    ) -> Result<Option<KeyBlockValidators>, ContractError> {
         // ref index = 3 because we skip load_block_info, load_value_flow, and load_merkle_update refs (dont care)
         let ref_index = &mut 3;
         let cells = BagOfCells::parse(boc)?;
         let first_root = cells.single_root()?;
         // set root hash as the hash of the first root
         self.root_hash = first_root.get_hash(0).as_slice().try_into()?;
+        if _is_verified_block(storage, HexBinary::from(self.root_hash))? {
+            return Ok(None);
+        }
         let block_extra = first_root
             .load_ref_if_exist(ref_index, Some(Cell::load_block_extra))?
             .0;
@@ -346,7 +356,7 @@ impl ISignatureValidator for SignatureValidator {
             .unwrap_or_default(),
         };
 
-        Ok(key_block_vals)
+        Ok(Some(key_block_vals))
     }
 
     fn load_validator_from_config_param(
@@ -397,4 +407,15 @@ impl ISignatureValidator for SignatureValidator {
             })
             .collect::<Result<Vec<ValidatorDescription>, ContractError>>()
     }
+}
+
+pub fn _is_verified_block(storage: &dyn Storage, root_hash: HexBinary) -> StdResult<bool> {
+    let validator = VALIDATOR.load(storage)?;
+    validator.is_verified_block(
+        storage,
+        root_hash
+            .as_slice()
+            .try_into()
+            .map_err(|err: TryFromSliceError| StdError::generic_err(err.to_string()))?,
+    )
 }

@@ -13,6 +13,7 @@ use tonbridge_validator::msg::{
 };
 
 use crate::error::ContractError;
+use crate::signature_validator::_is_verified_block;
 use crate::state::{validator_set, OWNER, SIGNATURE_CANDIDATE_VALIDATOR, VALIDATOR};
 use crate::validator::{IValidator, Validator};
 
@@ -289,14 +290,7 @@ pub fn get_validators(
 }
 
 pub fn is_verified_block(deps: Deps, root_hash: HexBinary) -> StdResult<bool> {
-    let validator = VALIDATOR.load(deps.storage)?;
-    validator.is_verified_block(
-        deps.storage,
-        root_hash
-            .as_slice()
-            .try_into()
-            .map_err(|err: TryFromSliceError| StdError::generic_err(err.to_string()))?,
-    )
+    _is_verified_block(deps.storage, root_hash)
 }
 
 pub fn is_signed_by_validator(
