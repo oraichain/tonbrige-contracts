@@ -1,9 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
-use std::array::TryFromSliceError;
-
-use cosmwasm_std::{to_json_binary, Addr, Empty, HexBinary, Order, StdError};
+use cosmwasm_std::{to_json_binary, Addr, Empty, HexBinary, Order};
 use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw_storage_plus::Bound;
 use tonbridge_parser::to_bytes32;
@@ -15,7 +13,7 @@ use tonbridge_validator::msg::{
 use crate::error::ContractError;
 use crate::signature_validator::_is_verified_block;
 use crate::state::{validator_set, OWNER, SIGNATURE_CANDIDATE_VALIDATOR, VALIDATOR};
-use crate::validator::{IValidator, Validator};
+use crate::validator::Validator;
 
 // settings for pagination
 const MAX_LIMIT: u32 = 100;
@@ -235,7 +233,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             limit,
             order,
         } => to_json_binary(&get_validators(deps, start_after, limit, order)?),
-        QueryMsg::IsVerifiedBlock { root_hash } => to_json_binary(&is_verified_block(deps, root_hash)?),
+        QueryMsg::IsVerifiedBlock { root_hash } => {
+            to_json_binary(&is_verified_block(deps, root_hash)?)
+        }
         QueryMsg::IsSignedByValidator {
             validator_node_id,
             root_hash,
