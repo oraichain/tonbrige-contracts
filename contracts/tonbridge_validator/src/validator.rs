@@ -10,7 +10,7 @@ use tonlib::cell::BagOfCells;
 
 use crate::{
     error::ContractError,
-    signature_validator::{ISignatureValidator, SignatureValidator},
+    signature_validator::{ISignatureValidator, SignatureValidator, _is_verified_block},
     state::{
         get_signature_candidate_validators, get_signature_validator_set, OWNER, VERIFIED_BLOCKS,
     },
@@ -115,6 +115,12 @@ impl Validator {
     ) -> Result<HexBinary, ContractError> {
         let block_header_proof = BagOfCells::parse(block_header_proof.as_slice())?;
         let root_hash_from_block_header = block_header_proof.root(0)?.reference(0)?.get_hash(0);
+        let root_hash_hex = HexBinary::from(root_hash_from_block_header.clone());
+
+        if _is_verified_block(storage, root_hash_hex.clone())? {
+            return Ok(root_hash_hex);
+        }
+
         let current_weight = self.signature_validator.verify_validators(
             storage,
             api,
